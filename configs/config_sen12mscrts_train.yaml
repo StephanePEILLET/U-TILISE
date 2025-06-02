@@ -1,11 +1,9 @@
 data:
     dataset: sen12mscrts         # Name of the dataset, ['earthnet2021', 'sen12mscrts']
-    root: data/                  # Data root directory
-    hdf5_file:
-        train: train.hdf5
-        val: sen12mscrts_val_simulation.hdf5
-    preprocessed: true
-    split: val
+    root: /home/SPeillet/Partage/store-dai/tmp/speillet/                 # Data root directory
+    hdf5_file: debug_circa.hdf5
+    preprocessed: false
+    split: all
     channels: all
     include_S1: false
     filter_settings:

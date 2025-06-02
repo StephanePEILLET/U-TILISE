@@ -21,6 +21,7 @@ mask:
     dilate_cloud_masks: false              # True to dilate the cloud masks before masking, False otherwise.
     fill_type: fill_value                  # Strategy for initializing masked pixels. ['fill_value', 'white_noise', 'mean']
     fill_value: 1                          # Pixel value of masked pixels. Used if fill_type == 'fill_value'.
+    p_filter: 0.1
 
 method:
     model_type: utilise

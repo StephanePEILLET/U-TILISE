@@ -1,0 +1,52 @@
+data:
+    dataset: circa         # Name of the dataset, ['earthnet2021', 'sen12mscrts']
+    data_optique: /home/SPeillet/Partage/store-dai/projets/pac/3str/EXP_2/Data_Raster/optique_dataset
+    data_radar: /home/SPeillet/Partage/store-dai/projets/pac/3str/EXP_2/Data_Raster/radar_dataset_v4
+    load_dataset: "datasetCIRCAUnCRtainTS.csv"
+    # hdf5_file: /home/SPeillet/Partage/store-dai/tmp/speillet/debug_circa.hdf5
+    channels: all
+    image_size: [256, 256]
+    overlap: 0
+    shuffle: False
+    use_SAR: True
+
+    filter_settings:
+        type: cloud-free
+        min_length: 5
+        max_t_sampling: 28
+        return_valid_obs_only: true
+
+mask:
+    mask_type: random_clouds               # Mask the input time series with randomly sampled cloud masks or the actual cloud masks. ['random_clouds', 'real_clouds']
+    ratio_masked_frames: 0.5               # Ratio of partially/fully masked images per image time series (upper bound).
+    ratio_fully_masked_frames: 0.0         # Ratio of fully masked images per image time series (upper bound).
+    fixed_masking_ratio: false             # True to vary the masking ratio across different image time series, False otherwise.
+    non_masked_frames: [0]                 # list of int, time steps to be excluded from masking. E.g., [0] never masks the first frame in a sequence.
+    intersect_real_cloud_masks: false      # True to intersect randomly sampled cloud masks with the actual cloud masks, False otherwise.
+    dilate_cloud_masks: false              # True to dilate the cloud masks before masking, False otherwise.
+    fill_type: fill_value                  # Strategy for initializing masked pixels. ['fill_value', 'white_noise', 'mean']
+    fill_value: 1                          # Pixel value of masked pixels. Used if fill_type == 'fill_value'.
+
+utilise:                                   
+    encoder_widths: [64,64,64,64,128]
+    decoder_widths: [64,64,64,64,128]
+
+optimizer:
+    name: Adam
+    learning_rate: 2.e-04
+    weight_decay: 1.0e-05
+
+scheduler:
+    name: MultiStepLR 
+    enabled: true
+    milestones: [40,60,80,100]
+    gamma: 0.5
+
+training_settings:
+    batch_size: 1                          # Batch size.
+    num_epochs: 3                       # Number of training epochs.
+
+    
+    
+    
+

@@ -1,10 +1,11 @@
 data:                                      # See lib/datasets/EarthNet2021Dataset.py for a detailed description.
-    dataset: earthnet2021                  # Name of the dataset, ['earthnet2021', 'sen12mscrts']
-    root: data/                            # Data root directory
-    hdf5_file: earthnet2021_iid_test_split_simulation.hdf5
-    preprocessed: true
+    dataset: sen12mscrts                  # Name of the dataset, ['earthnet2021', 'sen12mscrts']
+    root: /home/SPeillet/Partage/store-dai/tmp/speillet/                 # Data root directory
+    hdf5_file: debug_circa.hdf5
+    preprocessed: false
     split: iid
-    channels: bgr-nir
+    channels: all-mask
+    include_S1: true
     filter_settings:
         type: cloud-free                   # Strategy for removing observations with clouds/shadows/haze. ['cloud-free', 'cloud-free_consecutive']
         min_length: 5                      # Minimum sequence length.
@@ -26,38 +27,15 @@ mask:
     intersect_real_cloud_masks: false      # True to intersect randomly sampled cloud masks with the actual cloud mask sequence, False otherwise.
     dilate_cloud_masks: false              # True to dilate the cloud masks before masking, False otherwise.
     fill_type: fill_value                  # Strategy for initializing masked pixels. ['fill_value', 'white_noise', 'mean']
-    fill_value: 1                          # Pixel value of masked pixels. Used if fill_type == 'fill_value'.
-
+    fill_value: 1                         # Pixel value of masked pixels. Used if fill_type == 'fill_value'.
+ 
 method:
     model_type: utilise
     pad_value: 0
 
-utilise:                                   # See lib/models/utilise.py for a detailed description.
-    encoder_widths: [64,64,64,128]
-    decoder_widths: [64,64,64,128]
-    upconv_type: transpose
-    encoder_norm:
-    decoder_norm:
-    skip_norm:
-    activation: relu
-    str_conv_k: 4
-    str_conv_s: 2
-    str_conv_p: 1
-    str_conv_k_up: 2
-    str_conv_p_up: 0
-    skip_attention: false
-    n_temporal_encoding_layers: 1
-    agg_mode: att_group
-    n_head: 4
-    d_k: 4
-    bias_qk: false
-    attn_dropout: 0.1
-    dropout: 0.1
-    n_groups: 4
-    ltae_norm: group
-    ltae_activation: gelu
-    norm_first: true
-    output_activation: sigmoid
+utilise:                                   
+    encoder_widths: [64,64,64,64,128]
+    decoder_widths: [64,64,64,64,128]
 
 training_settings:
     batch_size: 3                          # Batch size.

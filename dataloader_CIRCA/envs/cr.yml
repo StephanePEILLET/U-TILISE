@@ -1,0 +1,59 @@
+name: cr
+channels:
+  - nvidia
+  - pytorch
+  - conda-forge
+  - default
+channel_priority: true
+dependencies:
+  - python==3.11.6
+  - pip
+  - pytorch ==2.0.1
+  - torchvision ==0.15.2
+  - torchmetrics ==1.2.1
+  - lightning ==2.3.3
+  - numpy >=1.22.4,<2
+  - rasterio>=1.2.8,<2
+  - pandas>=1.4.3
+  - albumentations>1.2.0
+  - pillow >=9.3.0,<10
+  - PyYAML>=6.0
+  - scikit-image>=0.18.3
+  - scikit-learn >=1.1.1,<2
+  - geopandas>=0.10
+  - einops >=0.3,<0.5
+  - fiona
+  - omegaconf >=2.2.3,<3
+  - pyproj >=2.2,<4
+  - rtree >=1,<2
+  - shapely
+  - rich>=13.4.1
+  - tensorboard
+  - tqdm
+  - py-opencv
+  - jsonargparse
+  - h5py
+  - python-dotenv
+  - optuna
+  - plotly
+  - wandb
+  - numba
+  - torchinfo
+  - tensorboardx
+  - ipykernel
+  - jupyter
+  - ipywidgets
+  - kornia
+  - pip:
+      - setuptools
+      - torch_scatter
+      - clearml
+      - torchgeometry
+      - prodict
+      - torchnet
+      - natsort
+      - dominate
+      - visdom
+      - fvcore
+      - s2cloudless
+      - nestargs
