@@ -34,8 +34,8 @@ class UTILISE_Dataset_HDF5_Handler(CircaPatchDataSet):
     """
     def __init__(
         self,
-        data_optique: Union[str, Path],
-        data_radar: Union[str, Path],
+        data_optique: Union[str, Path]= None,
+        data_radar: Union[str, Path]= None,
         image_size: int = 256,
         hdf5_file_output: Optional[Union[str, Path]] = None,
         hdf5_file_read: Optional[Union[str, Path]] = None,
@@ -55,44 +55,55 @@ class UTILISE_Dataset_HDF5_Handler(CircaPatchDataSet):
         channels: Optional[str] = 'all',
         sampling_random: Optional[float] = None,
     ):
+        if hdf5_file_read is None:
+            super().__init__(
+                data_optique=data_optique,
+                data_radar=data_radar,
+                image_size=image_size,
+                overlap=overlap,
+                load_dataset=load_dataset,
+                shuffle=shuffle,
+                use_sar=use_sar,
+            )
+            self.hdf5_file_output = hdf5_file_output
+            self.sampling_random = sampling_random
+            self.min_seq_length = min_seq_length
+        else:
+            self.hdf5_file, self.patches_dataset = self.setup_hdf5_file(hdf5_file_read)
+            self.use_sar = use_sar
+            self.render_occluded_above_p = render_occluded_above_p    # Fully occlude images with high cloud cover
+            # TODO Potentiellement stocker dans le hdf5 les hparams sur le filtrage les channels et les masks 
+            self.pe_strategy = pe_strategy
+            self.augment = augment
+            self.channels = channels
+            self.num_channels, self.c_index_rgb, self.c_index_nir, self.s2_channels = self.setup_channels()
+            self.filter_settings, self.variable_seq_length, self.seq_length, self.max_seq_length = self.setup_filter_settings(
+                filter_settings, max_seq_length)
+            (
+                self.mask_kwargs,
+                self.fill_type,
+                self.fill_value,
+                self.fixed_masking_ratio,
+                self.intersect_real_cloud_masks,
+                self.dilate_cloud_masks
+            ) = self.setup_mask_kwargs(mask_kwargs)
 
-        super().__init__(
-            data_optique=data_optique,
-            data_radar=data_radar,
-            image_size=image_size,
-            overlap=overlap,
-            load_dataset=load_dataset,
-            shuffle=shuffle,
-            use_sar=use_sar,
-        )
-        self.hdf5_file_output = hdf5_file_output
-        self.hdf5_file_read = hdf5_file_read
-        self.render_occluded_above_p = render_occluded_above_p    # Fully occlude images with high cloud cover
-        self.min_seq_length = min_seq_length
-        self.pe_strategy = pe_strategy
-        self.augment = augment
-        self.channels = channels
-        self.sampling_random = sampling_random
-        self.num_channels, self.c_index_rgb, self.c_index_nir, self.s2_channels = self.setup_channels()
-        self.filter_settings, self.variable_seq_length, self.seq_length, self.max_seq_length = self.setup_filter_settings(
-            filter_settings, max_seq_length)
-        (
-            self.mask_kwargs,
-            self.fill_type,
-            self.fill_value,
-            self.fixed_masking_ratio,
-            self.intersect_real_cloud_masks,
-            self.dilate_cloud_masks
-        ) = self.setup_mask_kwargs(mask_kwargs)
-        self.f = self.load_hdf5_file(self.hdf5_file_read)
+    def setup_hdf5_file(self, path_file):
+        if Path(path_file).exists():
+            f = h5py.File(path_file, 'r', libver='latest', swmr=True)
+            patches_dataset = self.list_files_in_hdf5(f)
+        else:
+            raise FileNotFoundError(f"HDF5 file {path_file} does not exist.")
+        return f, patches_dataset
 
-    def load_hdf5_file(self, path_file):
-        f = None
-        if path_file is not None:
-            if isinstance(path_file, str): path_file = Path(path_file)
-            if path_file.exists():
-                f = h5py.File(path_file, 'r')
-        return f
+    def list_files_in_hdf5(self, hdf5_file: Union[str, Path]) -> pd.DataFrame:
+        patches_dataset = pd.DataFrame(columns=['mgrs', 'mgrs25', 'window'])
+        for mgrs_level, mgrsc_list in hdf5_file.items():
+            for mgrsc_level, mgrsc_data in mgrsc_list.items():
+                for window in mgrsc_data.keys():
+                    data = {'mgrs': [mgrs_level], 'mgrs25': [mgrsc_level], 'window': [window]}
+                    patches_dataset = pd.concat([patches_dataset, pd.DataFrame(data)], ignore_index=True)
+        return patches_dataset
 
     def setup_channels(self):
         num_channels = 10
@@ -290,7 +301,7 @@ class UTILISE_Dataset_HDF5_Handler(CircaPatchDataSet):
             t_end = t_start + self.max_seq_length
             t_sampled = t_sampled[t_start:t_end]
 
-        return t_sampled
+        return t_sampled, masks_valid_obs
 
     def _mask_images_with_cloud_coverage_above_p(self, cloud_mask: torch.Tensor) -> torch.Tensor:
         """
@@ -325,7 +336,6 @@ class UTILISE_Dataset_HDF5_Handler(CircaPatchDataSet):
                     cloud_probs = cloud_probs.squeeze(axis=2).transpose((2, 0, 1))   #  H x W X 1 X T => T, H, W
                     snow_probs = snow_probs.squeeze(axis=2).transpose((2, 0, 1))     #  H x W X 1 X T => T, H, W
                     cloud_probs_corrected = SentinelDataProcessor.cloud_mask_correction(cloud_probs) # Attends du (T, H, W)
-                    cloud_mask = (cloud_probs_corrected != 0).astype(int)
 
                     index_to_drop, mgrs25_data = [], {}
                     for row_index, row in tqdm(mgrs25_dataset.iterrows(), total=mgrs25_dataset.shape[0], desc="Windows Processing"):
@@ -368,7 +378,6 @@ class UTILISE_Dataset_HDF5_Handler(CircaPatchDataSet):
 
                     if self.sampling_random is not None:
                         mgrs25_dataset = mgrs25_dataset.sample(n=n_sampling)
-                        # mgrs25_dataset.sample(frac=self.sampling_random, replace=True)
 
                     # Analyse des bandes utilisés dans la TS de la zone MGRS25
                     bands_used = mgrs25_dataset['masks_valid_obs'].explode().unique()
@@ -399,15 +408,15 @@ class UTILISE_Dataset_HDF5_Handler(CircaPatchDataSet):
                         s2 = mgrsc_s2[:, :, x:x+width, y:y+height]
                         s1 = mgrsc_s1[:, :, x:x+width, y:y+height]
                         # Pre-process data MS / SAR
-                        s2 = SentinelDataProcessor.process_MS(torch.from_numpy(s2).type(torch.float32))
-                        s1 = SentinelDataProcessor.process_SAR(torch.from_numpy(s1).type(torch.float32))
+                        # s2 = SentinelDataProcessor.process_MS(torch.from_numpy(s2).type(torch.float32))
+                        # s1 = SentinelDataProcessor.process_SAR(torch.from_numpy(s1).type(torch.float32))
                         sample = {
                             "S1": {
-                                "S1": s1.numpy(),  # torch.Size([46, 4, 256, 256])
+                                "S1": s1,
                                 "S1_dates": dates_s1,
                             },
                             "S2": {
-                                "S2": s2.numpy(), # Bandes correspondant aux dates correctes de la TS
+                                "S2": s2, # Bandes correspondant aux dates correctes de la TS
                                 "S2_dates": dates_s2_valid, # Dates correctes de la TS
                                 "cloud_mask": cloud_masks_window,  # Mask entier de la TS
                                 "cloud_prob": cloud_probs_window.astype(np.float32), # Probs cloud entier de la TS
@@ -439,53 +448,83 @@ class UTILISE_Dataset_HDF5_Handler(CircaPatchDataSet):
 
     def format_item(self, sample: dict):
         """
-            Passage de T* H * W * C en T * C * H * W.
+            Passage de T * C * H * W au bon format pour le modèle.
         """
-        sample['S1']['S1'] = sample['S1']['S1'].transpose(0, 3, 1, 2)
-        sample['S1']['S1_dates'] = np.array([str2date(date) for date in sample['S1']['S1_dates']])
-        sample['S2']['S2'] = sample['S2']['S2'].transpose(0, 3, 1, 2)
-        sample['S2']['cloud_mask'] = np.expand_dims(sample['S2']['cloud_mask'], axis=1)
-        sample['S2']['cloud_prob'] = np.expand_dims(sample['S2']['cloud_prob'], axis=1)
-        sample['S2']['S2_dates'] = np.array([str2date(date) for date in sample['S2']['S2_dates']])
-        return sample
-
-    def etl_item(self, item: int) -> Dict[str, Union[np.ndarray, List[str]]]:
-        patch = self.f["ROIs"][str(item)]
-        sample = {
+        return {
             "S1": {
-                "S1": patch['S1/S1'][:],
-                "S1_dates": self.decode_dates(patch['S1/S1_dates'][:].T[0]),
+                "S1": torch.from_numpy(sample['S1']['S1'].astype(np.float32)), # T * C * H * W
+                "S1_dates": np.array([str2date(date) for date in sample['S1']['S1_dates']]),
             },
             "S2": {
-                "S2": patch['S2/S2'][:],
-                "S2_dates": self.decode_dates(patch['S2/S2_dates'][:].T[0]),
-                "cloud_mask": patch['S2/cloud_mask'][:],
-                "cloud_prob": patch['S2/cloud_prob'][:],
+                "S2": torch.from_numpy(sample['S2']['S2'].astype(np.float32)),  # T * C * H * W
+                "S2_dates": np.array([str2date(date) for date in sample['S2']['S2_dates']]),
+                "cloud_mask":torch.from_numpy(np.expand_dims(sample['S2']['cloud_mask'], axis=1)),
+                "cloud_prob": torch.from_numpy(np.expand_dims(sample['S2']['cloud_prob'], axis=1)),
                 },
-            "idx_cloudy_frames": patch['idx_cloudy_frames'][:].T[0],
-            "idx_good_frames": patch['idx_good_frames'][:].T[0],
-            "idx_impaired_frames": patch['idx_impaired_frames'][:].T[0],
-            "valid_obs": patch['valid_obs'][:].T[0],
+            "idx_cloudy_frames":  torch.from_numpy(sample['idx_cloudy_frames']),
+            "idx_good_frames": torch.from_numpy(sample['idx_good_frames']),
+            "idx_impaired_frames":  torch.from_numpy(sample['idx_impaired_frames']),
+            "valid_obs": torch.from_numpy(sample['valid_obs']),
+        }
+
+
+    def etl_item(self, item: int) -> Dict[str, Union[np.ndarray, List[str]]]:
+        row = self.patches_dataset.iloc[item]
+        patch = self.hdf5_file[f"{row.mgrs}/{row.mgrs25}/{row.window}"]
+        sample = {
+            "S1": {
+                "S1": patch['S1/S1'][:], # T * C * H * W
+                "S1_dates": self.decode_dates(patch['S1/S1_dates'][:]),
+            },
+            "S2": {
+                "S2": patch['S2/S2'][:], # T * C * H * W
+                "S2_dates": self.decode_dates(patch['S2/S2_dates'][:]),
+                "cloud_mask": patch['S2/cloud_mask'][:], # T * C * H * W
+                "cloud_prob": patch['S2/cloud_prob'][:], # T * C * H * W
+                },
+            "idx_cloudy_frames": patch['idx_cloudy_frames'][:],
+            "idx_good_frames": patch['idx_good_frames'][:],
+            "idx_impaired_frames": patch['idx_impaired_frames'][:],
+            "valid_obs": patch['valid_obs'][:],
         }
         return self.format_item(sample)
 
-    def load_item_from_hdf5(
-            self,
-            item: int,
-            t_sampled: Optional[torch.Tensor] = None,
-            t_masked: Optional[torch.Tensor] = None,
-        ) -> Dict[str, torch.Tensor]:
 
+    def __getitem__(self, item: int, t_sampled: Optional[torch.Tensor] = None,
+            t_masked: Optional[torch.Tensor] = None,) -> dict[str, torch.Tensor]:
+        """
+        Returns a sample from the dataset.
+
+        Args:
+            item: int, index of the sample to be returned.
+
+        Returns:
+            sample: dict, a dictionary containing the following key-value pairs:
+                'x':                  torch.Tensor, (T x C x H x W), (synthetically masked) S2 satellite image time series.
+                'y':                  torch.Tensor, (T x C x H x W), observed/target satellite image time series.
+                'masks':              torch.Tensor, (T x 1 x H x W), masks applied to `x`.
+                'masks_valid_obs':    torch.Tensor, (T, ), flag to indicate valid time steps.
+                'position_days':      torch.Tensor, (T, ), positions for positional encoding.
+                'days':               torch.Tensor, (T, ), temporal sampling.
+                'sample_index':       int, index of the sample in the dataset.
+                'filepath':           list of str, file paths of the sample.
+                'c_index_rgb':        torch.Tensor, indices of RGB bands in `x`.
+                'c_index_nir':        torch.Tensor, indices of NIR bands in `x`.
+                'S2_dates':           list of str, dates of the S2 images in `x`.
+                'cloud_prob':         torch.Tensor, cloud probabilities associated with `x`.
+                'cloud_mask':         torch.Tensor, cloud mask associated with `x`.
+        """
         patch_data = self.etl_item(item=item)
+
         if t_sampled is None:
             t_sampled, masks_valid_obs = self.subsample_sequence(patch_data['valid_obs'])
         masks_valid_obs = patch_data['valid_obs'][t_sampled]
 
         frames_input, frames_target = patch_data["S2"]['S2'][t_sampled].clone(), patch_data["S2"]['S2'][t_sampled].clone()
-        s2_dates = patch_data['S2_dates'][t_sampled]
+        s2_dates = patch_data["S2"]['S2_dates'][t_sampled]
         if self.use_sar:
-            s1 = patch_data['S1']['S1'].astype(np.float32)[t_sampled]
-            s1_dates = patch_data['S1_dates'][t_sampled]
+            s1 = patch_data['S1']['S1'][t_sampled]
+            s1_dates = patch_data['S1']['S1_dates'][t_sampled]
             # Concatenate the (masked) S2 bands and the unmasked S1 bands
             frames_input = torch.cat((frames_input, s1), dim=1)
         cloud_mask = patch_data['S2']["cloud_mask"][t_sampled]  # T x C x H x W
@@ -518,50 +557,16 @@ class UTILISE_Dataset_HDF5_Handler(CircaPatchDataSet):
             'position_days': position_days,
             'days': days,    # temporal sampling, number of days since the first observation in the sequence, (T, )
             'sample_index': item,
-            'filepath': self.patches_dataset.iloc[item].files,
+            # 'filepath': self.patches_dataset.iloc[item].files,
             'c_index_rgb': self.c_index_rgb,
             'c_index_nir': self.c_index_nir,
             'S2_dates': [date.strftime('%Y-%m-%d') for date in s2_dates],
-            'cloud_prob': torch.from_numpy(patch_data['S2']['cloud_prob'].astype(np.float32))[t_sampled],
+            'cloud_prob': patch_data['S2']['cloud_prob'][t_sampled],
             'cloud_mask': cloud_mask,
         }
         if self.use_sar:
             out["S1_dates"] = [date.strftime('%Y-%m-%d') for date in s1_dates]
         return out
-
-    def __getitem__(self, item: int, t_sampled: Optional[torch.Tensor] = None,
-            t_masked: Optional[torch.Tensor] = None,) -> dict[str, torch.Tensor]:
-        """
-        Returns a sample from the dataset.
-
-        Args:
-            item: int, index of the sample to be returned.
-
-        Returns:
-            sample: dict, a dictionary containing the following key-value pairs:
-                'x':                  torch.Tensor, (T x C x H x W), (synthetically masked) S2 satellite image time series.
-                'y':                  torch.Tensor, (T x C x H x W), observed/target satellite image time series.
-                'masks':              torch.Tensor, (T x 1 x H x W), masks applied to `x`.
-                'masks_valid_obs':    torch.Tensor, (T, ), flag to indicate valid time steps.
-                'position_days':      torch.Tensor, (T, ), positions for positional encoding.
-                'days':               torch.Tensor, (T, ), temporal sampling.
-                'sample_index':       int, index of the sample in the dataset.
-                'filepath':           list of str, file paths of the sample.
-                'c_index_rgb':        torch.Tensor, indices of RGB bands in `x`.
-                'c_index_nir':        torch.Tensor, indices of NIR bands in `x`.
-                'S2_dates':           list of str, dates of the S2 images in `x`.
-                'cloud_prob':         torch.Tensor, cloud probabilities associated with `x`.
-                'cloud_mask':         torch.Tensor, cloud mask associated with `x`.
-        """
-        # Load item from HDF5 file
-        sample = None
-        if self.hdf5_file_read is not None:
-            sample = self.load_item_from_hdf5(item, t_sampled=t_sampled, t_masked=t_masked)
-
-        if sample is None:
-            # raise ValueError(f"Sample {item} has too few valid observations ({len(sample['S2_dates'])} < {self.min_seq_length}).")
-             print(f"Sample {item} has too few valid observations..")
-        return sample
 
 
     ### FONCTION POUR LA GENERATION DE MASKS ###
@@ -696,27 +701,20 @@ class UTILISE_Dataset_HDF5_Handler(CircaPatchDataSet):
         # Randomly sample `n` cloud masks with cloud coverage of >= p
         cloud_mask = []
         while len(cloud_mask) < n:
-            # Extract the cloud masks of a randomly drawn image time series, H x W x 1 x T
+            # Extract the cloud masks of a randomly drawn image time series, T * 1 * H * W (ancien code H x W x 1 x T)
             selected_idx = random.choice(samples.index)
-            if hasattr(self, "f") and str(selected_idx) in self.f["ROIs"]:
-                seq = self.f[f"ROIs/{str(selected_idx)}/S2/cloud_mask"][:]
-                seq = torch.from_numpy(np.expand_dims(seq, axis=1).transpose(2, 3, 1, 0)) # T * H * W =>  T * 1 * H * W  => H x W x 1 x T
-            else: # DEPRECATED
-                # Extraction à la volée des masks dans les fichiers plats
-                cloud_mask_data = SentinelDataProcessor.read_cloud_mask(
-                    path_raster=self.patches_dataset.iloc[selected_idx].files[0],
-                    window=Window(*self.patches_dataset.iloc[selected_idx].window)
-                )
-                seq = torch.from_numpy(cloud_mask_data).float()
+            seletect_row = self.patches_dataset.iloc[selected_idx]
+            seq = self.hdf5_file[f"{seletect_row.mgrs}/{seletect_row.mgrs25}/{seletect_row.window}/S2/cloud_mask"][:]
+            seq = torch.from_numpy(np.expand_dims(seq, axis=1)).type(torch.float32)  # H x W x T => T * 1 * H * W
 
             # Compute cloud coverage per frame
-            coverage = torch.mean(seq, dim=(0, 1, 2))
+            coverage = torch.mean(seq, dim=(1, 2, 3))
             indices = torch.argwhere(coverage >= p).flatten()
             if len(indices) > 0:
-                cloud_mask.append(seq[:, :, :, np.random.choice(indices)])
+                cloud_mask.append(seq[np.random.choice(indices)])
 
         # n x 1 x H x W
-        cloud_mask = torch.stack(cloud_mask, dim=3).permute(3, 2, 0, 1)
+        cloud_mask = torch.stack(cloud_mask, dim=0) # on stack sur C du T *C * H * W
 
         if self.render_occluded_above_p and self.render_occluded_above_p > 0.:
             cloud_mask = self._mask_images_with_cloud_coverage_above_p(cloud_mask)
@@ -805,46 +803,6 @@ class UTILISE_Dataset_HDF5_Handler(CircaPatchDataSet):
 ######################################################################################
 ######################################################################################
 
-def pytorch_dict_2_hdf5(dataset, output_file, num_workers=8, prefetch_factor=2):
-    dataloader = DataLoader(
-            dataset=dataset,
-            batch_size=1,
-            shuffle=False,
-            num_workers=num_workers,
-            drop_last=False,
-            prefetch_factor=prefetch_factor,
-    )
-    progress_bar = tqdm(total=len(dataset))
-    with h5py.File(output_file, 'w') as hf:
-        data_group = hf.create_group('ROIs')
-        hf.attrs['num_samples'] = len(dataset)
-        for i, sample in enumerate(dataloader):
-            if sample is None:
-                continue
-            sample_group = data_group.create_group(f'{i}')
-            for key, value in sample.items():
-                if isinstance(value, dict):
-                    sample_subgroup = sample_group.create_group(f'{key}')
-                    for meta_key, meta_value in value.items():
-                        if isinstance(meta_value, torch.Tensor):
-                            sample_subgroup.create_dataset(
-                                meta_key,
-                                data=meta_value.squeeze().numpy(),
-                                compression='gzip',
-                                compression_opts=9,
-                            )
-                        else:
-                            sample_subgroup.create_dataset(meta_key, data=meta_value)
-                else:
-                    sample_group.create_dataset(key, data=value)
-            progress_bar.update(1)
-
-
-######################################################################################
-######################################################################################
-######################################################################################
-
-
 if __name__ == "__main__":
     # store_dai = Path("/home/SPeillet/Partage/store-dai")
     # path_dataset_circa = store_dai / "projets/pac/3str/EXP_2"
@@ -856,7 +814,7 @@ if __name__ == "__main__":
     image_size = [256, 256]
     overlap = 0
     SAMPLING_SUBSET = 0.5
-    output_file =  path_dataset_circa / "circa_ligth_0.5.hdf5"
+    output_file =  path_dataset_circa / "toy_circa_ligth_0.5.hdf5"
 
     filter_settings = {
         "type": "cloud-free",           # Strategy for removing observations with data gaps. ['cloud-free', 'cloud-free_consecutive']
@@ -878,20 +836,28 @@ if __name__ == "__main__":
         "p_filter": 0.1,
     }
 
+    ## Si export des données vers un fichier hdf5
+    # dataset = UTILISE_Dataset_HDF5_Handler(
+    #     hdf5_file_output=output_file,
+    #     data_optique=data_optique,
+    #     data_radar=data_radar,
+    #     image_size=image_size,
+    #     overlap=overlap,
+    #     filter_settings=filter_settings,
+    #     mask_kwargs=mask_kwargs,
+    #     sampling_random=SAMPLING_SUBSET,
+    # )
+    # # dataset.load_items_to_hdf5()
+
+    # Import des données depuis un fichier hdf5
     dataset = UTILISE_Dataset_HDF5_Handler(
-        hdf5_file_output=output_file,
-        data_optique=data_optique,
-        data_radar=data_radar,
-        image_size=image_size,
-        overlap=overlap,
+        hdf5_file_read=output_file,
         filter_settings=filter_settings,
         mask_kwargs=mask_kwargs,
-        sampling_random=SAMPLING_SUBSET,
-        # load_dataset="datasetCIRCAUnCRtainTS.csv",
+        max_seq_length=10,
     )
-    # dataset.export_dataset()
-
-    dataset.load_items_to_hdf5()
+    sample = next(iter(dataset))
+    print(sample.keys())
 
     # print("Conversion du dataset PyTorch en HDF5...")
     # if SUBSET:
