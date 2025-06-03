@@ -120,8 +120,11 @@ def pad_collate(batch, pad_value=0):
 
 
 def get_dataloader(
-        config: DictConfig, phase: str, pin_memory: bool = True, drop_last: bool = False,
-        logger: Optional[logging.Logger] = None
+        config: DictConfig,
+        phase: str,
+        pin_memory: bool = True,
+        drop_last: bool = False,
+        logger: Optional[logging.Logger] = None,
 ) -> torch.utils.data.dataloader.DataLoader:
     """Returns a torch.utils.data.DataLoader instance."""
 
@@ -171,7 +174,13 @@ def get_dataset(config: DictConfig, phase: str, logger: Optional[logging.Logger]
             mask_kwargs=config.mask, augment=augment
         )
     else:
-        dset = Dataset(**without_keys(config.data, ['dataset']), mask_kwargs=config.mask, augment=augment)
+        augment = False
+        dset = Dataset(
+            **without_keys(config.data, ['dataset']),
+            mask_kwargs=config.mask,
+            augment=augment,
+            phase="all",
+        )
 
     return dset
 

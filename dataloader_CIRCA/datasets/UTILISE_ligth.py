@@ -28,7 +28,22 @@ from dataloader_CIRCA.tools.positional_encoding import str2date
 MAX_SEQ_LENGTH = 30
 MIN_SEQ_LENGTH = 5
 
-class UTILISE_Dataset_HDF5_Handler(CircaPatchDataSet):
+MGRS_SPLITS = {
+    "train": ['31TGJ', '31TEK', '30TYP', '31UDR', '30UXV', '31TEN', '31TFN',
+       '30TXR', '31TDH', '31UFQ', '30TXS', '31UCP', '31TGK', '31UFP',
+       '31TCN', '30TWT', '31UDS', '31TFK', '31TFL', '31UER', '31TCK',
+       '30TYR', '31TGL', '32UMV', '31UDP', '31TCJ', '31TFJ', '30TYQ',
+       '31TCH', '30UVU', '31TDM', '31TEL', '30TYS', '31TDJ'],
+    "val": ['31TGJ', '31TEK', '30TYP', '31UDR', '30UXV', '31TEN', '31TFN',
+       '30TXR', '31TDH', '31UFQ', '30TXS', '31UCP', '31TGK', '31UFP',
+       '31TCN', '30TWT', '31UDS', '31TFK', '31TFL', '31UER', '31TCK',
+       '30TYR', '31TGL', '32UMV', '31UDP', '31TCJ', '31TFJ', '30TYQ',
+       '31TCH', '30UVU', '31TDM', '31TEL', '30TYS', '31TDJ'],
+    "test": ['31UDR', '31UFQ', '31UDS', '31TFK', '32TLT', '31TDJ'],
+}
+
+
+class CIRCA_HDF5_Dataset(CircaPatchDataSet):
     """
         Dataset qui exporte / ou importe les données CIRCA dans / depuis un fichier HDF5.
     """
@@ -37,6 +52,7 @@ class UTILISE_Dataset_HDF5_Handler(CircaPatchDataSet):
         data_optique: Union[str, Path]= None,
         data_radar: Union[str, Path]= None,
         image_size: int = 256,
+        phase: str = 'train',
         hdf5_file_output: Optional[Union[str, Path]] = None,
         hdf5_file_read: Optional[Union[str, Path]] = None,
         overlap: Optional[int] = 0,
@@ -69,6 +85,7 @@ class UTILISE_Dataset_HDF5_Handler(CircaPatchDataSet):
             self.sampling_random = sampling_random
             self.min_seq_length = min_seq_length
         else:
+            self.phase = phase
             self.hdf5_file, self.patches_dataset = self.setup_hdf5_file(hdf5_file_read)
             self.use_sar = use_sar
             self.render_occluded_above_p = render_occluded_above_p    # Fully occlude images with high cloud cover
@@ -92,9 +109,31 @@ class UTILISE_Dataset_HDF5_Handler(CircaPatchDataSet):
         if Path(path_file).exists():
             f = h5py.File(path_file, 'r', libver='latest', swmr=True)
             patches_dataset = self.list_files_in_hdf5(f)
+            patches_dataset = self.splits_samples(patches_dataset, self.phase)
         else:
             raise FileNotFoundError(f"HDF5 file {path_file} does not exist.")
+
         return f, patches_dataset
+
+    def splits_samples(self, patches_dataset: pd.DataFrame, phase: str) -> pd.DataFrame:
+        if phase is not None:
+            if phase in MGRS_SPLITS:
+                patches_dataset = patches_dataset[patches_dataset['mgrs'].isin(MGRS_SPLITS[self.phase])].reset_index(drop=True)
+            elif phase == 'train+val':
+                patches_dataset = patches_dataset[patches_dataset['mgrs'].isin(MGRS_SPLITS['train'] + MGRS_SPLITS['val'])].reset_index(drop=True)
+            elif phase == 'all':
+                pass
+            else:
+                raise ValueError(f"Phase {phase} not recognized. Use 'train', 'val', 'train+val', or 'all'.")
+
+            if (phase in ["train", "val"]) and (MGRS_SPLITS["train"] == MGRS_SPLITS["val"]):
+                # If train and val are the same, we just return the dataset as is
+                if phase == 'train':
+                    patches_dataset = patches_dataset.sample(frac=0.8, random_state=42).reset_index(drop=True)
+                elif phase == 'val':
+                    patches_dataset = patches_dataset.sample(frac=0.2, random_state=42).reset_index(drop=True)
+
+        return patches_dataset
 
     def list_files_in_hdf5(self, hdf5_file: Union[str, Path]) -> pd.DataFrame:
         patches_dataset = pd.DataFrame(columns=['mgrs', 'mgrs25', 'window'])
@@ -850,7 +889,7 @@ if __name__ == "__main__":
     # # dataset.load_items_to_hdf5()
 
     # Import des données depuis un fichier hdf5
-    dataset = UTILISE_Dataset_HDF5_Handler(
+    dataset = CIRCA_HDF5_Dataset(
         hdf5_file_read=output_file,
         filter_settings=filter_settings,
         mask_kwargs=mask_kwargs,
