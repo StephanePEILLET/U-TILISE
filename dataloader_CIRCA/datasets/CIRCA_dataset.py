@@ -31,7 +31,7 @@ class CircaPatchDataSet(Dataset):
         overlap: Optional[int] = 0,
         load_dataset: Optional[str] = None,
         shuffle: bool = False,
-        use_sar: bool = True,
+        include_S1: bool = True,
         no_filter: bool = False,
     ):
         """
@@ -44,7 +44,7 @@ class CircaPatchDataSet(Dataset):
         - overlap (int, optional): Number of pixels to overlap between patches on all sides. Defaults to 0.
         - load_dataset (Optional[str], optional): Path to a pre-saved dataset CSV file. Defaults to None.
         - shuffle (bool, optional): Whether to shuffle the dataset. Defaults to False.
-        - use_sar (bool, optional): Whether to include SAR data in the dataset. Defaults to True.
+        - include_S1 (bool, optional): Whether to include SAR data in the dataset. Defaults to True.
         """
         self.data_optique = Path(data_optique)
         self.data_radar = Path(data_radar)
@@ -54,7 +54,7 @@ class CircaPatchDataSet(Dataset):
         self.shuffle = shuffle
         self.zones_dataset, self.dates_dict = None, None
         self.patches_dataset = None
-        self.use_sar = use_sar
+        self.include_S1 = include_S1
         self.no_filter = no_filter
         self.setup()
 
@@ -328,7 +328,7 @@ class CircaPatchDataSet(Dataset):
             "masks": cloud_masks,
         }
 
-        if self.use_sar:
+        if self.include_S1:
             # Appariement des dates S1 ASC ou DESC les plus proches
             (
                 dates_S1_curated,

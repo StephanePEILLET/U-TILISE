@@ -51,14 +51,14 @@ class CIRCA_HDF5_Dataset(CircaPatchDataSet):
         self,
         data_optique: Union[str, Path]= None,
         data_radar: Union[str, Path]= None,
-        image_size: int = 256,
+        image_size: int = (256, 256),
         phase: str = 'train',
         hdf5_file_output: Optional[Union[str, Path]] = None,
         hdf5_file_read: Optional[Union[str, Path]] = None,
         overlap: Optional[int] = 0,
         load_dataset: Optional[str] = None,
         shuffle: bool = False,
-        use_sar: bool = True,
+        include_S1: bool = True,
         filter_settings: dict = None,
         min_seq_length: Optional[int] = MIN_SEQ_LENGTH,
         max_seq_length: Optional[int] = None,
@@ -79,7 +79,7 @@ class CIRCA_HDF5_Dataset(CircaPatchDataSet):
                 overlap=overlap,
                 load_dataset=load_dataset,
                 shuffle=shuffle,
-                use_sar=use_sar,
+                include_S1=include_S1,
             )
             self.hdf5_file_output = hdf5_file_output
             self.sampling_random = sampling_random
@@ -87,7 +87,8 @@ class CIRCA_HDF5_Dataset(CircaPatchDataSet):
         else:
             self.phase = phase
             self.hdf5_file, self.patches_dataset = self.setup_hdf5_file(hdf5_file_read)
-            self.use_sar = use_sar
+            self.image_size = image_size
+            self.include_S1 = include_S1
             self.render_occluded_above_p = render_occluded_above_p    # Fully occlude images with high cloud cover
             # TODO Potentiellement stocker dans le hdf5 les hparams sur le filtrage les channels et les masks 
             self.pe_strategy = pe_strategy
@@ -149,7 +150,7 @@ class CIRCA_HDF5_Dataset(CircaPatchDataSet):
         c_index_rgb = torch.Tensor([2, 1, 0]).long()
         c_index_nir = torch.Tensor([6]).long()
         s2_channels = list(np.arange(10))
-        if self.use_sar:
+        if self.include_S1:
             num_channels += 4
         return num_channels, c_index_rgb, c_index_nir, s2_channels
 
@@ -561,7 +562,7 @@ class CIRCA_HDF5_Dataset(CircaPatchDataSet):
 
         frames_input, frames_target = patch_data["S2"]['S2'][t_sampled].clone(), patch_data["S2"]['S2'][t_sampled].clone()
         s2_dates = patch_data["S2"]['S2_dates'][t_sampled]
-        if self.use_sar:
+        if self.include_S1:
             s1 = patch_data['S1']['S1'][t_sampled]
             s1_dates = patch_data['S1']['S1_dates'][t_sampled]
             # Concatenate the (masked) S2 bands and the unmasked S1 bands
@@ -603,7 +604,7 @@ class CIRCA_HDF5_Dataset(CircaPatchDataSet):
             'cloud_prob': patch_data['S2']['cloud_prob'][t_sampled],
             'cloud_mask': cloud_mask,
         }
-        if self.use_sar:
+        if self.include_S1:
             out["S1_dates"] = [date.strftime('%Y-%m-%d') for date in s1_dates]
         return out
 
@@ -897,11 +898,3 @@ if __name__ == "__main__":
     )
     sample = next(iter(dataset))
     print(sample.keys())
-
-    # print("Conversion du dataset PyTorch en HDF5...")
-    # if SUBSET:
-    #     dataset = Subset(dataset, np.arange(SUBSIZE))
-    #     pytorch_dict_2_hdf5(dataset, output_file, num_workers=8)
-    # elif not output_file.exists():
-    #     pytorch_dict_2_hdf5(dataset, output_file, num_workers=8)
-    # print(f"Dataset converti et enregistré dans {output_file}")
