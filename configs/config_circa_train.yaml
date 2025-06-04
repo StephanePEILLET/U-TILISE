@@ -1,7 +1,7 @@
 data:
     dataset: circa         # Name of the dataset, ['earthnet2021', 'sen12mscrts']
-    hdf5_file_read: "/home/SPeillet/Downloads/data/toy_circa_ligth_0.5.hdf5"
-    max_seq_length: 10
+    hdf5_file_read: /home/SPeillet/Downloads/data/toy_circa_ligth_0.5.hdf5 #"/home/SPeillet/Downloads/data/toy_circa_ligth_0.5.hdf5"
+    max_seq_length: 5
     channels: all
     include_S1: true
     image_size: [256, 256]
@@ -41,9 +41,13 @@ scheduler:
 
 training_settings:
     batch_size: 1                          # Batch size.
-    num_epochs: 3                       # Number of training epochs.
+    num_epochs: 2                       # Number of training epochs.
+    accum_iter: 1                          # Accumulate gradients for 'accum_iter` iterations.
+    gradient_clip_norm: 0                  # If > 0, clips gradient norm to that value.
+    gradient_clip_value: 0                 # If > 0, clips gradient at specified value.
+    resume: false                          # True to resume training, False otherwise.
+    pretrained_path: ''                    # Path to the pretrained model weights.
 
-    
     
     
 

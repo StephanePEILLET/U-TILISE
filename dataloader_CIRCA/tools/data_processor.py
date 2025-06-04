@@ -29,7 +29,7 @@ class SentinelDataProcessor:
         - window (rasterio.windows.Window): Window defining the region of interest.
 
         Returns:
-        - np.ndarray: Processed MS data with shape (T, H, W, C), where:
+        - np.ndarray: Processed MS data with shape (T, C, H, W), where:
             - T: Number of time steps.
             - H: Height of the patch.
             - W: Width of the patch.
@@ -40,7 +40,6 @@ class SentinelDataProcessor:
             patch_S2_array = SentinelDataProcessor.reshape_sentinel(
                 patch_S2_array, chunk_size=S2_N_CHANNELS
             )
-            patch_S2_array = patch_S2_array.transpose(0, 2, 3, 1)
             return patch_S2_array
 
     @staticmethod
@@ -64,9 +63,6 @@ class SentinelDataProcessor:
             patch_S1_array = SentinelDataProcessor.reshape_sentinel(
                 patch_S1_array, chunk_size=S1_N_CHANNELS
             )  # (T * C, H, W) => (T, C, H, W)
-            patch_S1_array = patch_S1_array.transpose(
-                0, 2, 3, 1
-            )  # (T, C, H, W)=> (T, H, W, C)
             return patch_S1_array
 
     @staticmethod
@@ -81,10 +77,13 @@ class SentinelDataProcessor:
         span = bands_span[type_bands]
 
         with rasterio.open(path_raster) as src_S2:
-            indexes_bands = []
-            for index_date in indexes_dates:
-                indexes_bands += [index_date + x for x in np.arange(1, span + 1)]
-            raster_array = src_S2.read(indexes_bands, window=window)
+            if indexes_dates is None:
+                raster_array = src_S2.read(window=window)
+            else:
+                indexes_bands = []
+                for index_date in indexes_dates:
+                    indexes_bands += [index_date + x for x in np.arange(1, span + 1)]
+                raster_array = src_S2.read(indexes_bands, window=window)
             return SentinelDataProcessor.reshape_sentinel(raster_array, chunk_size=span)
 
     @staticmethod

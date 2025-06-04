@@ -120,7 +120,7 @@ def get_model(config: DictConfig, input_dim: int, logger: Optional[logging.Logge
         if '-mask' in config.data.channels:
             args_model.output_dim -= 1
         if config.data.get('include_S1', False):
-            args_model.output_dim -= 2
+            args_model.output_dim -= 4
 
         model = MODELS[model_type](**args_model)
         model.apply(weight_init)

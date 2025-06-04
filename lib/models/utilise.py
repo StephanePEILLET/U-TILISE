@@ -715,7 +715,7 @@ class TemporalAggregator(nn.Module):
                         )(attn)
                     else:
                         attn = nn.AdaptiveAvgPool2d(x.shape[-2:])(attn)
-                        
+
                     attn = attn.view(n_heads, b, t, t, *x.shape[-2:])  # n_heads x B x T x T x H x W
                     out = torch.stack(x.chunk(n_heads, dim=2))  # n_heads x B x T x (C/n_heads) x H x W
                     out = attn[:, :, :, :, None, :, :] * out[:, :, None, :, :, :, :]

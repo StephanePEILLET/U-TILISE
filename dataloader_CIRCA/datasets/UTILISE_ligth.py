@@ -87,24 +87,25 @@ class CIRCA_HDF5_Dataset(CircaPatchDataSet):
         else:
             self.phase = phase
             self.hdf5_file, self.patches_dataset = self.setup_hdf5_file(hdf5_file_read)
-            self.image_size = image_size
             self.include_S1 = include_S1
-            self.render_occluded_above_p = render_occluded_above_p    # Fully occlude images with high cloud cover
-            # TODO Potentiellement stocker dans le hdf5 les hparams sur le filtrage les channels et les masks 
-            self.pe_strategy = pe_strategy
-            self.augment = augment
-            self.channels = channels
-            self.num_channels, self.c_index_rgb, self.c_index_nir, self.s2_channels = self.setup_channels()
-            self.filter_settings, self.variable_seq_length, self.seq_length, self.max_seq_length = self.setup_filter_settings(
-                filter_settings, max_seq_length)
-            (
-                self.mask_kwargs,
-                self.fill_type,
-                self.fill_value,
-                self.fixed_masking_ratio,
-                self.intersect_real_cloud_masks,
-                self.dilate_cloud_masks
-            ) = self.setup_mask_kwargs(mask_kwargs)
+            self.image_size = image_size
+
+        # TODO Potentiellement stocker dans le hdf5 les hparams sur le filtrage les channels et les masks 
+        self.render_occluded_above_p = render_occluded_above_p    # Fully occlude images with high cloud cover
+        self.pe_strategy = pe_strategy
+        self.augment = augment
+        self.channels = channels
+        self.num_channels, self.c_index_rgb, self.c_index_nir, self.s2_channels = self.setup_channels()
+        self.filter_settings, self.variable_seq_length, self.seq_length, self.max_seq_length = self.setup_filter_settings(
+            filter_settings, max_seq_length)
+        (
+            self.mask_kwargs,
+            self.fill_type,
+            self.fill_value,
+            self.fixed_masking_ratio,
+            self.intersect_real_cloud_masks,
+            self.dilate_cloud_masks
+        ) = self.setup_mask_kwargs(mask_kwargs)
 
     def setup_hdf5_file(self, path_file):
         if Path(path_file).exists():
@@ -419,23 +420,23 @@ class CIRCA_HDF5_Dataset(CircaPatchDataSet):
                     if self.sampling_random is not None:
                         mgrs25_dataset = mgrs25_dataset.sample(n=n_sampling)
 
-                    # Analyse des bandes utilisés dans la TS de la zone MGRS25
-                    bands_used = mgrs25_dataset['masks_valid_obs'].explode().unique()
-                    dates_s2_used = mgrs25_dataset['dates_s2_valid'].explode().unique()
+                    mgrsc_s2 = SentinelDataProcessor.read_raster_per_dates(path_raster=mgrs25_files[0], type_bands="s2") # T x C x H x W
+                    mgrsc_s2 = mgrsc_s2[:, self.s2_channels, :, :]  # Sélection des canaux S2
                     # Récupération des données S1 associées aux dates s2 valides prises
-                    dates_s1, index_s1, orbit_type = SentinelDataProcessor.get_pairedS1(dates_s2_used, dates_s1_asc, dates_s1_desc)
-                    # Récupération des images S2 associées aux dates valides  # Refaire la fonction d'extraction
-                    mgrsc_s2 = SentinelDataProcessor.read_raster_per_dates(
-                        path_raster=mgrs25_files[0],
-                        indexes_dates=bands_used,
-                        type_bands="s2_bands",
-                    )
+                    dates_s1, index_s1, orbit_type = SentinelDataProcessor.get_pairedS1(dates_s2, dates_s1_asc, dates_s1_desc)
+                    # Récupération des images S2 associées aux dates valides
                     path_s1 = mgrs25_files[1] if orbit_type == "ASC" else mgrs25_files[2]
                     mgrsc_s1 = SentinelDataProcessor.read_raster_per_dates(
                         path_raster=path_s1,
                         indexes_dates=index_s1,
                         type_bands="s1",
                     )
+                    # Vérification de la cohérence des données
+                    assert mgrsc_s2.shape[0] == mgrsc_s1.shape[0], "Number of S2 and S1 images must match."
+                    assert len(dates_s2) == mgrsc_s2.shape[0], "Number of S2 dates must match the number of S2 images."
+                    assert len(dates_s2) == len(dates_s1), "Number of S2 dates must match the number of S1 images."
+                    assert len(dates_s1) == mgrsc_s1.shape[0], "Number of S1 dates must match the number of S1 images."
+
                     for row_index, row in tqdm(mgrs25_dataset.iterrows(), total=mgrs25_dataset.shape[0], desc="Windows loading"):
                         # Découpage des données selon la fenêtre
                         window = row.window
@@ -445,19 +446,25 @@ class CIRCA_HDF5_Dataset(CircaPatchDataSet):
                         cloud_probs_window = cloud_probs_corrected[:, x:x+width, y:y+height]
                         snow_probs_window = snow_probs[:, x:x+width, y:y+height]
                         cloud_masks_window = (cloud_probs_window != 0).astype(int)
-                        s2 = mgrsc_s2[:, :, x:x+width, y:y+height]
-                        s1 = mgrsc_s1[:, :, x:x+width, y:y+height]
-                        # Pre-process data MS / SAR
-                        # s2 = SentinelDataProcessor.process_MS(torch.from_numpy(s2).type(torch.float32))
-                        # s1 = SentinelDataProcessor.process_SAR(torch.from_numpy(s1).type(torch.float32))
+
+                        idx_selected = np.asarray(mgrs25_dataset.loc[row_index, 'idx_good_frames'])
+
+                        s2 = mgrsc_s2[idx_selected, :, x:x+width, y:y+height]
+                        s1 = mgrsc_s1[idx_selected, :, x:x+width, y:y+height]
+
+                        assert s2.shape[0] == s1.shape[0], "Number of S2 and S1 images must match."
+                        assert s2.shape[0] == len(mgrs25_dataset.loc[row_index, 'dates_s2_valid']), "Number of S2 images must match the number of valid dates."
+                        assert s2.shape[0] == len(mgrs25_dataset.loc[row_index, 'idx_good_frames']), "Number of S2 images must match the number of good frames."
+                        assert s2.shape[0] == len(mgrs25_dataset.loc[row_index, 'masks_valid_obs']), "Number of S2 images must match the number of valid observations."
+
                         sample = {
                             "S1": {
                                 "S1": s1,
-                                "S1_dates": dates_s1,
+                                "S1_dates": np.asarray(dates_s1)[idx_selected].tolist(), # Dates S1 correspondantes aux dates S2 valides
                             },
                             "S2": {
                                 "S2": s2, # Bandes correspondant aux dates correctes de la TS
-                                "S2_dates": dates_s2_valid, # Dates correctes de la TS
+                                "S2_dates": mgrs25_dataset.loc[row_index, 'dates_s2_valid'], # Dates correctes de la TS
                                 "cloud_mask": cloud_masks_window,  # Mask entier de la TS
                                 "cloud_prob": cloud_probs_window.astype(np.float32), # Probs cloud entier de la TS
                             },
@@ -561,7 +568,7 @@ class CIRCA_HDF5_Dataset(CircaPatchDataSet):
         masks_valid_obs = patch_data['valid_obs'][t_sampled]
 
         frames_input, frames_target = patch_data["S2"]['S2'][t_sampled].clone(), patch_data["S2"]['S2'][t_sampled].clone()
-        s2_dates = patch_data["S2"]['S2_dates'][t_sampled]
+        s2_dates = np.asarray(patch_data["S2"]['S2_dates'])[t_sampled]
         if self.include_S1:
             s1 = patch_data['S1']['S1'][t_sampled]
             s1_dates = patch_data['S1']['S1_dates'][t_sampled]
@@ -597,11 +604,10 @@ class CIRCA_HDF5_Dataset(CircaPatchDataSet):
             'position_days': position_days,
             'days': days,    # temporal sampling, number of days since the first observation in the sequence, (T, )
             'sample_index': item,
-            # 'filepath': self.patches_dataset.iloc[item].files,
             'c_index_rgb': self.c_index_rgb,
             'c_index_nir': self.c_index_nir,
             'S2_dates': [date.strftime('%Y-%m-%d') for date in s2_dates],
-            'cloud_prob': patch_data['S2']['cloud_prob'][t_sampled],
+            'cloud_prob': patch_data['S2']['cloud_prob'],
             'cloud_mask': cloud_mask,
         }
         if self.include_S1:
@@ -876,8 +882,8 @@ if __name__ == "__main__":
         "p_filter": 0.1,
     }
 
-    ## Si export des données vers un fichier hdf5
-    # dataset = UTILISE_Dataset_HDF5_Handler(
+    # Si export des données vers un fichier hdf5
+    # dataset = CIRCA_HDF5_Dataset(
     #     hdf5_file_output=output_file,
     #     data_optique=data_optique,
     #     data_radar=data_radar,
@@ -887,7 +893,7 @@ if __name__ == "__main__":
     #     mask_kwargs=mask_kwargs,
     #     sampling_random=SAMPLING_SUBSET,
     # )
-    # # dataset.load_items_to_hdf5()
+    # dataset.load_items_to_hdf5()
 
     # Import des données depuis un fichier hdf5
     dataset = CIRCA_HDF5_Dataset(
