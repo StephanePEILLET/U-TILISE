@@ -498,8 +498,8 @@ class CIRCA_HDF5_Dataset(CircaPatchDataSet):
             "S2": {
                 "S2": torch.from_numpy(sample['S2']['S2'].astype(np.float32)),  # T * C * H * W
                 "S2_dates": np.array([str2date(date) for date in sample['S2']['S2_dates']]),
-                "cloud_mask":torch.from_numpy(np.expand_dims(sample['S2']['cloud_mask'], axis=1)),
-                "cloud_prob": torch.from_numpy(np.expand_dims(sample['S2']['cloud_prob'], axis=1)),
+                "cloud_mask":torch.from_numpy(np.expand_dims(sample['S2']['cloud_mask'], axis=1).astype(np.float32)),
+                "cloud_prob": torch.from_numpy(np.expand_dims(sample['S2']['cloud_prob'], axis=1).astype(np.float32)),
                 },
             "idx_cloudy_frames":  torch.from_numpy(sample['idx_cloudy_frames']),
             "idx_good_frames": torch.from_numpy(sample['idx_good_frames']),
