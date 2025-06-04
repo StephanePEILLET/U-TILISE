@@ -452,6 +452,13 @@ class CIRCA_HDF5_Dataset(CircaPatchDataSet):
                         s2 = mgrsc_s2[idx_selected, :, x:x+width, y:y+height]
                         s1 = mgrsc_s1[idx_selected, :, x:x+width, y:y+height]
 
+                        if s2.shape[2] != self.image_size[0] or s2.shape[3] != self.image_size[1]:
+                            continue
+                        if s1.shape[2] != self.image_size[0] or s1.shape[3] != self.image_size[1]:
+                            continue
+                        if cloud_probs_window.shape[1] != self.image_size[0] or cloud_probs_window.shape[2] != self.image_size[1]:
+                            continue
+                        
                         assert s2.shape[0] == s1.shape[0], "Number of S2 and S1 images must match."
                         assert s2.shape[0] == len(mgrs25_dataset.loc[row_index, 'dates_s2_valid']), "Number of S2 images must match the number of valid dates."
                         assert s2.shape[0] == len(mgrs25_dataset.loc[row_index, 'idx_good_frames']), "Number of S2 images must match the number of good frames."
@@ -896,11 +903,11 @@ if __name__ == "__main__":
     # dataset.load_items_to_hdf5()
 
     # Import des données depuis un fichier hdf5
-    dataset = CIRCA_HDF5_Dataset(
-        hdf5_file_read=output_file,
-        filter_settings=filter_settings,
-        mask_kwargs=mask_kwargs,
-        max_seq_length=10,
-    )
-    sample = next(iter(dataset))
-    print(sample.keys())
+    # dataset = CIRCA_HDF5_Dataset(
+    #     hdf5_file_read=output_file,
+    #     filter_settings=filter_settings,
+    #     mask_kwargs=mask_kwargs,
+    #     max_seq_length=10,
+    # )
+    # sample = next(iter(dataset))
+    # print(sample.keys())
