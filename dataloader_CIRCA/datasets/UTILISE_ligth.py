@@ -362,6 +362,9 @@ class CIRCA_HDF5_Dataset(CircaPatchDataSet):
                 mgrs_group = hf.create_group(mgrs_id)
                 mgrs_dataset = self.patches_dataset[self.patches_dataset["mgrs"] == mgrs_id]
                 for mgrs25_id in tqdm(mgrs_dataset["mgrs25"].unique(), desc="MGRS25 IDs"):
+                    if mgrs25_id == "MGRS25-31TGK_row-4_col-2":
+                        continue
+
                     mgrs25_group = mgrs_group.create_group(mgrs25_id)
                     mgrs25_dataset = mgrs_dataset[mgrs_dataset["mgrs25"] == mgrs25_id]
                     # ETL des données S2 pour la zone mgrs25 concernée
@@ -458,7 +461,7 @@ class CIRCA_HDF5_Dataset(CircaPatchDataSet):
                             continue
                         if cloud_probs_window.shape[1] != self.image_size[0] or cloud_probs_window.shape[2] != self.image_size[1]:
                             continue
-                        
+
                         assert s2.shape[0] == s1.shape[0], "Number of S2 and S1 images must match."
                         assert s2.shape[0] == len(mgrs25_dataset.loc[row_index, 'dates_s2_valid']), "Number of S2 images must match the number of valid dates."
                         assert s2.shape[0] == len(mgrs25_dataset.loc[row_index, 'idx_good_frames']), "Number of S2 images must match the number of good frames."
@@ -861,13 +864,15 @@ if __name__ == "__main__":
     # path_dataset_circa = store_dai / "projets/pac/3str/EXP_2"
     # output_file =  store_dai / "tmp/speillet" / "circa_ligth_0.5.hdf5"
 
+
+
     path_dataset_circa = Path("/home/SPeillet/Downloads/data")
     data_optique = path_dataset_circa / "optique_dataset"
     data_radar = path_dataset_circa / "radar_dataset_v4"
     image_size = [256, 256]
     overlap = 0
-    SAMPLING_SUBSET = 0.5
-    output_file =  path_dataset_circa / "toy_circa_ligth_0.5.hdf5"
+    SAMPLING_SUBSET = 1.0
+    output_file =  path_dataset_circa / "toy_circa_ligth.hdf5"
 
     filter_settings = {
         "type": "cloud-free",           # Strategy for removing observations with data gaps. ['cloud-free', 'cloud-free_consecutive']
@@ -890,17 +895,17 @@ if __name__ == "__main__":
     }
 
     # Si export des données vers un fichier hdf5
-    # dataset = CIRCA_HDF5_Dataset(
-    #     hdf5_file_output=output_file,
-    #     data_optique=data_optique,
-    #     data_radar=data_radar,
-    #     image_size=image_size,
-    #     overlap=overlap,
-    #     filter_settings=filter_settings,
-    #     mask_kwargs=mask_kwargs,
-    #     sampling_random=SAMPLING_SUBSET,
-    # )
-    # dataset.load_items_to_hdf5()
+    dataset = CIRCA_HDF5_Dataset(
+        hdf5_file_output=output_file,
+        data_optique=data_optique,
+        data_radar=data_radar,
+        image_size=image_size,
+        overlap=overlap,
+        filter_settings=filter_settings,
+        mask_kwargs=mask_kwargs,
+        sampling_random=SAMPLING_SUBSET,
+    )
+    dataset.load_items_to_hdf5()
 
     # Import des données depuis un fichier hdf5
     # dataset = CIRCA_HDF5_Dataset(
