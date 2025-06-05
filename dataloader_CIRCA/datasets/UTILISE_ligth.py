@@ -131,9 +131,9 @@ class CIRCA_HDF5_Dataset(CircaPatchDataSet):
             if (phase in ["train", "val"]) and (MGRS_SPLITS["train"] == MGRS_SPLITS["val"]):
                 # If train and val are the same, we just return the dataset as is
                 if phase == 'train':
-                    patches_dataset = patches_dataset.sample(frac=0.8, random_state=42).reset_index(drop=True)
+                    patches_dataset = patches_dataset.sample(frac=0.9, random_state=42).reset_index(drop=True)
                 elif phase == 'val':
-                    patches_dataset = patches_dataset.sample(frac=0.2, random_state=42).reset_index(drop=True)
+                    patches_dataset = patches_dataset.sample(frac=0.1, random_state=42).reset_index(drop=True)
 
         return patches_dataset
 

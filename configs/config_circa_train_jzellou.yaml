@@ -43,7 +43,24 @@ training_settings:
     batch_size: 2                          # Batch size.
     num_epochs: 30                       # Number of training epochs.
 
-    
-    
-    
+metrics:
+    masked_metrics: true                   # True to compute all pixel-based metrics only for those pixels with cloud-free target reflectance, False to evaluate all pixels.
+    mae: true                              # Mean absolute error (MAE).
+    mse: true                              # Mean square error (MSE).
+    rmse: true                             # Root mean square error (RMSE).
+    ssim: true                             # Structural similarity index (SSIM).
+    psnr: true                             # Peak signal-to-noise ratio (PSNR).
+    sam: true                              # Spectral angle mapper (SAM).
+
+misc:
+    logstep_train: 100                     # Training log interval in number of iterations.
+    checkpoint_every_n_epochs: 5           # Save checkpoint after every `checkpoint_every_n_epochs` training epochs.
+    log_gradients: false                   # True to log gradients and model parameters using Weights & Biases.
+    val_every_n_epochs: 1                  # Validation interval in epochs.
+    plot_every_n_epochs: 15                # Plot interval in epochs.
+    plot_val_sample: []                    # List of int, indices of the validation samples to be visualized during training using Weights & Biases.
+    num_workers: 8                         # Number of dataloader worker processes.
+    random_seed: 0                         # Random seed.
+    pin_memory: false                      # Pin memory (dataloader settings).
+    run_mode: train                        # Run mode. ['train', 'val', 'test']
 
