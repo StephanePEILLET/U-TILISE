@@ -70,6 +70,7 @@ class CIRCA_HDF5_Dataset(CircaPatchDataSet):
         return_cloud_mask: bool = True,
         channels: Optional[str] = 'all',
         sampling_random: Optional[float] = None,
+        process_data:bool = True,
     ):
         if hdf5_file_read is None:
             super().__init__(
@@ -89,6 +90,7 @@ class CIRCA_HDF5_Dataset(CircaPatchDataSet):
             self.hdf5_file, self.patches_dataset = self.setup_hdf5_file(hdf5_file_read)
             self.include_S1 = include_S1
             self.image_size = image_size
+            self.process_data = process_data
 
         # TODO Potentiellement stocker dans le hdf5 les hparams sur le filtrage les channels et les masks 
         self.render_occluded_above_p = render_occluded_above_p    # Fully occlude images with high cloud cover
@@ -578,10 +580,13 @@ class CIRCA_HDF5_Dataset(CircaPatchDataSet):
         masks_valid_obs = patch_data['valid_obs'][t_sampled]
 
         frames_input, frames_target = patch_data["S2"]['S2'][t_sampled].clone(), patch_data["S2"]['S2'][t_sampled].clone()
-        frames_input = SentinelDataProcessor.process_MS(frames_input)
+        if self.process_data:
+            frames_input = SentinelDataProcessor.process_MS(frames_input)
         s2_dates = np.asarray(patch_data["S2"]['S2_dates'])[t_sampled]
         if self.include_S1:
-            s1 = SentinelDataProcessor.process_SAR(patch_data['S1']['S1'][t_sampled])
+            s1 = patch_data['S1']['S1'][t_sampled]
+            if self.process_data:
+                s1 = SentinelDataProcessor.process_SAR(s1)
             s1_dates = patch_data['S1']['S1_dates'][t_sampled]
             # Concatenate the (masked) S2 bands and the unmasked S1 bands
             frames_input = torch.cat((frames_input, s1), dim=1)
