@@ -362,8 +362,8 @@ class CIRCA_HDF5_Dataset(CircaPatchDataSet):
                 mgrs_group = hf.create_group(mgrs_id)
                 mgrs_dataset = self.patches_dataset[self.patches_dataset["mgrs"] == mgrs_id]
                 for mgrs25_id in tqdm(mgrs_dataset["mgrs25"].unique(), desc="MGRS25 IDs"):
-                    if mgrs25_id == "MGRS25-31TGK_row-4_col-2":
-                        continue
+                    # if mgrs25_id == "MGRS25-31TGK_row-4_col-2":
+                    #     continue
 
                     mgrs25_group = mgrs_group.create_group(mgrs25_id)
                     mgrs25_dataset = mgrs_dataset[mgrs_dataset["mgrs25"] == mgrs25_id]

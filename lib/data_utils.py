@@ -178,8 +178,8 @@ def get_dataset(config: DictConfig, phase: str, logger: Optional[logging.Logger]
         dset = Dataset(
             **without_keys(config.data, ['dataset']),
             mask_kwargs=config.mask,
-            augment=augment,
-            phase="all",
+            augment=False,
+            phase=phase,
         )
 
     return dset
