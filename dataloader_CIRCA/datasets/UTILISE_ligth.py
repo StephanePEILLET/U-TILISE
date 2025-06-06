@@ -140,13 +140,26 @@ class CIRCA_HDF5_Dataset(CircaPatchDataSet):
         return patches_dataset
 
     def list_files_in_hdf5(self, hdf5_file: Union[str, Path]) -> pd.DataFrame:
-        patches_dataset = pd.DataFrame(columns=['mgrs', 'mgrs25', 'window'])
-        for mgrs_level, mgrsc_list in hdf5_file.items():
-            for mgrsc_level, mgrsc_data in mgrsc_list.items():
-                for window in mgrsc_data.keys():
-                    data = {'mgrs': [mgrs_level], 'mgrs25': [mgrsc_level], 'window': [window]}
-                    patches_dataset = pd.concat([patches_dataset, pd.DataFrame(data)], ignore_index=True)
-        return patches_dataset
+            """
+            List all files in a given HDF5 file and return their details in a DataFrame.
+
+            This method iterates through the hierarchical structure of the HDF5 file,
+            extracting the MGRS levels, MGRS25 levels, and window names, and compiles
+            them into a pandas DataFrame.
+
+            Args:
+                hdf5_file (Union[str, Path]): The path to the HDF5 file or the file object itself.
+
+            Returns:
+                pd.DataFrame: A DataFrame containing the MGRS levels, MGRS25 levels, and window names.
+            """
+            patches_dataset = pd.DataFrame(columns=['mgrs', 'mgrs25', 'window'])
+            for mgrs_level, mgrsc_list in hdf5_file.items():
+                for mgrsc_level, mgrsc_data in mgrsc_list.items():
+                    for window in mgrsc_data.keys():
+                        data = {'mgrs': [mgrs_level], 'mgrs25': [mgrsc_level], 'window': [window]}
+                        patches_dataset = pd.concat([patches_dataset, pd.DataFrame(data)], ignore_index=True)
+            return patches_dataset
 
     def setup_channels(self):
         num_channels = 10
@@ -170,7 +183,7 @@ class CIRCA_HDF5_Dataset(CircaPatchDataSet):
         if isinstance(filter_settings, dict):
             filter_settings = OmegaConf.create(filter_settings)
 
-        if  filter_settings.get('type', None):
+        if filter_settings.get('type', None):
             variable_seq_length = filter_settings.return_valid_obs_only
         else:
             variable_seq_length = False
