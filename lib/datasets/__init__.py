@@ -1,6 +1,7 @@
+from dataloader_CIRCA.datasets.UTILISE_ligth import CIRCA_HDF5_Dataset
+
 from .EarthNet2021Dataset import EarthNet2021Dataset
 from .SEN12MSCRTSDataset import SEN12MSCRTSDataset
-from dataloader_CIRCA.datasets.UTILISE_ligth import CIRCA_HDF5_Dataset
 
 DATASETS = {
     "earthnet2021": EarthNet2021Dataset,

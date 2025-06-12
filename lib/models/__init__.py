@@ -5,5 +5,5 @@ from .utilise import UTILISE
 
 MODELS: Dict[str, Type[UTILISE | ImageSeriesInterpolator]] = {
     "utilise": UTILISE,
-    "ImageSeriesInterpolator": ImageSeriesInterpolator
+    "ImageSeriesInterpolator": ImageSeriesInterpolator,
 }

@@ -1,14 +1,14 @@
 data:
     dataset: circa         # Name of the dataset, ['earthnet2021', 'sen12mscrts']
     hdf5_file_read: /home/SPeillet/Downloads/data/toy_circa_ligth_0.5.hdf5 #"/home/SPeillet/Downloads/data/toy_circa_ligth_0.5.hdf5"
-    max_seq_length: 5
+    max_seq_length: 3
     channels: all
     include_S1: true
     image_size: [256, 256]
 
     filter_settings:
         type: cloud-free
-        min_length: 5
+        min_length: 3
         return_valid_obs_only: true
         # max_t_sampling: 28
 

@@ -11,7 +11,9 @@ from torch import Tensor, nn
 
 
 class ImageSeriesInterpolator(nn.Module):
-    def __init__(self, mode: Literal['last', 'next', 'closest', 'linear_interpolation']):
+    def __init__(
+        self, mode: Literal["last", "next", "closest", "linear_interpolation"]
+    ):
         """
         Trivial image time series interpolation over time.
         Note that the interpolation runs on CPU but is based on numba to speed up the computations
@@ -32,10 +34,11 @@ class ImageSeriesInterpolator(nn.Module):
         self.mode = mode
 
     def forward(
-            self, images: Tensor,
-            cloud_mask: Tensor,
-            days: Optional[Tensor] = None,
-            return_vis_map: Optional[bool] = False
+        self,
+        images: Tensor,
+        cloud_mask: Tensor,
+        days: Optional[Tensor] = None,
+        return_vis_map: Optional[bool] = False,
     ) -> Tensor | Tuple[Tensor, Optional[np.ndarray | Tuple[np.ndarray, np.ndarray]]]:
         """
         Args:
@@ -53,8 +56,8 @@ class ImageSeriesInterpolator(nn.Module):
                              _find_next_visible() (provided that return_vis_map == True).
         """
 
-        if self.mode in ['linear_interpolation', 'closest']:
-            assert days is not None, 'Please provide the temporal sampling information.'
+        if self.mode in ["linear_interpolation", "closest"]:
+            assert days is not None, "Please provide the temporal sampling information."
 
         vis_maps: Optional[np.ndarray | Tuple[np.ndarray, np.ndarray]] = None
 
@@ -63,24 +66,31 @@ class ImageSeriesInterpolator(nn.Module):
         cloud_mask = cloud_mask.numpy()
         days = days.numpy() if days is not None else None
 
-        if self.mode in ['last', 'next']:
+        if self.mode in ["last", "next"]:
             # For every occluded pixel in the image time series, find the temporally closest non-occluded pixel in the
             # past (self.mode=='last') or future (self.mode=='next')
-            vis_maps = self._find_last_visible(images, cloud_mask) if self.mode == 'last' else \
-                self._find_next_visible(images, cloud_mask)
+            vis_maps = (
+                self._find_last_visible(images, cloud_mask)
+                if self.mode == "last"
+                else self._find_next_visible(images, cloud_mask)
+            )
 
             inpainted = self._inpaint_unidirectional(images, vis_maps)
 
-        elif self.mode in ['closest', 'linear_interpolation']:
+        elif self.mode in ["closest", "linear_interpolation"]:
             # For every occluded pixel in the image time series, find the temporally closest non-occluded pixel in the
             # past and future
             vis_maps_last = self._find_last_visible(images, cloud_mask)
             vis_maps_next = self._find_next_visible(images, cloud_mask)
 
-            if self.mode == 'closest':
-                inpainted, vis_maps = self._inpaint_bidirectional(images, days, vis_maps_last, vis_maps_next)
+            if self.mode == "closest":
+                inpainted, vis_maps = self._inpaint_bidirectional(
+                    images, days, vis_maps_last, vis_maps_next
+                )
             else:
-                inpainted = self._linear_interpolation(images, days, vis_maps_last, vis_maps_next)
+                inpainted = self._linear_interpolation(
+                    images, days, vis_maps_last, vis_maps_next
+                )
                 vis_maps = (vis_maps_last, vis_maps_next)
 
         inpainted = torch.from_numpy(inpainted)
@@ -117,16 +127,17 @@ class ImageSeriesInterpolator(nn.Module):
         last_visible = np.full((B, T, H, W), np.nan, dtype=np.float32)
 
         # Pixel observed at time step t=0
-        last_visible[:, 0, :, :][cloud_mask[:, 0, 0, :, :] == 0.] = 0
+        last_visible[:, 0, :, :][cloud_mask[:, 0, 0, :, :] == 0.0] = 0
 
         # Iterate through the image time series (forward)
         for t in range(1, T):
             # Pixel observed at time step t
-            last_visible[:, t, :, :][cloud_mask[:, t, 0, :, :] == 0.] = t
+            last_visible[:, t, :, :][cloud_mask[:, t, 0, :, :] == 0.0] = t
 
             # Pixel occluded at time step t: record at which previous time step the pixel was last visible
-            last_visible[:, t, :, :][cloud_mask[:, t, 0, :, :] == 1.] = \
-                last_visible[:, t-1, :, :][cloud_mask[:, t, 0, :, :] == 1.]
+            last_visible[:, t, :, :][cloud_mask[:, t, 0, :, :] == 1.0] = last_visible[
+                :, t - 1, :, :
+            ][cloud_mask[:, t, 0, :, :] == 1.0]
 
         return last_visible
 
@@ -158,16 +169,17 @@ class ImageSeriesInterpolator(nn.Module):
         next_visible = np.full((B, T, H, W), np.nan, dtype=np.float32)
 
         # Pixel observed in the last image of the time series
-        next_visible[:, -1, :, :][cloud_mask[:, -1, 0, :, :] == 0.] = T-1
+        next_visible[:, -1, :, :][cloud_mask[:, -1, 0, :, :] == 0.0] = T - 1
 
         # Iterate through the image time series (backward)
         for t in range(T - 2, -1, -1):
             # Pixel observed at time step t
-            next_visible[:, t, :, :][cloud_mask[:, t, 0, :, :] == 0.] = t
+            next_visible[:, t, :, :][cloud_mask[:, t, 0, :, :] == 0.0] = t
 
             # Pixel occluded at time step t: record at which time step the pixel is observed next
-            next_visible[:, t, :, :][cloud_mask[:, t, 0, :, :] == 1.] = \
-                next_visible[:, t+1, :, :][cloud_mask[:, t, 0, :, :] == 1.]
+            next_visible[:, t, :, :][cloud_mask[:, t, 0, :, :] == 1.0] = next_visible[
+                :, t + 1, :, :
+            ][cloud_mask[:, t, 0, :, :] == 1.0]
 
         return next_visible
 
@@ -196,14 +208,19 @@ class ImageSeriesInterpolator(nn.Module):
                 for h in prange(H):
                     for w in prange(W):
                         if ~np.isnan(vis_maps[b, t, h, w]):
-                            inpainted[b, t, :, h, w] = images[b, int(vis_maps[b, t, h, w]), :, h, w]
+                            inpainted[b, t, :, h, w] = images[
+                                b, int(vis_maps[b, t, h, w]), :, h, w
+                            ]
 
         return inpainted
 
     @staticmethod
     @njit(parallel=True)
     def _inpaint_bidirectional(
-            images: np.ndarray, days: np.ndarray, vis_maps_last: np.ndarray, vis_maps_next: np.ndarray
+        images: np.ndarray,
+        days: np.ndarray,
+        vis_maps_last: np.ndarray,
+        vis_maps_next: np.ndarray,
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Pixel-wise bidirectional data imputation (closest) over time.
@@ -233,7 +250,9 @@ class ImageSeriesInterpolator(nn.Module):
             for t in prange(T):
                 for h in prange(H):
                     for w in prange(W):
-                        if ~np.isnan(vis_maps_last[b, t, h, w]) and ~np.isnan(vis_maps_next[b, t, h, w]):
+                        if ~np.isnan(vis_maps_last[b, t, h, w]) and ~np.isnan(
+                            vis_maps_next[b, t, h, w]
+                        ):
                             t0 = int(vis_maps_last[b, t, h, w])
                             t1 = int(vis_maps_next[b, t, h, w])
 
@@ -246,19 +265,30 @@ class ImageSeriesInterpolator(nn.Module):
                                 inpainted[b, t, :, h, w] = images[b, t1, :, h, w]
 
                         elif ~np.isnan(vis_maps_last[b, t, h, w]):
-                            vis_maps_closest[b, t, h, w] = int(vis_maps_last[b, t, h, w])
-                            inpainted[b, t, :, h, w] = images[b, int(vis_maps_last[b, t, h, w]), :, h, w]
+                            vis_maps_closest[b, t, h, w] = int(
+                                vis_maps_last[b, t, h, w]
+                            )
+                            inpainted[b, t, :, h, w] = images[
+                                b, int(vis_maps_last[b, t, h, w]), :, h, w
+                            ]
 
                         elif ~np.isnan(vis_maps_next[b, t, h, w]):
-                            vis_maps_closest[b, t, h, w] = int(vis_maps_next[b, t, h, w])
-                            inpainted[b, t, :, h, w] = images[b, int(vis_maps_next[b, t, h, w]), :, h, w]
+                            vis_maps_closest[b, t, h, w] = int(
+                                vis_maps_next[b, t, h, w]
+                            )
+                            inpainted[b, t, :, h, w] = images[
+                                b, int(vis_maps_next[b, t, h, w]), :, h, w
+                            ]
 
         return inpainted, vis_maps_closest
 
     @staticmethod
     @njit(parallel=True)
     def _linear_interpolation(
-            images: np.ndarray, days: np.ndarray, vis_maps_last: np.ndarray, vis_maps_next: np.ndarray
+        images: np.ndarray,
+        days: np.ndarray,
+        vis_maps_last: np.ndarray,
+        vis_maps_next: np.ndarray,
     ) -> np.ndarray:
         """
         Pixel-wise linear interpolation of occluded pixels over time.
@@ -284,7 +314,9 @@ class ImageSeriesInterpolator(nn.Module):
             for t in prange(T):
                 for h in prange(H):
                     for w in prange(W):
-                        if ~np.isnan(vis_maps_last[b, t, h, w]) and ~np.isnan(vis_maps_next[b, t, h, w]):
+                        if ~np.isnan(vis_maps_last[b, t, h, w]) and ~np.isnan(
+                            vis_maps_next[b, t, h, w]
+                        ):
                             t0 = int(vis_maps_last[b, t, h, w])
                             t1 = int(vis_maps_next[b, t, h, w])
 
@@ -298,27 +330,35 @@ class ImageSeriesInterpolator(nn.Module):
 
                                 # Linear interpolation between (t0, refl0) and (t1, refl1) by taking the temporal
                                 # sampling into account
-                                interpolated[b, t, :, h, w] = refl0 + (refl1 - refl0) * (
-                                            (days[b, t] - days[b, t0]) / (days[b, t1] - days[b, t0]))
+                                interpolated[b, t, :, h, w] = refl0 + (
+                                    refl1 - refl0
+                                ) * (
+                                    (days[b, t] - days[b, t0])
+                                    / (days[b, t1] - days[b, t0])
+                                )
 
                         elif ~np.isnan(vis_maps_last[b, t, h, w]):
                             # Keep the last observation
-                            interpolated[b, t, :, h, w] = images[b, int(vis_maps_last[b, t, h, w]), :, h, w]
+                            interpolated[b, t, :, h, w] = images[
+                                b, int(vis_maps_last[b, t, h, w]), :, h, w
+                            ]
 
                         elif ~np.isnan(vis_maps_next[b, t, h, w]):
                             # Take the next observation
-                            interpolated[b, t, :, h, w] = images[b, int(vis_maps_next[b, t, h, w]), :, h, w]
+                            interpolated[b, t, :, h, w] = images[
+                                b, int(vis_maps_next[b, t, h, w]), :, h, w
+                            ]
 
         return interpolated
 
     @staticmethod
     def visualize_visibility_maps(
-            vis_maps: np.ndarray,
-            figsize: Tuple[int, int] = (18, 12),
-            nrows: Optional[int] = None,
-            ncols: Optional[int] = None,
-            colormap: str = 'Paired',
-            fontsize: int = 10
+        vis_maps: np.ndarray,
+        figsize: Tuple[int, int] = (18, 12),
+        nrows: Optional[int] = None,
+        ncols: Optional[int] = None,
+        colormap: str = "Paired",
+        fontsize: int = 10,
     ) -> matplotlib.figure.Figure:
         """
         Plot visibility maps (used for debugging purposes).
@@ -354,15 +394,17 @@ class ImageSeriesInterpolator(nn.Module):
 
         # Set up figure and image grid
         fig = plt.figure(figsize=figsize)
-        grid = ImageGrid(fig, 111,  # as in plt.subplot(111)
-                         nrows_ncols=(nrows, ncols),
-                         axes_pad=0.15,
-                         share_all=True,
-                         cbar_location="right",
-                         cbar_mode="single",
-                         cbar_size="7%",
-                         cbar_pad=0.15,
-                         )
+        grid = ImageGrid(
+            fig,
+            111,  # as in plt.subplot(111)
+            nrows_ncols=(nrows, ncols),
+            axes_pad=0.15,
+            share_all=True,
+            cbar_location="right",
+            cbar_mode="single",
+            cbar_size="7%",
+            cbar_pad=0.15,
+        )
 
         # Bounds for colormap
         vmin = -1
@@ -372,7 +414,9 @@ class ImageSeriesInterpolator(nn.Module):
         # Add data to image grid
         for t in range(T):
             grid[t].set_axis_off()
-            h = grid[t].imshow(maps[t, :, :], cmap=cmap, vmin=vmin - 0.5, vmax=vmax + 0.5)
+            h = grid[t].imshow(
+                maps[t, :, :], cmap=cmap, vmin=vmin - 0.5, vmax=vmax + 0.5
+            )
 
         cbar = grid.cbar_axes[0].colorbar(h)
 
@@ -381,7 +425,7 @@ class ImageSeriesInterpolator(nn.Module):
 
         # Colorbar tick labels
         ticklabels = [str(label) for label in np.arange(vmin, vmax + 1)]
-        ticklabels[0] = 'nan'
+        ticklabels[0] = "nan"
         cbar.set_ticklabels(ticklabels, fontsize=fontsize)
 
         return fig

@@ -7,7 +7,9 @@ from torch import Tensor
 
 
 def dilate_masks(
-        masks: Tensor, kernel: Tensor = Tensor([[0, 1, 0], [1, 1, 1], [0, 1, 0]]), iterations: int = 1
+    masks: Tensor,
+    kernel: Tensor = Tensor([[0, 1, 0], [1, 1, 1], [0, 1, 0]]),
+    iterations: int = 1,
 ) -> Tensor:
     """
     Returns the dilated `masks` using the kernel `kernel`. Dilation is performed `iterations` times.
@@ -34,12 +36,12 @@ def dilate_masks(
 
 
 def masks_init_filling(
-        seq: Tensor,
-        masks: Tensor,
-        mask_valid: Optional[Tensor] = None,
-        fill_type: Literal['fill_value', 'white_noise', 'mean'] = 'fill_value',
-        fill_value: float = 0,
-        dilate_cloud_masks: Optional[bool] = False
+    seq: Tensor,
+    masks: Tensor,
+    mask_valid: Optional[Tensor] = None,
+    fill_type: Literal["fill_value", "white_noise", "mean"] = "fill_value",
+    fill_value: float = 0,
+    dilate_cloud_masks: Optional[bool] = False,
 ) -> Tuple[Tensor, Tensor]:
     """
     Overlays the input satellite image time series `seq` with the sequenc of masks `masks`. The pixel values of masked
@@ -64,38 +66,46 @@ def masks_init_filling(
         masks:       torch.Tensor, sequence of cloud masks.
     """
 
-    assert fill_type in ['fill_value', 'white_noise', 'mean'], 'Invalid mask initialization.'
+    assert fill_type in [
+        "fill_value",
+        "white_noise",
+        "mean",
+    ], "Invalid mask initialization."
 
     if dilate_cloud_masks:
         masks = dilate_masks(masks)
 
     num_channels = seq.shape[1]
     masked_seq = seq.clone()
-    flag = (masks == 1.).expand_as(seq)
+    flag = (masks == 1.0).expand_as(seq)
 
-    if fill_type == 'fill_value':
+    if fill_type == "fill_value":
         masked_seq[flag] = fill_value
 
-    elif fill_type == 'white_noise':
+    elif fill_type == "white_noise":
         noise = torch.normal(mean=0, std=0.5, size=seq.shape)
         noise[noise < 0] = 0
         noise[noise > 1] = 1
         masked_seq[flag] += noise[flag]
 
-    elif fill_type == 'mean':
+    elif fill_type == "mean":
         for c in range(num_channels):
             # Compute the mean per channel (across all time steps)
-            masked_seq[:, c, :, :][flag[:, 0, :, :]] = \
-                torch.mean(seq[mask_valid == 1, c, :, :][(~flag)[mask_valid == 1, 0, :, :]])
+            masked_seq[:, c, :, :][flag[:, 0, :, :]] = torch.mean(
+                seq[mask_valid == 1, c, :, :][(~flag)[mask_valid == 1, 0, :, :]]
+            )
     else:
-        raise NotImplementedError(f'Unknown mask fill type: {fill_type}\n')
+        raise NotImplementedError(f"Unknown mask fill type: {fill_type}\n")
 
     return masked_seq, masks
 
 
 def overlay_seq_with_clouds(
-        images: Tensor, cloud_masks: Tensor, t_masked: np.ndarray | None = None, fill_value: int = 0,
-        dilate_cloud_masks: Optional[bool] = False
+    images: Tensor,
+    cloud_masks: Tensor,
+    t_masked: np.ndarray | None = None,
+    fill_value: int = 0,
+    dilate_cloud_masks: Optional[bool] = False,
 ) -> Tuple[Tensor, Tensor]:
     """
     Masks the given satellite image time series `images` with cloud masks stored in `cloud_masks`.
@@ -120,7 +130,9 @@ def overlay_seq_with_clouds(
     if cloud_masks.shape[0] < images.shape[0]:
         if t_masked is None:
             # Randomly sample the images to be masked
-            t_masked = np.random.choice(np.arange(0, images.shape[0]), cloud_masks.shape[0], replace=False)
+            t_masked = np.random.choice(
+                np.arange(0, images.shape[0]), cloud_masks.shape[0], replace=False
+            )
 
         masks = torch.zeros((images.shape[0], 1, *images.shape[-2:]))
         masks[t_masked, :, :, :] = cloud_masks
@@ -129,7 +141,11 @@ def overlay_seq_with_clouds(
 
     # Image time series with overlaid cloud masks filled with value `fill_value`
     images_masked, masks = masks_init_filling(
-        seq=images, masks=masks, fill_type='fill_value', fill_value=fill_value, dilate_cloud_masks=dilate_cloud_masks
+        seq=images,
+        masks=masks,
+        fill_type="fill_value",
+        fill_value=fill_value,
+        dilate_cloud_masks=dilate_cloud_masks,
     )
 
     return images_masked, masks

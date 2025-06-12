@@ -10,21 +10,27 @@ from omegaconf import DictConfig
 from torch import Tensor
 
 # Launch date of Sentinel-2A
-REFERENCE_DATE: dt.date = dt.datetime(*map(int, '2015-06-23'.split("-")), tzinfo=None).date()
+REFERENCE_DATE: dt.date = dt.datetime(
+    *map(int, "2015-06-23".split("-")), tzinfo=None
+).date()
 
 # Strategies for positional encoding
-PE_STRATEGIES = ['day-of-year', 'day-within-sequence', 'absolute', 'enumeration']
+PE_STRATEGIES = ["day-of-year", "day-within-sequence", "absolute", "enumeration"]
 
 # Mask types for synthetically generating data gaps in cloud-free satellite image time series
-MASK_TYPES = ['random_clouds', 'real_clouds']
+MASK_TYPES = ["random_clouds", "real_clouds"]
+
 
 def str2date(date_string: str) -> dt.date:
     """Converts a date in string format to datetime format."""
-    return dt.datetime.strptime(date_string, '%Y-%m-%d').date()
+    return dt.datetime.strptime(date_string, "%Y-%m-%d").date()
 
 
 def detect_impaired_frames(
-        seq: Tensor, cloud_prob: Optional[Tensor], cloud_mask: Tensor, increased_filter_strength: bool = False
+    seq: Tensor,
+    cloud_prob: Optional[Tensor],
+    cloud_mask: Tensor,
+    increased_filter_strength: bool = False,
 ) -> Tuple[List[int], Dict[str, Tensor]]:
     """
     Returns the indices of unavailable or cloudy/foggy images within a given image time series `seq`.
@@ -54,7 +60,9 @@ def detect_impaired_frames(
         cc_cumsum = (torch.sum(cloud_prob > p1, dim=(-2, -1)) / (H * W) * 100).flatten()
 
         # Criterion 1: a frame not available if all pixels are NaN
-        not_avail = torch.Tensor([torch.all(torch.isnan(seq[i, ...])) for i in range(seq_length)])
+        not_avail = torch.Tensor(
+            [torch.all(torch.isnan(seq[i, ...])) for i in range(seq_length)]
+        )
 
         # Criterion 2: a frame is considered as cloudy/foggy if >=`q`% of its pixels are cloudy
         # (w.r.t. the binary cloud mask)
@@ -74,13 +82,17 @@ def detect_impaired_frames(
         cc_status = torch.logical_or(cc_status1, cc_status2)
 
         # Combine all criteria: criterion 1 OR criterion 2 OR criterion 3
-        frame_impaired = torch.logical_or(not_avail, torch.logical_or(cc_status, clouds_status))
+        frame_impaired = torch.logical_or(
+            not_avail, torch.logical_or(cc_status, clouds_status)
+        )
     else:
         # Percentage of cloudy pixels per frame
         clouds_cumsum = (torch.sum(cloud_mask, dim=(-2, -1)) / (H * W) * 100).flatten()
 
         # Criterion 1: a frame not available if all pixels are NaN
-        not_avail = torch.Tensor([torch.all(torch.isnan(seq[i, ...])) for i in range(seq_length)])
+        not_avail = torch.Tensor(
+            [torch.all(torch.isnan(seq[i, ...])) for i in range(seq_length)]
+        )
 
         # Criterion 2: a frame is considered as cloudy/foggy if >=`q`% of its pixels are cloudy
         # (w.r.t. the binary cloud mask)
@@ -94,17 +106,17 @@ def detect_impaired_frames(
     idx_impaired_frames = list(compress(range(seq_length), frame_impaired))
 
     debug_info = {
-        'clouds_cumsum': clouds_cumsum,
-        'clouds_status': clouds_status,
-        'frame_impaired': frame_impaired
+        "clouds_cumsum": clouds_cumsum,
+        "clouds_status": clouds_status,
+        "frame_impaired": frame_impaired,
     }
     if cloud_prob is not None:
-        debug_info['cc_cumsum'] = cc_cumsum
-        debug_info['cc_status'] = cc_status
+        debug_info["cc_cumsum"] = cc_cumsum
+        debug_info["cc_status"] = cc_status
 
     return idx_impaired_frames, debug_info
 
-    
+
 def get_position_for_positional_encoding(dates: List[dt.date], strategy: str) -> Tensor:
     """
     Extracts the position index for every observation in an image time series, expressed as the number of days since
@@ -130,25 +142,27 @@ def get_position_for_positional_encoding(dates: List[dt.date], strategy: str) ->
         position:  torch.Tensor, number of days since a given reference date for every observation in the sequence.
     """
 
-    if strategy == 'enumeration':
+    if strategy == "enumeration":
         position = torch.arange(0, len(dates))
-    elif strategy == 'day-of-year':
+    elif strategy == "day-of-year":
         position = Tensor([(date - dt.date(date.year, 1, 1)).days for date in dates])
-    elif strategy == 'day-within-sequence':
+    elif strategy == "day-within-sequence":
         position = Tensor([(date - dates[0]).days for date in dates])
-    elif strategy == 'absolute':
+    elif strategy == "absolute":
         position = Tensor([(date - REFERENCE_DATE).days for date in dates])
     else:
-        raise NotImplementedError(f'Unknown positional encoding strategy {strategy}.\n')
+        raise NotImplementedError(f"Unknown positional encoding strategy {strategy}.\n")
 
     return position
 
 
-def sample_indices_masked_frames(idx_valid_input_frames: np.ndarray,
-                                 ratio_masked_frames: float = 0.5,
-                                 ratio_fully_masked_frames: float = 0.0,
-                                 non_masked_frames: Optional[List[int]] = None,
-                                 fixed_masking_ratio: bool = True) -> Dict[str, np.ndarray]:
+def sample_indices_masked_frames(
+    idx_valid_input_frames: np.ndarray,
+    ratio_masked_frames: float = 0.5,
+    ratio_fully_masked_frames: float = 0.0,
+    non_masked_frames: Optional[List[int]] = None,
+    fixed_masking_ratio: bool = True,
+) -> Dict[str, np.ndarray]:
     """
     Generates a sequence of `masks` to synthetically mask an image time series. masks[t1, 0, y1, x1] == 1 will mask the
     spatio-temporal location (t1, y1, x1), whereas masks[t2, 0, y2, x2] == 0 will retain the observed reflectance at
@@ -171,8 +185,10 @@ def sample_indices_masked_frames(idx_valid_input_frames: np.ndarray,
             'indices_fully_masked':  np.ndarray, indices of fully masked frames.
     """
 
-    assert ratio_fully_masked_frames <= ratio_masked_frames, "Masking parameter `ratio_fully_masked_frames` needs to " \
-                                                             "be smaller or equal to `ratio_masked_frames.`"
+    assert ratio_fully_masked_frames <= ratio_masked_frames, (
+        "Masking parameter `ratio_fully_masked_frames` needs to "
+        "be smaller or equal to `ratio_masked_frames.`"
+    )
 
     # Upper bound: Maximum number of masked input frames (partially or fully masked)
     num_total = len(idx_valid_input_frames)
@@ -194,19 +210,30 @@ def sample_indices_masked_frames(idx_valid_input_frames: np.ndarray,
         if np.any(non_masked_frames < 0):
             # Account for negative indices
             indices_pos = non_masked_frames[non_masked_frames >= 0]
-            indices_neg = idx_valid_input_frames[non_masked_frames[non_masked_frames < 0]]
+            indices_neg = idx_valid_input_frames[
+                non_masked_frames[non_masked_frames < 0]
+            ]
             non_masked_frames = np.concatenate((indices_pos, indices_neg), axis=0)
         else:
             non_masked_frames = idx_valid_input_frames[non_masked_frames]
         list_frames = np.setdiff1d(idx_valid_input_frames, non_masked_frames)
-        indices_masked = np.random.choice(list_frames, min(num_masked, list_frames.size), replace=False)
+        indices_masked = np.random.choice(
+            list_frames, min(num_masked, list_frames.size), replace=False
+        )
     else:
-        indices_masked = np.random.choice(idx_valid_input_frames, num_masked, replace=False)
+        indices_masked = np.random.choice(
+            idx_valid_input_frames, num_masked, replace=False
+        )
 
     # Randomly selected the frame indices of the fully masked frames
-    indices_fully_masked = np.random.choice(indices_masked, num_fully_masked, replace=False)
+    indices_fully_masked = np.random.choice(
+        indices_masked, num_fully_masked, replace=False
+    )
 
-    return {'indices_masked': indices_masked, 'indices_fully_masked': indices_fully_masked}
+    return {
+        "indices_masked": indices_masked,
+        "indices_fully_masked": indices_fully_masked,
+    }
 
 
 def get_mask_sampling_id_hdf5(mask_args: DictConfig) -> Tuple[str, str]:
@@ -221,11 +248,14 @@ def get_mask_sampling_id_hdf5(mask_args: DictConfig) -> Tuple[str, str]:
         mask_name:  string, hd5f dataset name, mask sequence (stored in `mask_dir`).
     """
 
-    if 'ratio_fully_masked_frames' in mask_args and mask_args.ratio_fully_masked_frames > 0.:
-        mask_dir = f'ratio_masked_{mask_args.ratio_masked_frames}_fully_masked_{mask_args.ratio_fully_masked_frames}'
+    if (
+        "ratio_fully_masked_frames" in mask_args
+        and mask_args.ratio_fully_masked_frames > 0.0
+    ):
+        mask_dir = f"ratio_masked_{mask_args.ratio_masked_frames}_fully_masked_{mask_args.ratio_fully_masked_frames}"
     else:
-        mask_dir = f'ratio_masked_{mask_args.ratio_masked_frames}'
+        mask_dir = f"ratio_masked_{mask_args.ratio_masked_frames}"
 
-    mask_name = f'masks_{mask_args.mask_type}'
+    mask_name = f"masks_{mask_args.mask_type}"
 
     return mask_dir, mask_name

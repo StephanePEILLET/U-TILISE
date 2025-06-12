@@ -5,8 +5,12 @@ from argparse import HelpFormatter
 
 class RawFormatter(HelpFormatter):
     def _fill_text(self, text, width, indent):
-        return "\n".join([textwrap.fill(line, width) for line in textwrap.indent(textwrap.dedent(text), indent).
-                         splitlines()])
+        return "\n".join(
+            [
+                textwrap.fill(line, width)
+                for line in textwrap.indent(textwrap.dedent(text), indent).splitlines()
+            ]
+        )
 
 
 class LeveledFormatter(logging.Formatter):

@@ -15,7 +15,7 @@ from lib.datasets.EarthNet2021Dataset import EarthNet2021Dataset
 from lib.utils import set_seed
 
 VALIDATION_SIZE = 5000
-SPLITS = ['train', 'iid', 'ood', 'extreme', 'seasonal']
+SPLITS = ["train", "iid", "ood", "extreme", "seasonal"]
 
 
 class EarthNet2021_npz2hdf5(torch.utils.data.Dataset):
@@ -26,21 +26,25 @@ class EarthNet2021_npz2hdf5(torch.utils.data.Dataset):
         mode:  str, data split mode for the training set, ['train', 'val', 'all']
     """
 
-    def __init__(self, root: str, split: str = 'train', mode: Optional[str] = 'train'):
+    def __init__(self, root: str, split: str = "train", mode: Optional[str] = "train"):
 
         if split not in SPLITS:
-            raise ValueError(f"Invalid `split`. Choose among {SPLITS} to specify `split`.\n")
+            raise ValueError(
+                f"Invalid `split`. Choose among {SPLITS} to specify `split`.\n"
+            )
 
-        if mode not in ['train', 'val', 'all']:
-            raise ValueError("Invalid `mode`. Choose among ['train', 'val', 'all'] to specify `mode`.\n")
+        if mode not in ["train", "val", "all"]:
+            raise ValueError(
+                "Invalid `mode`. Choose among ['train', 'val', 'all'] to specify `mode`.\n"
+            )
 
-        if split == 'train':
+        if split == "train":
             self.split = split
             self.root = os.path.join(root, split)
             self.mode = mode
         else:
-            self.split = split + '_test_split'
-            self.root = os.path.join(root, self.split, 'context')
+            self.split = split + "_test_split"
+            self.root = os.path.join(root, self.split, "context")
 
         # Get the paths of the data samples (including train/val split) and optionally remove short sequences
         self.tiles, self.paths = self._get_data_samples_npz()
@@ -54,28 +58,28 @@ class EarthNet2021_npz2hdf5(torch.utils.data.Dataset):
     def __getitem__(self, idx: int) -> Dict[str, Union[np.ndarray, str]]:
 
         # Load the data multicube: H x W x C x T
-        if self.split == 'train':
+        if self.split == "train":
             filepath = self.paths[idx]
-            multicube = np.load(filepath)['highresdynamic']
+            multicube = np.load(filepath)["highresdynamic"]
 
         else:
             filepath = self.paths[idx]
-            filepath_target = filepath.replace('context', 'target')
+            filepath_target = filepath.replace("context", "target")
             multicube = np.concatenate(
-                (np.load(filepath)['highresdynamic'], np.load(filepath_target)['highresdynamic']),
-                axis=3
+                (
+                    np.load(filepath)["highresdynamic"],
+                    np.load(filepath_target)["highresdynamic"],
+                ),
+                axis=3,
             )
 
-        filepath = filepath.replace(self.root + '/', '').replace('context_', '')
+        filepath = filepath.replace(self.root + "/", "").replace("context_", "")
 
         # Return <tile_name>/<filename>
         p = Path(filepath)
         filepath_export = str(p.parent / p.stem)
 
-        out = {
-            'highresdynamic': multicube,
-            'filepath_export': filepath_export
-        }
+        out = {"highresdynamic": multicube, "filepath_export": filepath_export}
 
         return out
 
@@ -83,10 +87,12 @@ class EarthNet2021_npz2hdf5(torch.utils.data.Dataset):
         # Get the paths of all samples in the given data split
         tiles, paths, sample_count = self._get_data_structure()
 
-        if self.split == 'train':
-            if self.mode in ['train', 'val']:
+        if self.split == "train":
+            if self.mode in ["train", "val"]:
                 # Split the training set into training and validation samples (roughly 80:20 ratio).
-                tiles, paths = self._get_train_val_split(tiles, paths, sample_count, return_samples=self.mode)
+                tiles, paths = self._get_train_val_split(
+                    tiles, paths, sample_count, return_samples=self.mode
+                )
             else:
                 # Concatenate the filepaths across all tiles
                 temp = []
@@ -116,8 +122,8 @@ class EarthNet2021_npz2hdf5(torch.utils.data.Dataset):
 
         tiles = os.listdir(self.root)
 
-        if 'LICENSE' in tiles:
-            tiles.remove('LICENSE')
+        if "LICENSE" in tiles:
+            tiles.remove("LICENSE")
         tiles.sort()
 
         paths = {}
@@ -139,7 +145,10 @@ class EarthNet2021_npz2hdf5(torch.utils.data.Dataset):
 
     @staticmethod
     def _get_train_val_split(
-            tiles: List[str], paths: Dict[str, List[str]], sample_count: np.ndarray, return_samples: str = 'train'
+        tiles: List[str],
+        paths: Dict[str, List[str]],
+        sample_count: np.ndarray,
+        return_samples: str = "train",
     ) -> Tuple[List[str], List[str]]:
         """
         Splits the train split into VALIDATION_SIZE validation samples and sample_count.sum() - VALIDATION_SIZE
@@ -160,8 +169,10 @@ class EarthNet2021_npz2hdf5(torch.utils.data.Dataset):
         # Set seed to reproduce the same training/validation split
         set_seed(0)
 
-        if return_samples not in ['train', 'val']:
-            raise ValueError("Invalid train/val split identifier. Choose among ['train', 'val'].\n")
+        if return_samples not in ["train", "val"]:
+            raise ValueError(
+                "Invalid train/val split identifier. Choose among ['train', 'val'].\n"
+            )
 
         # Total number of samples
         num_samples = sample_count.sum()
@@ -204,27 +215,27 @@ class EarthNet2021_npz2hdf5(torch.utils.data.Dataset):
             else:
                 paths_val = paths_val + paths[tile]
 
-        if return_samples == 'train':
+        if return_samples == "train":
             return tiles_train, paths_train
         return tiles_val, paths_val
 
 
 def create_hdf5_group(hdf5_file: str, group: str) -> None:
-    with h5py.File(hdf5_file, 'a', libver='latest') as f:
+    with h5py.File(hdf5_file, "a", libver="latest") as f:
         if not f.__contains__(group):
             f.create_group(group)
 
 
 def process_npz_sample_to_hdf5(
-        hdf5_file: str, directory: str, dataset: torch.utils.data.Dataset, sample_index: int
+    hdf5_file: str, directory: str, dataset: torch.utils.data.Dataset, sample_index: int
 ) -> None:
 
-    with h5py.File(hdf5_file, 'a', libver='latest') as f:
+    with h5py.File(hdf5_file, "a", libver="latest") as f:
         # Load the npz sample: H x W x C x T
         data = dataset.__getitem__(sample_index)
-        sample = data['highresdynamic'][:]
+        sample = data["highresdynamic"][:]
 
-        p = Path(data['filepath_export'])
+        p = Path(data["filepath_export"])
         filename = p.stem
         tile = p.parts[-2]
 
@@ -234,7 +245,7 @@ def process_npz_sample_to_hdf5(
 
         # Store the sample as hdf5 dataset
         dset = f[group].create_dataset(
-            'highresdynamic', data=sample, compression='gzip', compression_opts=9
+            "highresdynamic", data=sample, compression="gzip", compression_opts=9
         )
 
         # (H x W x C x T) -> (T x C x H x W), format expected by detect_impaired_frames()
@@ -243,7 +254,7 @@ def process_npz_sample_to_hdf5(
         T = images.shape[0]
 
         # Detect impaired frames (unavailable/foggy/cloudy)
-        if dataset.split == 'train':
+        if dataset.split == "train":
             cloud_prob = torch.from_numpy(sample[:, :, [4], :]).permute(3, 2, 0, 1)
             idx_impaired_frames, _ = detect_impaired_frames(
                 images, cloud_prob, cloud_mask, increased_filter_strength=False
@@ -252,46 +263,59 @@ def process_npz_sample_to_hdf5(
             idx_impaired_frames, _ = detect_impaired_frames(images, None, cloud_mask)
 
         dset = f[group].create_dataset(
-            'idx_impaired_frames', data=idx_impaired_frames, compression='gzip', compression_opts=9
+            "idx_impaired_frames",
+            data=idx_impaired_frames,
+            compression="gzip",
+            compression_opts=9,
         )
 
         # Indices of foggy/cloudy (but available) frames
-        idx_cloudy_frames = [i for i in idx_impaired_frames if ~torch.all(torch.isnan(images[i, ...]))]
+        idx_cloudy_frames = [
+            i for i in idx_impaired_frames if ~torch.all(torch.isnan(images[i, ...]))
+        ]
         dset = f[group].create_dataset(
-            'idx_cloudy_frames', data=idx_cloudy_frames, compression='gzip', compression_opts=9
+            "idx_cloudy_frames",
+            data=idx_cloudy_frames,
+            compression="gzip",
+            compression_opts=9,
         )
 
         # Indices of available and cloud-free frames
         idx_good_frames = [i for i in range(T) if i not in idx_impaired_frames]
         dset = f[group].create_dataset(
-            'idx_good_frames', data=idx_good_frames, compression='gzip', compression_opts=9
+            "idx_good_frames",
+            data=idx_good_frames,
+            compression="gzip",
+            compression_opts=9,
         )
 
         # Save a flag for every time step to indicate whether the observation is valid or not
         # (1: available and cloud-free, 0: otherwise)
         valid_obs = [1 if i in idx_good_frames else 0 for i in range(T)]
         dset = f[group].create_dataset(
-            'valid_obs', data=valid_obs, compression='gzip', compression_opts=9
+            "valid_obs", data=valid_obs, compression="gzip", compression_opts=9
         )
 
 
 parser = ArgumentParser()
-parser.add_argument('--root_source', type=str, required=True)
-parser.add_argument('--root_dest', type=str, required=True)
-parser.add_argument('--split', type=str, required=True)
-parser.add_argument('--mode', type=str, default='train')
+parser.add_argument("--root_source", type=str, required=True)
+parser.add_argument("--root_dest", type=str, required=True)
+parser.add_argument("--split", type=str, required=True)
+parser.add_argument("--mode", type=str, default="train")
 
 
 def main(args):
-    dataset = EarthNet2021_npz2hdf5(root=args.root_source, split=args.split, mode=args.mode)
-    if args.split == 'train':
-        hdf5_file = os.path.join(args.root_dest, 'train.hdf5')
+    dataset = EarthNet2021_npz2hdf5(
+        root=args.root_source, split=args.split, mode=args.mode
+    )
+    if args.split == "train":
+        hdf5_file = os.path.join(args.root_dest, "train.hdf5")
     else:
-        hdf5_file = os.path.join(args.root_dest, args.split + '_test_split.hdf5')
+        hdf5_file = os.path.join(args.root_dest, args.split + "_test_split.hdf5")
 
     # Create a subgroup per data split
-    directory = args.mode if args.split == 'train' else args.split + '_test_split'
-    #directory = os.path.join(directory, 'samples')
+    directory = args.mode if args.split == "train" else args.split + "_test_split"
+    # directory = os.path.join(directory, 'samples')
     create_hdf5_group(hdf5_file, directory)
 
     # Create a subgroup for each tile
@@ -305,20 +329,27 @@ def main(args):
     # Retrieve valid samples (samples with at least 5 cloud-free images) by creating a EarthNet2021 dataset instance
     # from the created hdf5 file
     dataset2 = EarthNet2021Dataset(
-        root=args.root_dest, hdf5_file=Path(hdf5_file).parts[-1], split=args.split, mode=args.mode,
-        filter_settings={'type': 'cloud-free', 'min_length': 5, 'return_valid_obs_only': False}
+        root=args.root_dest,
+        hdf5_file=Path(hdf5_file).parts[-1],
+        split=args.split,
+        mode=args.mode,
+        filter_settings={
+            "type": "cloud-free",
+            "min_length": 5,
+            "return_valid_obs_only": False,
+        },
     )
     dataset2.f.close()
 
     # Dump the sample paths to a list to speed up data loading later on
-    with h5py.File(hdf5_file, 'a', libver='latest') as f:
-        name = args.mode if args.split == 'train' else args.split + '_test_split'
-        f.create_dataset(f'path_samples_{name}', data=dataset2.paths)
+    with h5py.File(hdf5_file, "a", libver="latest") as f:
+        name = args.mode if args.split == "train" else args.split + "_test_split"
+        f.create_dataset(f"path_samples_{name}", data=dataset2.paths)
 
-    print('Done')
+    print("Done")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
 
     if len(sys.argv) < 2:
         parser.print_help()

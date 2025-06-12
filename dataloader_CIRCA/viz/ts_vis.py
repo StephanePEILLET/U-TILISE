@@ -1,12 +1,11 @@
-import pandas as pd
+from typing import Dict, List, Optional, Union
+
+import ipywidgets as widgets
+import matplotlib.pyplot as plt
 import numpy as np
-import matplotlib.pyplot as plt
-import ipywidgets as widgets
-import matplotlib.pyplot as plt
-from mpl_interactions import ipyplot as iplt
+import pandas as pd
 from mpl_interactions import hyperslicer
-import ipywidgets as widgets
-from typing import List, Dict, Optional, Union
+from mpl_interactions import ipyplot as iplt
 
 
 class TimeSerieVisualizer:

@@ -26,15 +26,15 @@ class LTAEtransformer(nn.Module):
         positional_encoding: bool = True,
         T: int = 1000,
         mlp: List[int] = [128, 128],
-        activation: str | Tuple[str, float] = 'relu',
-        norm: Literal['group', 'layer'] = 'group',
+        activation: str | Tuple[str, float] = "relu",
+        norm: Literal["group", "layer"] = "group",
         num_groups: int = 4,
         dim_per_group: int = -1,
         group_norm_eps: float = 1e-05,
         norm_first: bool = True,
         dropout: float = 0.1,
         attn_dropout: float = 0.1,
-        return_att: bool = False
+        return_att: bool = False,
     ):
         """
         Transformer-inspired Lightweight Temporal Attention Encoder (L-TAE) for sequence-to-sequence modeling.
@@ -93,18 +93,29 @@ class LTAEtransformer(nn.Module):
         else:
             self.positional_encoder = None
 
-        self.attention_heads = MultiHeadAttention(n_head=self.n_head, d_k=self.d_k, d_in=self.in_channels,
-                                                  bias_qk=self.bias_qk, attn_dropout=self.attn_dropout)
+        self.attention_heads = MultiHeadAttention(
+            n_head=self.n_head,
+            d_k=self.d_k,
+            d_in=self.in_channels,
+            bias_qk=self.bias_qk,
+            attn_dropout=self.attn_dropout,
+        )
 
         if self.norm == LTAENormType.GROUP:
-            self.norm1 = nn.GroupNorm(num_channels=self.in_channels,
-                                      num_groups=get_group_gn(self.in_channels, self.dim_per_group, self.num_groups),
-                                      eps=self.group_norm_eps
-                                      )
-            self.norm2 = nn.GroupNorm(num_channels=mlp[-1],
-                                      num_groups=get_group_gn(self.mlp[-1], self.dim_per_group, self.num_groups),
-                                      eps=self.group_norm_eps
-                                      )
+            self.norm1 = nn.GroupNorm(
+                num_channels=self.in_channels,
+                num_groups=get_group_gn(
+                    self.in_channels, self.dim_per_group, self.num_groups
+                ),
+                eps=self.group_norm_eps,
+            )
+            self.norm2 = nn.GroupNorm(
+                num_channels=mlp[-1],
+                num_groups=get_group_gn(
+                    self.mlp[-1], self.dim_per_group, self.num_groups
+                ),
+                eps=self.group_norm_eps,
+            )
         elif self.norm == LTAENormType.LAYER:
             self.norm1 = nn.LayerNorm(self.in_channels)
             self.norm2 = nn.LayerNorm(self.in_channels)
@@ -116,17 +127,12 @@ class LTAEtransformer(nn.Module):
         # Feed-forward block
         layers = []
         for i in range(len(self.mlp) - 1):
-            layers.extend(
-                [
-                    nn.Linear(self.mlp[i], self.mlp[i + 1]),
-                    self.activation
-                ]
-            )
+            layers.extend([nn.Linear(self.mlp[i], self.mlp[i + 1]), self.activation])
 
         self.mlp = nn.Sequential(*layers)
 
     def _sa_block(
-            self, x: Tensor, pad_mask: Optional[Tensor] = None
+        self, x: Tensor, pad_mask: Optional[Tensor] = None
     ) -> Tuple[Tensor, Tensor]:
         """
         Sequence-to-sequence multi-head self-attention.
@@ -144,7 +150,9 @@ class LTAEtransformer(nn.Module):
         out, attn = self.attention_heads(x, pad_mask=pad_mask)
 
         # Concatenate heads
-        out = (out.permute(1, 2, 0, 3).contiguous().view(sz_b, seq_len, -1))  # (B x H x W) x T x C
+        out = (
+            out.permute(1, 2, 0, 3).contiguous().view(sz_b, seq_len, -1)
+        )  # (B x H x W) x T x C
         out = self.dropout1(out.view(sz_b * seq_len, -1))
 
         return out, attn
@@ -155,7 +163,10 @@ class LTAEtransformer(nn.Module):
         return out
 
     def forward(
-            self, x: Tensor, batch_positions: Optional[Tensor] = None, pad_mask: Optional[Tensor] = None
+        self,
+        x: Tensor,
+        batch_positions: Optional[Tensor] = None,
+        pad_mask: Optional[Tensor] = None,
     ) -> Tensor | Tuple[Tensor, Tensor]:
         sz_b, seq_len, c, h, w = x.shape
         if pad_mask is not None:
@@ -166,7 +177,9 @@ class LTAEtransformer(nn.Module):
                 .repeat((1, 1, 1, w))
             )  # B x T x H x W
             pad_mask = (
-                pad_mask.permute(0, 2, 3, 1).contiguous().view(sz_b * h * w, seq_len)  # (B x H x W) x T
+                pad_mask.permute(0, 2, 3, 1)
+                .contiguous()
+                .view(sz_b * h * w, seq_len)  # (B x H x W) x T
             )
 
         # B x T x C x H x W -> (B x H x W) x T x C
@@ -179,12 +192,16 @@ class LTAEtransformer(nn.Module):
                 .unsqueeze(-1)
                 .repeat((1, 1, 1, w))
             )  # B x T x H x W
-            bp = bp.permute(0, 2, 3, 1).contiguous().view(sz_b * h * w, seq_len)  # (B x H x W) x T
-            out = out + self.positional_encoder(bp)   # (B x H x W) x T x C
+            bp = (
+                bp.permute(0, 2, 3, 1).contiguous().view(sz_b * h * w, seq_len)
+            )  # (B x H x W) x T
+            out = out + self.positional_encoder(bp)  # (B x H x W) x T x C
 
         if self.norm_first:
             out = out.view(sz_b * h * w * seq_len, -1)
-            buffer, attn = self._sa_block(self.norm1(out).view(sz_b * h * w, seq_len, -1), pad_mask=pad_mask)
+            buffer, attn = self._sa_block(
+                self.norm1(out).view(sz_b * h * w, seq_len, -1), pad_mask=pad_mask
+            )
             out = out + buffer
             out = out + self._ff_block(self.norm2(out))
         else:
@@ -196,7 +213,9 @@ class LTAEtransformer(nn.Module):
         out = out.view(sz_b, h, w, seq_len, -1).permute(0, 3, 4, 1, 2)
 
         # n_head x B x T x T x H x W
-        attn = attn.view(self.n_head, sz_b, h, w, seq_len, seq_len).permute(0, 1, 4, 5, 2, 3)
+        attn = attn.view(self.n_head, sz_b, h, w, seq_len, seq_len).permute(
+            0, 1, 4, 5, 2, 3
+        )
 
         if self.return_att:
             return out.contiguous(), attn.contiguous()
@@ -210,7 +229,14 @@ class MultiHeadAttention(nn.Module):
     Modified from github.com/jadore801120/attention-is-all-you-need-pytorch
     """
 
-    def __init__(self, n_head: int, d_k: int, d_in: int, bias_qk: bool = True, attn_dropout: float = 0.1):
+    def __init__(
+        self,
+        n_head: int,
+        d_k: int,
+        d_in: int,
+        bias_qk: bool = True,
+        attn_dropout: float = 0.1,
+    ):
         super().__init__()
         self.n_head = n_head
         self.d_k = d_k
@@ -222,21 +248,27 @@ class MultiHeadAttention(nn.Module):
         nn.init.normal_(self.fc_k.weight, mean=0, std=np.sqrt(2.0 / d_k))
         nn.init.normal_(self.fc_q.weight, mean=0, std=np.sqrt(2.0 / d_k))
 
-        self.attention = ScaledDotProductAttention(temperature=np.power(d_k, 0.5), attn_dropout=self.attn_dropout)
+        self.attention = ScaledDotProductAttention(
+            temperature=np.power(d_k, 0.5), attn_dropout=self.attn_dropout
+        )
 
     def forward(
-            self, v: Tensor, pad_mask: Optional[Tensor] = None, return_comp: bool = False
+        self, v: Tensor, pad_mask: Optional[Tensor] = None, return_comp: bool = False
     ) -> Tuple[Tensor, Tensor] | Tuple[Tensor, Tensor, Optional[Tensor]]:
         d_k, d_in, n_head = self.d_k, self.d_in, self.n_head
         sz_b, seq_len, _ = v.size()
 
         # Perform linear operation and split into heads
         k = self.fc_k(v).view(sz_b, seq_len, n_head, d_k)
-        k = k.permute(2, 0, 1, 3).contiguous().view(-1, seq_len, d_k)  # (n_head x B x H x W) x T x d_k
+        k = (
+            k.permute(2, 0, 1, 3).contiguous().view(-1, seq_len, d_k)
+        )  # (n_head x B x H x W) x T x d_k
 
         # One query per date and sequence
         q = self.fc_q(v).view(sz_b, seq_len, n_head, d_k)
-        q = q.permute(2, 0, 1, 3).contiguous().view(-1, seq_len, d_k)  # (n_head x B x H x W) x T x d_k
+        q = (
+            q.permute(2, 0, 1, 3).contiguous().view(-1, seq_len, d_k)
+        )  # (n_head x B x H x W) x T x d_k
 
         if pad_mask is not None:
             pad_mask = pad_mask.repeat(
@@ -245,7 +277,7 @@ class MultiHeadAttention(nn.Module):
 
         v = torch.stack(v.split(v.shape[-1] // n_head, dim=-1)).view(
             n_head * sz_b, seq_len, -1
-        )   # (B x H x W) x T x C  ->  (n_head x B x H x W) x T x (C // n_head)
+        )  # (B x H x W) x T x C  ->  (n_head x B x H x W) x T x (C // n_head)
         if return_comp:
             output, attn, comp = self.attention(
                 q, k, v, pad_mask=pad_mask, return_comp=return_comp
@@ -256,8 +288,10 @@ class MultiHeadAttention(nn.Module):
             )
             comp = None
 
-        attn = attn.view(n_head, sz_b, seq_len, seq_len)                # n_head x (B x H x W) x T x T
-        output = output.view(n_head, sz_b, seq_len, d_in // n_head)     # n_head x (B x H x W) x T x (C // n_head)
+        attn = attn.view(n_head, sz_b, seq_len, seq_len)  # n_head x (B x H x W) x T x T
+        output = output.view(
+            n_head, sz_b, seq_len, d_in // n_head
+        )  # n_head x (B x H x W) x T x (C // n_head)
 
         if return_comp:
             return output, attn, comp
@@ -278,7 +312,12 @@ class ScaledDotProductAttention(nn.Module):
         self.softmax = nn.Softmax(dim=-1)
 
     def forward(
-            self, q: Tensor, k: Tensor, v: Tensor, pad_mask: Optional[Tensor] = None, return_comp: bool = False
+        self,
+        q: Tensor,
+        k: Tensor,
+        v: Tensor,
+        pad_mask: Optional[Tensor] = None,
+        return_comp: bool = False,
     ) -> Tuple[Tensor, Tensor] | Tuple[Tensor, Tensor, Optional[Tensor]]:
         attn = torch.matmul(q, k.transpose(1, 2))
         attn = attn / self.temperature
@@ -287,9 +326,9 @@ class ScaledDotProductAttention(nn.Module):
             attn = attn.masked_fill(pad_mask.unsqueeze(1), -1e3)
         comp = attn if return_comp else None
 
-        attn = self.softmax(attn)        # attn: (n_head x B x H x W) x T_out x T_in
+        attn = self.softmax(attn)  # attn: (n_head x B x H x W) x T_out x T_in
         attn = self.dropout(attn)
-        output = torch.matmul(attn, v)   # v: (n_head x B x H x W) x T_in x (C // n_head)
+        output = torch.matmul(attn, v)  # v: (n_head x B x H x W) x T_in x (C // n_head)
 
         if return_comp:
             return output, attn, comp

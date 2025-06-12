@@ -1,15 +1,14 @@
-from pathlib import Path
 import sys
+from pathlib import Path
+
 sys.path.append(str(Path(__file__).parents[2]))
 
 import ast
 import json
-
-from typing import Dict, List, Optional, Union, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
-
 from rasterio.windows import Window
 from torch.utils.data import Dataset
 from tqdm.auto import tqdm
@@ -48,7 +47,9 @@ class CircaPatchDataSet(Dataset):
         """
         self.data_optique = Path(data_optique)
         self.data_radar = Path(data_radar)
-        self.image_size = (image_size, image_size) if isinstance(image_size, int) else image_size
+        self.image_size = (
+            (image_size, image_size) if isinstance(image_size, int) else image_size
+        )
         self.overlap = overlap
         self.load_dataset = load_dataset
         self.shuffle = shuffle
@@ -104,7 +105,10 @@ class CircaPatchDataSet(Dataset):
             cols_to_convert
         ].map(ast.literal_eval)
 
-        if self.patches_dataset.loc[0, "window"][2] != self.image_size[0] and self.patches_dataset.loc[0, "window"][3] != self.image_size[1]:
+        if (
+            self.patches_dataset.loc[0, "window"][2] != self.image_size[0]
+            and self.patches_dataset.loc[0, "window"][3] != self.image_size[1]
+        ):
             print(
                 """
                 WARNING : Patch size load in the .csv file is not corresponding to the patch size requested 
@@ -272,12 +276,16 @@ class CircaPatchDataSet(Dataset):
         Returns:
         - Optional[int]: The index of the patch in the DataFrame. Returns None if the patch is not found.
         """
-        matching_patches = self.patches_dataset[self.patches_dataset["patch"] == patch_name]
+        matching_patches = self.patches_dataset[
+            self.patches_dataset["patch"] == patch_name
+        ]
         if not matching_patches.empty:
             return matching_patches.index.values[0]
         return None  # Returns None if no matching patch is found
-    
-    def get_random_patch_by_mgrs(self, mgrs: str) -> Dict[str, Union[np.ndarray, str, list]]:
+
+    def get_random_patch_by_mgrs(
+        self, mgrs: str
+    ) -> Dict[str, Union[np.ndarray, str, list]]:
         """
         Retrieves a random patch associated with a given MGRS code.
 
@@ -370,7 +378,7 @@ if __name__ == "__main__":
         data_radar=data_radar,
         image_size=image_size,
         overlap=OVERLAP,
-        load_dataset="datasetCIRCAUnCRtainTS.csv"
+        load_dataset="datasetCIRCAUnCRtainTS.csv",
     )
 
     # ds.setup()

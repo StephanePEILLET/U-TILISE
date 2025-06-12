@@ -1,29 +1,29 @@
 import os
 import sys
-import torch
-from matplotlib import pyplot as plt
 from typing import Any, Dict
 
-from lib import config_utils
-from lib import data_utils
-from lib import visutils
+import torch
+from lib import config_utils, data_utils, visutils
 from lib.eval_tools import (
     Imputation,
     visualize_att_for_one_head_across_time,
     visualize_att_for_target_t_across_heads,
 )
+from matplotlib import pyplot as plt
 
 
 def get_dataloader_testdata(
-    config_file_train: str,
-    config_file_test: str,
-    run_mode: str = 'test'
+    config_file_train: str, config_file_test: str, run_mode: str = "test"
 ) -> torch.utils.data.dataloader.DataLoader:
     if not os.path.isfile(config_file_train):
-        raise FileNotFoundError(f'Cannot find the configuration file used during training: {config_file_train}\n')
+        raise FileNotFoundError(
+            f"Cannot find the configuration file used during training: {config_file_train}\n"
+        )
 
     if not os.path.isfile(config_file_test):
-        raise FileNotFoundError(f'Cannot find the test configuration file: {config_file_test}\n')
+        raise FileNotFoundError(
+            f"Cannot find the test configuration file: {config_file_test}\n"
+        )
 
     # Read the configuration file used during training
     config = config_utils.read_config(config_file_train)
@@ -31,7 +31,7 @@ def get_dataloader_testdata(
     # Merge generic data settings (used during training) with test-specific data settings
     config_testdata = config_utils.read_config(config_file_test)
     config.data.update(config_testdata.data)
-    if 'mask' in config_testdata:
+    if "mask" in config_testdata:
         config.mask.update(config_testdata.mask)
     config.misc.run_mode = run_mode
 
@@ -44,10 +44,9 @@ def get_dataloader_testdata(
 
 
 def get_sample(
-    dataloader: torch.utils.data.dataloader.DataLoader,
-    sample_index: int
+    dataloader: torch.utils.data.dataloader.DataLoader, sample_index: int
 ) -> Dict[str, Any]:
-    
+
     batch = dataloader.dataset.__getitem__(sample_index)
     # Introduce the batch dimension (required for the forward pass)
     for k, v in batch.items():
@@ -62,12 +61,12 @@ def get_sample(
 if __name__ == "__main__":
     # Default data and model settings (i.e., settings used during training)
     # config_file_train = 'configs/demo.yaml'
-    config_file_train = 'configs/demo.yaml'
+    config_file_train = "configs/demo.yaml"
     # Test-specific data settings
-    config_file_test = 'configs/config_sen12mscrts_test.yaml'
+    config_file_test = "configs/config_sen12mscrts_test.yaml"
 
     # Model weights
-    checkpoint = 'checkpoints/utilise_sen12mscrts_w_s1.pth'
+    checkpoint = "checkpoints/utilise_sen12mscrts_w_s1.pth"
 
     train_config = config_utils.read_config(config_file_train)
     test_config = config_utils.read_config(config_file_test)
@@ -77,5 +76,3 @@ if __name__ == "__main__":
     batch = get_sample(dataloader, sample_index=269)
 
     print(batch.keys())
-
-

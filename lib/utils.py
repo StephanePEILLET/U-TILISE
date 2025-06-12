@@ -13,11 +13,10 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import torch
 import torchinfo
-from omegaconf import DictConfig, OmegaConf
-
 from lib.models import MODELS
 from lib.models.weight_init import weight_init
 from lib.trainer import Trainer
+from omegaconf import DictConfig, OmegaConf
 
 
 def create_output_directory(config: DictConfig) -> str:
@@ -31,16 +30,22 @@ def create_output_directory(config: DictConfig) -> str:
         output_directory:   str, path of the output directory.
     """
 
-    if 'output' in config and 'output_directory' in config.output and isinstance(config.output.output_directory, str):
+    if (
+        "output" in config
+        and "output_directory" in config.output
+        and isinstance(config.output.output_directory, str)
+    ):
         os.makedirs(config.output.output_directory, exist_ok=True)
 
-        if 'suffix' in config.output and isinstance(config.output.suffix, str):
+        if "suffix" in config.output and isinstance(config.output.suffix, str):
             # The name of the output directory is the current date and time, followed by a suffix defined in the
             # configuration file
-            name = datetime.now().strftime('%Y-%m-%d_%H-%M') + '_' + config.output.suffix
+            name = (
+                datetime.now().strftime("%Y-%m-%d_%H-%M") + "_" + config.output.suffix
+            )
         else:
             # The name of the output directory is the current date and time without suffix
-            name = datetime.now().strftime('%Y-%m-%d_%H-%M')
+            name = datetime.now().strftime("%Y-%m-%d_%H-%M")
 
         output_directory = os.path.join(config.output.output_directory, name)
         os.makedirs(output_directory, exist_ok=True)
@@ -76,12 +81,36 @@ def get_default_model_settings(model, args_model: DictConfig) -> None:
 
     default_parms = {}
 
-    if isinstance(model, MODELS['utilise']):
-        default_parms = ['encoder_widths', 'decoder_widths', 'str_conv_k', 'str_conv_s', 'str_conv_p', 'agg_mode',
-                         'upconv_type', 'encoder_norm', 'decoder_norm', 'skip_norm', 'activation', 'n_head', 'd_k',
-                         'bias_qk', 'attn_dropout', 'dropout', 'return_maps', 'padding_mode', 'skip_attention',
-                         'output_activation', 'n_groups', 'dim_per_group', 'group_norm_eps', 'ltae_norm',
-                         'str_conv_k_up', 'str_conv_p_up', 'norm_first']
+    if isinstance(model, MODELS["utilise"]):
+        default_parms = [
+            "encoder_widths",
+            "decoder_widths",
+            "str_conv_k",
+            "str_conv_s",
+            "str_conv_p",
+            "agg_mode",
+            "upconv_type",
+            "encoder_norm",
+            "decoder_norm",
+            "skip_norm",
+            "activation",
+            "n_head",
+            "d_k",
+            "bias_qk",
+            "attn_dropout",
+            "dropout",
+            "return_maps",
+            "padding_mode",
+            "skip_attention",
+            "output_activation",
+            "n_groups",
+            "dim_per_group",
+            "group_norm_eps",
+            "ltae_norm",
+            "str_conv_k_up",
+            "str_conv_p_up",
+            "norm_first",
+        ]
 
     for param in default_parms:
         if param not in args_model:
@@ -89,7 +118,9 @@ def get_default_model_settings(model, args_model: DictConfig) -> None:
             args_model[param] = val.value if isinstance(val, Enum) else val
 
 
-def get_model(config: DictConfig, input_dim: int, logger: Optional[logging.Logger] = None):
+def get_model(
+    config: DictConfig, input_dim: int, logger: Optional[logging.Logger] = None
+):
     """
     Returns a model instance and its parameter settings.
 
@@ -109,17 +140,21 @@ def get_model(config: DictConfig, input_dim: int, logger: Optional[logging.Logge
         if logger is not None:
             logger.error(f"{model_type} model is not implemented.\n")
         else:
-            raise NotImplementedError(f"ERROR: {model_type} model is not implemented.\n")
+            raise NotImplementedError(
+                f"ERROR: {model_type} model is not implemented.\n"
+            )
 
-    args_model = deepcopy(config[model_type]) if model_type in config else OmegaConf.create()
+    args_model = (
+        deepcopy(config[model_type]) if model_type in config else OmegaConf.create()
+    )
 
-    if model_type == 'utilise':
+    if model_type == "utilise":
         args_model.input_dim = input_dim
         args_model.output_dim = input_dim
         args_model.pad_value = config.method.pad_value
-        if '-mask' in config.data.channels:
+        if "-mask" in config.data.channels:
             args_model.output_dim -= 1
-        if config.data.get('include_S1', False):
+        if config.data.get("include_S1", False):
             args_model.output_dim -= 4
 
         model = MODELS[model_type](**args_model)
@@ -146,28 +181,36 @@ def get_optimizer(config: DictConfig, model, logger: Optional[logging.Logger] = 
         optimizer:   torch.optim.optimizer instance, optimizer to be used for training.
     """
 
-    if config.optimizer.name == 'Adam':
-        betas = config.optimizer.get('betas', (0.9, 0.999))
+    if config.optimizer.name == "Adam":
+        betas = config.optimizer.get("betas", (0.9, 0.999))
         optimizer = torch.optim.Adam(
-            model.parameters(), lr=config.optimizer.learning_rate, weight_decay=config.optimizer.weight_decay,
-            betas=betas
+            model.parameters(),
+            lr=config.optimizer.learning_rate,
+            weight_decay=config.optimizer.weight_decay,
+            betas=betas,
         )
-    elif config.optimizer.name == 'SGD':
+    elif config.optimizer.name == "SGD":
         optimizer = torch.optim.SGD(
-            model.parameters(), lr=config.optimizer.learning_rate,  weight_decay=config.optimizer.weight_decay,
-            momentum=config.optimizer.momentum
+            model.parameters(),
+            lr=config.optimizer.learning_rate,
+            weight_decay=config.optimizer.weight_decay,
+            momentum=config.optimizer.momentum,
         )
     else:
         if logger is not None:
             logger.error(f"{config.optimizer.name} optimizer is not implemented.\n")
             sys.exit(1)
         else:
-            raise NotImplementedError(f"ERROR: {config.optimizer.name} optimizer is not implemented.\n")
+            raise NotImplementedError(
+                f"ERROR: {config.optimizer.name} optimizer is not implemented.\n"
+            )
 
     return optimizer
 
 
-def get_scheduler(config: DictConfig, optimizer, logger: Optional[logging.Logger] = None):
+def get_scheduler(
+    config: DictConfig, optimizer, logger: Optional[logging.Logger] = None
+):
     """
     Returns a learning rate scheduler instance.
 
@@ -183,17 +226,23 @@ def get_scheduler(config: DictConfig, optimizer, logger: Optional[logging.Logger
 
     if config.scheduler.enabled:
         name = config.scheduler.name
-        settings = without_keys(config.scheduler, ['name', 'enabled'])
+        settings = without_keys(config.scheduler, ["name", "enabled"])
 
-        if name == 'ReduceLROnPlateau':
-            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', verbose=True, **settings)
-        elif name == 'StepLR':
-            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, verbose=False, **settings)
-        elif name == 'MultiStepLR':
+        if name == "ReduceLROnPlateau":
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer, mode="min", verbose=True, **settings
+            )
+        elif name == "StepLR":
+            scheduler = torch.optim.lr_scheduler.StepLR(
+                optimizer, verbose=False, **settings
+            )
+        elif name == "MultiStepLR":
             scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, **settings)
-        elif name == 'ExponentialLR':
-            scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, verbose=False, **settings)
-        elif name == 'CosineAnnealingLR':
+        elif name == "ExponentialLR":
+            scheduler = torch.optim.lr_scheduler.ExponentialLR(
+                optimizer, verbose=False, **settings
+            )
+        elif name == "CosineAnnealingLR":
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
                 optimizer, verbose=False, T_max=config.training_settings.num_epochs
             )
@@ -202,7 +251,9 @@ def get_scheduler(config: DictConfig, optimizer, logger: Optional[logging.Logger
                 logger.error(f"{name} learning rate scheduler is not implemented.\n")
                 sys.exit(1)
             else:
-                raise NotImplementedError(f"ERROR: {name} learning rate scheduler is not implemented.\n")
+                raise NotImplementedError(
+                    f"ERROR: {name} learning rate scheduler is not implemented.\n"
+                )
     else:
         scheduler = None
 
@@ -210,8 +261,12 @@ def get_scheduler(config: DictConfig, optimizer, logger: Optional[logging.Logger
 
 
 def get_trainer(
-        config: DictConfig, train_loader: torch.utils.data.DataLoader, val_loader: torch.utils.data.DataLoader,
-        model, optimizer, scheduler
+    config: DictConfig,
+    train_loader: torch.utils.data.DataLoader,
+    val_loader: torch.utils.data.DataLoader,
+    model,
+    optimizer,
+    scheduler,
 ) -> Trainer:
     """
     Returns a Trainer instance.
@@ -230,7 +285,7 @@ def get_trainer(
     """
 
     # Prepare configuration file for logging
-    args = without_keys(config, ['scheduler', 'training_settings', 'misc', 'output'])
+    args = without_keys(config, ["scheduler", "training_settings", "misc", "output"])
     if not isinstance(args, DictConfig):
         args = OmegaConf.create(args)
 
@@ -239,7 +294,7 @@ def get_trainer(
         args.scheduler.name = config.scheduler.name
         args.scheduler.enabled = config.scheduler.enabled
     else:
-        args.scheduler = deepcopy(getattr(config, 'scheduler'))
+        args.scheduler = deepcopy(getattr(config, "scheduler"))
 
     for key in config.training_settings.keys():
         args[key] = getattr(config.training_settings, key)
@@ -250,31 +305,35 @@ def get_trainer(
     args.save_dir = config.output.experiment_folder
     args.checkpoint_dir = config.output.checkpoint_dir
 
-    if 'wandb' in args:
+    if "wandb" in args:
         args.wandb.dir = config.output.experiment_folder
 
-    if args.get('resume', False) and args.get('pretrained_path', None) is not None:
+    if args.get("resume", False) and args.get("pretrained_path", None) is not None:
         # Get the logs directory of the pretrained model
         experiment_directory = Path(args.pretrained_path).parent.parent
 
-        if 'wandb' in args:
+        if "wandb" in args:
             # Pretrained model logged in wandb
             # Find the previous training log file and copy it to the new experiments output folder
-            log_file = experiment_directory / 'training.log'
+            log_file = experiment_directory / "training.log"
             if os.path.exists(log_file):
-                shutil.copy(log_file, Path(args.save_dir) / 'training.log')
+                shutil.copy(log_file, Path(args.save_dir) / "training.log")
 
             # Copy the best model weights so far
-            path_model = Path(args.pretrained_path).parents[0] / 'Model_best.pth'
+            path_model = Path(args.pretrained_path).parents[0] / "Model_best.pth"
             if os.path.exists(path_model):
-                shutil.copy(path_model, Path(args.checkpoint_dir) / 'Model_best.pth')
+                shutil.copy(path_model, Path(args.checkpoint_dir) / "Model_best.pth")
         else:
             # Pretrained model logged in tensorboard
-            experiment_tboard_log_dir = experiment_directory.parent / 'logs' / experiment_directory.name
+            experiment_tboard_log_dir = (
+                experiment_directory.parent / "logs" / experiment_directory.name
+            )
 
             # Find the previous tensorboard files and copy them to the new experiments output folder
             if os.path.isdir(experiment_tboard_log_dir):
-                tb_files = glob.glob(os.path.join(experiment_tboard_log_dir, 'events.*'))
+                tb_files = glob.glob(
+                    os.path.join(experiment_tboard_log_dir, "events.*")
+                )
                 for tb_file in tb_files:
                     shutil.copy(tb_file, Path(args.checkpoint_dir) / Path(tb_file).name)
     else:
@@ -299,7 +358,12 @@ def set_seed(seed: int) -> None:
 
 
 def write_model_structure_to_file(
-        filepath: str, model, batch_size: int, seq_length: int, in_channels: int, image_size: Tuple[int, int]
+    filepath: str,
+    model,
+    batch_size: int,
+    seq_length: int,
+    in_channels: int,
+    image_size: Tuple[int, int],
 ) -> None:
     """
     Writes the model architecture to a text file.
@@ -317,16 +381,33 @@ def write_model_structure_to_file(
     original = sys.stdout
     sys.stdout = open(filepath, "w", encoding="utf-8")
 
-    if isinstance(model, MODELS['utilise']):
-        torchinfo.summary(model.cuda(), input_size=[
-            (batch_size, seq_length, in_channels, *image_size),  # input (image time series)
-            (batch_size, seq_length)                             # batch_positions (date sequence of the observations
-                                                                 # expressed in #days since the first observation)
-        ], device='cuda', depth=5)
+    if isinstance(model, MODELS["utilise"]):
+        torchinfo.summary(
+            model.cuda(),
+            input_size=[
+                (
+                    batch_size,
+                    seq_length,
+                    in_channels,
+                    *image_size,
+                ),  # input (image time series)
+                (
+                    batch_size,
+                    seq_length,
+                ),  # batch_positions (date sequence of the observations
+                # expressed in #days since the first observation)
+            ],
+            device="cuda",
+            depth=5,
+        )
     else:
-        torchinfo.summary(model.cuda(), input_size=(batch_size, seq_length, in_channels, *image_size), device='cuda')
+        torchinfo.summary(
+            model.cuda(),
+            input_size=(batch_size, seq_length, in_channels, *image_size),
+            device="cuda",
+        )
     torch.cuda.empty_cache()
-    print('\n\n')
+    print("\n\n")
     print(model)
 
     # Reset stdout

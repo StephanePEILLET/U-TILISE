@@ -2,11 +2,12 @@ import datetime
 import itertools
 from pathlib import Path
 from typing import List, Literal, Tuple, Union
-import torch
-from torch import Tensor
+
 import numpy as np
 import rasterio
+import torch
 from rasterio.windows import Window
+from torch import Tensor
 
 # Constants for the number of channels in Sentinel-2 and Sentinel-1 data
 S2_N_CHANNELS = 12
@@ -68,10 +69,10 @@ class SentinelDataProcessor:
     @staticmethod
     def read_raster_per_dates(
         path_raster: str,
-        window: Window=None,
+        window: Window = None,
         indexes_dates=None,
         type_bands: str = None,
-        ) -> np.ndarray:
+    ) -> np.ndarray:
 
         bands_span = {"s2": S2_N_CHANNELS, "s1": S1_N_CHANNELS, "s2_bands": 10}
         span = bands_span[type_bands]
@@ -89,10 +90,10 @@ class SentinelDataProcessor:
     @staticmethod
     def read_mask_prob(
         path_raster: str,
-        window: Window=None,
-        type_mask : Literal["cloud", "snow"] = "cloud",
+        window: Window = None,
+        type_mask: Literal["cloud", "snow"] = "cloud",
         mask_band_index: int = None,
-        ) -> np.ndarray:
+    ) -> np.ndarray:
         if mask_band_index is None:
             index_band = {"cloud": 10, "snow": 11}
             mask_band_index = index_band[type_mask]
@@ -100,22 +101,25 @@ class SentinelDataProcessor:
         with rasterio.open(path_raster) as src_S2:
             len_ts_stacked = src_S2.count // S2_N_CHANNELS
             cloud_bands = [
-                (x * S2_N_CHANNELS + mask_band_index ) + 1 
-                for x in np.arange(len_ts_stacked)]
+                (x * S2_N_CHANNELS + mask_band_index) + 1
+                for x in np.arange(len_ts_stacked)
+            ]
             if window is None:
                 cloud_prob = src_S2.read(cloud_bands).transpose(1, 2, 0)
             else:
                 cloud_prob = src_S2.read(cloud_bands, window=window).transpose(1, 2, 0)
-            return np.expand_dims(cloud_prob, axis=2) # H x W X 1 X T
+            return np.expand_dims(cloud_prob, axis=2)  # H x W X 1 X T
 
     @staticmethod
-    def read_cloud_mask(path_raster: str, window: Window, cloud_band_index: int = 10) -> np.ndarray:
+    def read_cloud_mask(
+        path_raster: str, window: Window, cloud_band_index: int = 10
+    ) -> np.ndarray:
         cloud_prob = SentinelDataProcessor.read_mask_prob(
             path_raster=path_raster,
             window=window,
             type_mask="cloud",
         )
-        return (cloud_prob != 0).astype(int) # H x W X 1 X T
+        return (cloud_prob != 0).astype(int)  # H x W X 1 X T
 
     @staticmethod
     def reshape_sentinel(arr: np.ndarray, chunk_size: int = 10) -> np.ndarray:
@@ -281,7 +285,9 @@ class SentinelDataProcessor:
 
     @staticmethod
     def extract_and_transform_S2(
-        S2_array: np.ndarray, dates: List[str], S2_channels_selected: List[int] = None,
+        S2_array: np.ndarray,
+        dates: List[str],
+        S2_channels_selected: List[int] = None,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Extracts and transforms Sentinel-2 data by filtering cloudy dates and correcting cloud masks.
@@ -318,7 +324,6 @@ class SentinelDataProcessor:
             np.asarray(dates)[index_S2_curated],
             cloud_masks_corrected[index_S2_curated],
         )
-
 
     @staticmethod
     def get_pairedS1(

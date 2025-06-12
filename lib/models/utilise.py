@@ -12,50 +12,45 @@ from torch import Tensor, nn
 
 from .ltae_transformer import LTAEtransformer
 from .make_layers import get_activation, get_group_gn, str2ActivationType
-from .parameters import (
-    ActivationType,
-    NormType,
-    TemporalAggregationMode,
-    UpConvType
-)
+from .parameters import ActivationType, NormType, TemporalAggregationMode, UpConvType
 
 
 class UTILISE(nn.Module):
     def __init__(
-            self,
-            input_dim: int,
-            output_dim: Optional[int] = None,
-            encoder_widths: List[int] = [64, 64, 64, 128],
-            decoder_widths: List[int] = [32, 32, 64, 128],
-            upconv_type: Literal['transpose', 'bilinear'] = 'transpose',
-            encoder_norm: Optional[Literal['group', 'batch', 'instance']] = None,
-            decoder_norm: Optional[Literal['group', 'batch', 'instance']] = None,
-            skip_norm: Optional[Literal['group', 'batch', 'instance']] = None,
-            activation: str | Tuple[str, float] = 'relu',
-            str_conv_k: int = 4,
-            str_conv_s: int = 2,
-            str_conv_p: int = 1,
-            str_conv_k_up: Optional[int] = 2,
-            str_conv_p_up: Optional[int] = 0,
-            padding_mode: str = 'reflect',
-            skip_attention: bool = False,
-            positional_encoding: bool = True,
-            n_temporal_encoding_layers: int = 1,
-            agg_mode: Optional[Literal['att_group', 'att_mean']] = 'att_group',
-            n_head: int = 4,
-            d_k: int = 4,
-            bias_qk: bool = False,
-            attn_dropout: float = 0.1,
-            dropout: float = 0.1,
-            n_groups: int = 4,
-            dim_per_group: int = -1,
-            group_norm_eps: float = 1e-05,
-            ltae_norm: str = 'group',
-            ltae_activation: str | Tuple[str, float] = 'relu',
-            norm_first: bool = True,
-            pad_value: Optional[float] = 0,
-            output_activation: str | Tuple[str, float] | bool | None = 'sigmoid',
-            return_maps: bool = False
+        self,
+        input_dim: int,
+        output_dim: Optional[int] = None,
+        encoder_widths: List[int] = [64, 64, 64, 128],
+        decoder_widths: List[int] = [32, 32, 64, 128],
+        upconv_type: Literal["transpose", "bilinear"] = "transpose",
+        encoder_norm: Optional[Literal["group", "batch", "instance"]] = None,
+        decoder_norm: Optional[Literal["group", "batch", "instance"]] = None,
+        skip_norm: Optional[Literal["group", "batch", "instance"]] = None,
+        activation: str | Tuple[str, float] = "relu",
+        str_conv_k: int = 4,
+        str_conv_s: int = 2,
+        str_conv_p: int = 1,
+        str_conv_k_up: Optional[int] = 2,
+        str_conv_p_up: Optional[int] = 0,
+        padding_mode: str = "reflect",
+        skip_attention: bool = False,
+        positional_encoding: bool = True,
+        n_temporal_encoding_layers: int = 1,
+        agg_mode: Optional[Literal["att_group", "att_mean"]] = "att_group",
+        n_head: int = 4,
+        d_k: int = 4,
+        bias_qk: bool = False,
+        attn_dropout: float = 0.1,
+        dropout: float = 0.1,
+        n_groups: int = 4,
+        dim_per_group: int = -1,
+        group_norm_eps: float = 1e-05,
+        ltae_norm: str = "group",
+        ltae_activation: str | Tuple[str, float] = "relu",
+        norm_first: bool = True,
+        pad_value: Optional[float] = 0,
+        output_activation: str | Tuple[str, float] | bool | None = "sigmoid",
+        return_maps: bool = False,
     ):
         """
         U-TILISE (U-Net Temporal Imputation Lightweight Image Sequence Encoder) architecture for spatio-temporal
@@ -183,15 +178,20 @@ class UTILISE(nn.Module):
         self.group_norm_eps = group_norm_eps
         self.ltae_norm = ltae_norm
         self.ltae_activation = ltae_activation
-        self.str_conv_k_up = str_conv_k_up if str_conv_k_up is not None else self.str_conv_k
-        self.str_conv_p_up = str_conv_p_up if str_conv_p_up is not None else self.str_conv_p
+        self.str_conv_k_up = (
+            str_conv_k_up if str_conv_k_up is not None else self.str_conv_k
+        )
+        self.str_conv_p_up = (
+            str_conv_p_up if str_conv_p_up is not None else self.str_conv_p
+        )
         self.norm_first = norm_first
 
         if self.skip_attention:
             self.agg_mode = TemporalAggregationMode.NONE
 
         self.in_conv = ConvBlock(
-            n_kernels=[self.input_dim] + [self.encoder_widths[0], self.encoder_widths[0]],
+            n_kernels=[self.input_dim]
+            + [self.encoder_widths[0], self.encoder_widths[0]],
             pad_value=self.pad_value,
             norm=self.encoder_norm,
             num_groups=self.n_groups,
@@ -233,7 +233,7 @@ class UTILISE(nn.Module):
                 group_norm_eps=self.group_norm_eps,
                 activation=self.activation,
                 pad_value=self.pad_value,
-                padding_mode=self.padding_mode
+                padding_mode=self.padding_mode,
             )
             for i in range(self.n_stages - 1, 0, -1)
         )
@@ -256,7 +256,7 @@ class UTILISE(nn.Module):
                     norm_first=self.norm_first,
                     dropout=self.dropout,
                     attn_dropout=self.attn_dropout,
-                    return_att=True
+                    return_att=True,
                 )
                 layers.append(t_encoder)
 
@@ -272,14 +272,20 @@ class UTILISE(nn.Module):
             group_norm_eps=self.group_norm_eps,
             activation=self.activation,
             padding_mode=self.padding_mode,
-            activation_last_layer=self.output_activation
+            activation_last_layer=self.output_activation,
         )
 
     def forward(
-            self, x: Tensor, batch_positions: Optional[Tensor] = None, return_att: bool = False
-    ) -> Tensor | Tuple[Tensor, Tensor] | Tuple[Tensor, Optional[List[Tensor]]] | Tuple[
-        Tensor, Optional[Tensor], Optional[List[Tensor]]
-    ]:
+        self,
+        x: Tensor,
+        batch_positions: Optional[Tensor] = None,
+        return_att: bool = False,
+    ) -> (
+        Tensor
+        | Tuple[Tensor, Tensor]
+        | Tuple[Tensor, Optional[List[Tensor]]]
+        | Tuple[Tensor, Optional[Tensor], Optional[List[Tensor]]]
+    ):
         pad_mask = (
             (x == self.pad_value).all(dim=-1).all(dim=-1).all(dim=-1)
         )  # BxT pad mask
@@ -300,7 +306,9 @@ class UTILISE(nn.Module):
         else:
             for layer in self.temporal_encoder:
                 # att.shape: n_head x B x T x T x h x w
-                out, att = layer(out, batch_positions=batch_positions, pad_mask=pad_mask)
+                out, att = layer(
+                    out, batch_positions=batch_positions, pad_mask=pad_mask
+                )
 
         # SPATIAL DECODER
         maps = [out] if self.return_maps else None
@@ -357,10 +365,8 @@ class TemporallySharedBlock(nn.Module):
 
             if pad_mask.any():
                 temp = (
-                        torch.ones(
-                            self.out_shape, device=x.device, requires_grad=False
-                        )
-                        * self.pad_value
+                    torch.ones(self.out_shape, device=x.device, requires_grad=False)
+                    * self.pad_value
                 )
                 temp[~pad_mask] = self.forward(out[~pad_mask])
                 out = temp
@@ -375,18 +381,20 @@ class TemporallySharedBlock(nn.Module):
 
 class ConvLayer(nn.Module):
     def __init__(
-            self,
-            n_kernels: List[int],
-            norm: NormType = NormType.BATCH,
-            activation: ActivationType | Tuple[ActivationType, float] = ActivationType.RELU,
-            k: int = 3,
-            s: int = 1,
-            p: int = 1,
-            num_groups: int = 4,
-            dim_per_group: int = -1,
-            group_norm_eps: float = 1e-05,
-            padding_mode: str = 'reflect',
-            activation_last_layer: ActivationType | Tuple[ActivationType, float] | bool | None = True
+        self,
+        n_kernels: List[int],
+        norm: NormType = NormType.BATCH,
+        activation: ActivationType | Tuple[ActivationType, float] = ActivationType.RELU,
+        k: int = 3,
+        s: int = 1,
+        p: int = 1,
+        num_groups: int = 4,
+        dim_per_group: int = -1,
+        group_norm_eps: float = 1e-05,
+        padding_mode: str = "reflect",
+        activation_last_layer: (
+            ActivationType | Tuple[ActivationType, float] | bool | None
+        ) = True,
     ):
         super().__init__()
         layers = []
@@ -398,7 +406,7 @@ class ConvLayer(nn.Module):
             nl = lambda num_features: nn.GroupNorm(
                 num_channels=num_features,
                 num_groups=get_group_gn(num_features, dim_per_group, num_groups),
-                eps=group_norm_eps
+                eps=group_norm_eps,
             )
         else:
             nl = None
@@ -439,19 +447,19 @@ class ConvLayer(nn.Module):
 
 class UpConvLayer(TemporallySharedBlock):
     def __init__(
-            self,
-            n_kernels: List[int],
-            pad_value: Optional[float] = None,
-            norm: NormType = NormType.BATCH,
-            upconv_type: UpConvType = UpConvType.TRANSPOSE,
-            activation: ActivationType | Tuple[ActivationType, float] = ActivationType.RELU,
-            k: int = 4,
-            s: int = 2,
-            p: int = 1,
-            num_groups: int = 4,
-            dim_per_group: int = -1,
-            group_norm_eps: float = 1e-05,
-            activation_last_layer: bool = True
+        self,
+        n_kernels: List[int],
+        pad_value: Optional[float] = None,
+        norm: NormType = NormType.BATCH,
+        upconv_type: UpConvType = UpConvType.TRANSPOSE,
+        activation: ActivationType | Tuple[ActivationType, float] = ActivationType.RELU,
+        k: int = 4,
+        s: int = 2,
+        p: int = 1,
+        num_groups: int = 4,
+        dim_per_group: int = -1,
+        group_norm_eps: float = 1e-05,
+        activation_last_layer: bool = True,
     ):
         super().__init__(pad_value=pad_value)
         layers = []
@@ -463,7 +471,7 @@ class UpConvLayer(TemporallySharedBlock):
             nl = lambda num_features: nn.GroupNorm(
                 num_channels=num_features,
                 num_groups=get_group_gn(num_features, dim_per_group, num_groups),
-                eps=group_norm_eps
+                eps=group_norm_eps,
             )
         else:
             nl = None
@@ -475,12 +483,14 @@ class UpConvLayer(TemporallySharedBlock):
                     out_channels=n_kernels[1],
                     kernel_size=k,
                     stride=s,
-                    padding=p
+                    padding=p,
                 )
             )
         elif upconv_type == UpConvType.BILINEAR:
-            layers.append(nn.Upsample(mode='bilinear', scale_factor=2))
-            layers.append(nn.Conv2d(n_kernels[0], n_kernels[1], kernel_size=1, stride=1))
+            layers.append(nn.Upsample(mode="bilinear", scale_factor=2))
+            layers.append(
+                nn.Conv2d(n_kernels[0], n_kernels[1], kernel_size=1, stride=1)
+            )
 
         if nl is not None:
             layers.append(nl(n_kernels[-1]))
@@ -495,18 +505,20 @@ class UpConvLayer(TemporallySharedBlock):
 
 class ConvBlock(TemporallySharedBlock):
     def __init__(
-            self,
-            n_kernels: List[int],
-            k: int = 3,
-            p: int = 1,
-            pad_value: Optional[float] = None,
-            norm: NormType = NormType.BATCH,
-            activation: ActivationType | Tuple[ActivationType, float] = ActivationType.RELU,
-            activation_last_layer: ActivationType | Tuple[ActivationType, float] | bool | None = True,
-            padding_mode: str = 'reflect',
-            num_groups: int = 4,
-            dim_per_group: int = -1,
-            group_norm_eps: float = 1e-05
+        self,
+        n_kernels: List[int],
+        k: int = 3,
+        p: int = 1,
+        pad_value: Optional[float] = None,
+        norm: NormType = NormType.BATCH,
+        activation: ActivationType | Tuple[ActivationType, float] = ActivationType.RELU,
+        activation_last_layer: (
+            ActivationType | Tuple[ActivationType, float] | bool | None
+        ) = True,
+        padding_mode: str = "reflect",
+        num_groups: int = 4,
+        dim_per_group: int = -1,
+        group_norm_eps: float = 1e-05,
     ):
         super().__init__(pad_value=pad_value)
         self.conv = ConvLayer(
@@ -519,7 +531,7 @@ class ConvBlock(TemporallySharedBlock):
             padding_mode=padding_mode,
             num_groups=num_groups,
             dim_per_group=dim_per_group,
-            group_norm_eps=group_norm_eps
+            group_norm_eps=group_norm_eps,
         )
 
     def forward(self, x: Tensor) -> Tensor:
@@ -528,19 +540,19 @@ class ConvBlock(TemporallySharedBlock):
 
 class DownConvBlock(TemporallySharedBlock):
     def __init__(
-            self,
-            d_in: int,
-            d_out: int,
-            k: int,
-            s: int,
-            p: int,
-            pad_value: Optional[float] = None,
-            norm: NormType = NormType.BATCH,
-            num_groups: int = 4,
-            dim_per_group: int = -1,
-            group_norm_eps: float = 1e-05,
-            activation: ActivationType | Tuple[ActivationType, float] = ActivationType.RELU,
-            padding_mode: str = 'reflect'
+        self,
+        d_in: int,
+        d_out: int,
+        k: int,
+        s: int,
+        p: int,
+        pad_value: Optional[float] = None,
+        norm: NormType = NormType.BATCH,
+        num_groups: int = 4,
+        dim_per_group: int = -1,
+        group_norm_eps: float = 1e-05,
+        activation: ActivationType | Tuple[ActivationType, float] = ActivationType.RELU,
+        padding_mode: str = "reflect",
     ):
         super().__init__(pad_value=pad_value)
         self.down = ConvLayer(
@@ -553,7 +565,7 @@ class DownConvBlock(TemporallySharedBlock):
             k=k,
             s=s,
             p=p,
-            padding_mode=padding_mode
+            padding_mode=padding_mode,
         )
         self.conv1 = ConvLayer(
             n_kernels=[d_in, d_out],
@@ -562,7 +574,7 @@ class DownConvBlock(TemporallySharedBlock):
             dim_per_group=dim_per_group,
             group_norm_eps=group_norm_eps,
             activation=activation,
-            padding_mode=padding_mode
+            padding_mode=padding_mode,
         )
         self.conv2 = ConvLayer(
             n_kernels=[d_out, d_out],
@@ -583,22 +595,22 @@ class DownConvBlock(TemporallySharedBlock):
 
 class UpConvBlock(TemporallySharedBlock):
     def __init__(
-            self,
-            d_in: int,
-            d_out: int,
-            k: int,
-            s: int,
-            p: int,
-            d_skip: Optional[int] = None,
-            upconv_type: UpConvType = UpConvType.TRANSPOSE,
-            norm_conv: NormType = NormType.BATCH,
-            norm_skip: NormType = NormType.BATCH,
-            num_groups: int = 4,
-            dim_per_group: int = -1,
-            group_norm_eps: float = 1e-05,
-            activation: ActivationType | Tuple[ActivationType, float] = ActivationType.RELU,
-            padding_mode: str = 'reflect',
-            pad_value: Optional[float] = None
+        self,
+        d_in: int,
+        d_out: int,
+        k: int,
+        s: int,
+        p: int,
+        d_skip: Optional[int] = None,
+        upconv_type: UpConvType = UpConvType.TRANSPOSE,
+        norm_conv: NormType = NormType.BATCH,
+        norm_skip: NormType = NormType.BATCH,
+        num_groups: int = 4,
+        dim_per_group: int = -1,
+        group_norm_eps: float = 1e-05,
+        activation: ActivationType | Tuple[ActivationType, float] = ActivationType.RELU,
+        padding_mode: str = "reflect",
+        pad_value: Optional[float] = None,
     ):
         super().__init__(pad_value=pad_value)
         d = d_out if d_skip is None else d_skip
@@ -612,7 +624,7 @@ class UpConvBlock(TemporallySharedBlock):
             num_groups=num_groups,
             dim_per_group=dim_per_group,
             group_norm_eps=group_norm_eps,
-            activation=activation
+            activation=activation,
         )
 
         self.up = UpConvLayer(
@@ -626,7 +638,7 @@ class UpConvBlock(TemporallySharedBlock):
             dim_per_group=dim_per_group,
             group_norm_eps=group_norm_eps,
             upconv_type=upconv_type,
-            activation=activation
+            activation=activation,
         )
 
         self.conv1 = ConvBlock(
@@ -637,7 +649,7 @@ class UpConvBlock(TemporallySharedBlock):
             dim_per_group=dim_per_group,
             group_norm_eps=group_norm_eps,
             activation=activation,
-            padding_mode=padding_mode
+            padding_mode=padding_mode,
         )
 
         self.conv2 = ConvBlock(
@@ -648,23 +660,34 @@ class UpConvBlock(TemporallySharedBlock):
             dim_per_group=dim_per_group,
             group_norm_eps=group_norm_eps,
             activation=activation,
-            padding_mode=padding_mode
+            padding_mode=padding_mode,
         )
 
-    def forward(self, x: Tensor, skip: Tensor, pad_mask: Optional[Tensor] = None) -> Tensor:
+    def forward(
+        self, x: Tensor, skip: Tensor, pad_mask: Optional[Tensor] = None
+    ) -> Tensor:
         out = self.up.smart_forward(x, pad_mask=pad_mask)
-        out = torch.cat([out, self.skip_conv.smart_forward(skip, pad_mask=pad_mask)], dim=2)
+        out = torch.cat(
+            [out, self.skip_conv.smart_forward(skip, pad_mask=pad_mask)], dim=2
+        )
         out = self.conv1.smart_forward(out, pad_mask=pad_mask)
         out = out + self.conv2.smart_forward(out, pad_mask=pad_mask)
         return out
 
 
 class TemporalAggregator(nn.Module):
-    def __init__(self, mode: TemporalAggregationMode = TemporalAggregationMode.ATT_GROUP):
+    def __init__(
+        self, mode: TemporalAggregationMode = TemporalAggregationMode.ATT_GROUP
+    ):
         super().__init__()
         self.mode = mode
 
-    def forward(self, x: Tensor, pad_mask: Optional[Tensor] = None, attn_mask: Optional[Tensor] = None) -> Tensor:
+    def forward(
+        self,
+        x: Tensor,
+        pad_mask: Optional[Tensor] = None,
+        attn_mask: Optional[Tensor] = None,
+    ) -> Tensor:
 
         if self.mode is TemporalAggregationMode.NONE:
             return x
@@ -676,14 +699,16 @@ class TemporalAggregator(nn.Module):
 
                 if x.shape[-1] > w or x.shape[-2] > h:
                     attn = nn.Upsample(
-                        size=tuple(x.shape[-2:]), mode='bilinear', align_corners=False
+                        size=tuple(x.shape[-2:]), mode="bilinear", align_corners=False
                     )(attn)
                 else:
                     attn = nn.AdaptiveAvgPool2d(x.shape[-2:])(attn)
 
                 attn = attn.view(n_heads, b, t, t, *x.shape[-2:])
                 attn = attn * (~pad_mask).float()[None, :, None, :, None, None]
-                out = torch.stack(x.chunk(n_heads, dim=2))  # n_heads x B x T x (C/n_heads) x H x W
+                out = torch.stack(
+                    x.chunk(n_heads, dim=2)
+                )  # n_heads x B x T x (C/n_heads) x H x W
                 out = attn[:, :, :, :, None, :, :] * out[:, :, None, :, :, :, :]
                 out = out.sum(dim=3)  # n_heads x B x T x (C/n_heads) x H x W
                 out = torch.cat([group for group in out], dim=2)  # B x T x C x H x W
@@ -695,7 +720,7 @@ class TemporalAggregator(nn.Module):
                 attn = attn.view(b * t, t, h, w)
 
                 attn = nn.Upsample(
-                    size=tuple(x.shape[-2:]), mode='bilinear', align_corners=False
+                    size=tuple(x.shape[-2:]), mode="bilinear", align_corners=False
                 )(attn)
 
                 attn = attn.view(b, t, t, *x.shape[-2:])
@@ -711,29 +736,41 @@ class TemporalAggregator(nn.Module):
 
                     if x.shape[-1] > w or x.shape[-2] > h:
                         attn = nn.Upsample(
-                            size=tuple(x.shape[-2:]), mode='bilinear', align_corners=False
+                            size=tuple(x.shape[-2:]),
+                            mode="bilinear",
+                            align_corners=False,
                         )(attn)
                     else:
                         attn = nn.AdaptiveAvgPool2d(x.shape[-2:])(attn)
 
-                    attn = attn.view(n_heads, b, t, t, *x.shape[-2:])  # n_heads x B x T x T x H x W
-                    out = torch.stack(x.chunk(n_heads, dim=2))  # n_heads x B x T x (C/n_heads) x H x W
+                    attn = attn.view(
+                        n_heads, b, t, t, *x.shape[-2:]
+                    )  # n_heads x B x T x T x H x W
+                    out = torch.stack(
+                        x.chunk(n_heads, dim=2)
+                    )  # n_heads x B x T x (C/n_heads) x H x W
                     out = attn[:, :, :, :, None, :, :] * out[:, :, None, :, :, :, :]
                     out = out.sum(dim=3)  # n_heads x B x T x (C/n_heads) x H x W
-                    out = torch.cat([group for group in out], dim=2)  # B x T x C x H x W
+                    out = torch.cat(
+                        [group for group in out], dim=2
+                    )  # B x T x C x H x W
                     return out
 
                 elif self.mode == TemporalAggregationMode.ATT_MEAN:
                     n_heads, b, t, _, h, w = attn_mask.shape
-                    attn = attn_mask.mean(dim=0)  # average over heads, B x T x T x H x W
+                    attn = attn_mask.mean(
+                        dim=0
+                    )  # average over heads, B x T x T x H x W
                     attn = attn.view(b * t, t, h, w)
 
                     attn = nn.Upsample(
-                        size=tuple(x.shape[-2:]), mode='bilinear', align_corners=False
+                        size=tuple(x.shape[-2:]), mode="bilinear", align_corners=False
                     )(attn)
 
                     attn = attn.view(b, t, t, *x.shape[-2:])
-                    out = (x[:, None, :, :, :, :] * attn[:, :, :, None, :, :]).sum(dim=2)
+                    out = (x[:, None, :, :, :, :] * attn[:, :, :, None, :, :]).sum(
+                        dim=2
+                    )
                     return out
 
         return x

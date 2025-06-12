@@ -5,17 +5,16 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
+from lib.datasets import DATASETS, EarthNet2021Dataset, SEN12MSCRTSDataset
 from omegaconf import DictConfig
 from torch import Tensor
 from torch.nn import functional as F
 from torchvision import transforms
 
-from lib.datasets import DATASETS, EarthNet2021Dataset, SEN12MSCRTSDataset
-
 np_str_obj_array_pattern = re.compile(r"[SaUO]")
 
 
-def to_device(sample: Dict, device: torch.device = torch.device('cuda')) -> Dict:
+def to_device(sample: Dict, device: torch.device = torch.device("cuda")) -> Dict:
     sample_out = {}
     for key, val in sample.items():
         if isinstance(val, torch.Tensor):
@@ -34,14 +33,16 @@ def to_device(sample: Dict, device: torch.device = torch.device('cuda')) -> Dict
     return sample_out
 
 
-def extract_sample(sample: Dict) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Union[float, int]]:
-    inputs = sample['x']
-    target = sample['y']
-    masks = sample['masks']
-    mask_valid = sample['masks_valid_obs'] if 'masks_valid_obs' in sample else None
-    cloud_mask = sample['cloud_mask'] if 'cloud_mask' in sample else None
-    indices_rgb = sample.get('c_index_rgb', torch.Tensor([2, 1, 0]))
-    index_nir = sample.get('c_index_nir', torch.Tensor([np.nan]))
+def extract_sample(
+    sample: Dict,
+) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Union[float, int]]:
+    inputs = sample["x"]
+    target = sample["y"]
+    masks = sample["masks"]
+    mask_valid = sample["masks_valid_obs"] if "masks_valid_obs" in sample else None
+    cloud_mask = sample["cloud_mask"] if "cloud_mask" in sample else None
+    indices_rgb = sample.get("c_index_rgb", torch.Tensor([2, 1, 0]))
+    index_nir = sample.get("c_index_nir", torch.Tensor([np.nan]))
 
     if isinstance(indices_rgb[0], torch.Tensor):
         indices_rgb = indices_rgb[0]
@@ -80,8 +81,8 @@ def pad_collate(batch, pad_value=0):
             # If we're in a background process, concatenate directly into a
             # shared memory tensor to avoid an extra copy
             numel = sum([x.numel() for x in batch])
-            storage = elem.untyped_storage()._new_shared(numel)
-            #out = elem.new(storage)
+            storage = elem.storage()._new_shared(numel)
+            # out = elem.new(storage)
             out = elem.new(storage).resize_(len(batch), *list(batch[0].size()))
         return torch.stack(batch, 0, out=out)
     if (
@@ -120,72 +121,87 @@ def pad_collate(batch, pad_value=0):
 
 
 def get_dataloader(
-        config: DictConfig,
-        phase: str,
-        pin_memory: bool = True,
-        drop_last: bool = False,
-        logger: Optional[logging.Logger] = None,
+    config: DictConfig,
+    phase: str,
+    pin_memory: bool = True,
+    drop_last: bool = False,
+    logger: Optional[logging.Logger] = None,
 ) -> torch.utils.data.dataloader.DataLoader:
     """Returns a torch.utils.data.DataLoader instance."""
 
     dset = get_dataset(config, phase, logger)
-    variable_seq_length = getattr(dset, 'variable_seq_length', False) and config.training_settings.batch_size > 1
-    shuffle = config['misc']['run_mode'] != 'test'
+    variable_seq_length = (
+        getattr(dset, "variable_seq_length", False)
+        and config.training_settings.batch_size > 1
+    )
+    shuffle = config["misc"]["run_mode"] != "test"
 
     if variable_seq_length:
         collate_fn = lambda x: pad_collate(x, pad_value=config.method.pad_value)
     else:
         collate_fn = None
 
-    loader = torch.utils.data.DataLoader(dataset=dset, batch_size=config.training_settings.batch_size, shuffle=shuffle,
-                                         num_workers=config.misc.num_workers, collate_fn=collate_fn,
-                                         pin_memory=pin_memory, drop_last=drop_last)
+    loader = torch.utils.data.DataLoader(
+        dataset=dset,
+        batch_size=config.training_settings.batch_size,
+        shuffle=shuffle,
+        num_workers=config.misc.num_workers,
+        collate_fn=collate_fn,
+        pin_memory=pin_memory,
+        drop_last=drop_last,
+    )
 
     return loader
 
 
-def get_dataset(config: DictConfig, phase: str, logger: Optional[logging.Logger] = None):
+def get_dataset(
+    config: DictConfig, phase: str, logger: Optional[logging.Logger] = None
+):
     """Returns a torch.utils.data.Dataset instance."""
 
     from lib.utils import without_keys
 
-    assert config['misc']['run_mode'] in ['train', 'val', 'test']
-    assert phase in ['train', 'val', 'train+val', 'test']
+    assert config["misc"]["run_mode"] in ["train", "val", "test"]
+    assert phase in ["train", "val", "train+val", "test"]
 
     if config.data.dataset not in DATASETS:
         if logger:
-            logger.error(f'Unknown dataset: {config.data.dataset}\n')
+            logger.error(f"Unknown dataset: {config.data.dataset}\n")
         else:
-            raise NotImplementedError(f'Unknown dataset: {config.data.dataset}\n')
+            raise NotImplementedError(f"Unknown dataset: {config.data.dataset}\n")
 
     # Select the defined dataset
     Dataset = DATASETS[config.data.dataset]
 
-    if Dataset == EarthNet2021Dataset and phase != 'test':
+    if Dataset == EarthNet2021Dataset and phase != "test":
         config.data.mode = phase
     elif Dataset == SEN12MSCRTSDataset:
         config.data.split = phase
 
-    augment = phase == 'train'
-    if 'hdf5_file' in config.data and isinstance(config.data.hdf5_file, DictConfig):
+    augment = phase == "train"
+    if "hdf5_file" in config.data and isinstance(config.data.hdf5_file, DictConfig):
         # Choose the input hdf5 file depending on the phase
         dset = Dataset(
-            hdf5_file=config.data.hdf5_file[phase], **without_keys(config.data, ['dataset', 'hdf5_file']),
-            mask_kwargs=config.mask, augment=augment
+            hdf5_file=config.data.hdf5_file[phase],
+            **without_keys(config.data, ["dataset", "hdf5_file"]),
+            mask_kwargs=config.mask,
+            augment=augment,
         )
     else:
         augment = False
         dset = Dataset(
-            **without_keys(config.data, ['dataset']),
+            **without_keys(config.data, ["dataset"]),
             mask_kwargs=config.mask,
             augment=False,
-            phase=phase,
+            # phase=phase,
         )
 
     return dset
 
 
-def compute_false_color(x: Tensor, index_rgb: Tensor | List[int | float], index_nir: int | float) -> Tensor:
+def compute_false_color(
+    x: Tensor, index_rgb: Tensor | List[int | float], index_nir: int | float
+) -> Tensor:
     """
     Returns the false color composite (NIR, R, G) for every time step of the input sequence or
     for the single input image.
@@ -200,6 +216,11 @@ def compute_false_color(x: Tensor, index_rgb: Tensor | List[int | float], index_
     """
 
     if x.dim() == 4:
-        return torch.stack((x[:, index_nir, ...], x[:, index_rgb[0], ...], x[:, index_rgb[1], ...]), dim=1)
+        return torch.stack(
+            (x[:, index_nir, ...], x[:, index_rgb[0], ...], x[:, index_rgb[1], ...]),
+            dim=1,
+        )
 
-    return torch.stack((x[index_nir, ...], x[index_rgb[0], ...], x[index_rgb[1], ...]), dim=1)
+    return torch.stack(
+        (x[index_nir, ...], x[index_rgb[0], ...], x[index_rgb[1], ...]), dim=1
+    )

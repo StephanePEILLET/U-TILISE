@@ -2,7 +2,6 @@ import logging
 from typing import Optional
 
 import numpy as np
-
 from lib.formatter import LeveledFormatter
 
 
@@ -10,6 +9,7 @@ class AverageMeter:
     """
     Computes and stores the average and current value.
     """
+
     def __init__(self):
         self.val = np.nan
         self.avg = np.nan
@@ -34,7 +34,10 @@ class AverageMeter:
 
 
 def prepare_logger(
-        logger_name: str, level: int = logging.INFO, log_to_console: bool = True, log_file: Optional[str] = None
+    logger_name: str,
+    level: int = logging.INFO,
+    log_to_console: bool = True,
+    log_file: Optional[str] = None,
 ) -> logging.Logger:
     """
     Returns a logger.
@@ -52,11 +55,19 @@ def prepare_logger(
     logger = logging.getLogger(logger_name)
     logger.setLevel(level)
 
-    formatter = LeveledFormatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                                 datefmt='%Y-%m-%d %H:%M:%S')
-    formatter.set_formatter(logging.INFO, logging.Formatter('%(message)s'))
-    formatter.set_formatter(logging.WARNING, logging.Formatter('%(asctime)s [%(levelname)s] %(name)s - %(message)s'))
-    formatter.set_formatter(logging.ERROR, logging.Formatter('%(asctime)s [%(levelname)s] %(name)s - %(message)s'))
+    formatter = LeveledFormatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    formatter.set_formatter(logging.INFO, logging.Formatter("%(message)s"))
+    formatter.set_formatter(
+        logging.WARNING,
+        logging.Formatter("%(asctime)s [%(levelname)s] %(name)s - %(message)s"),
+    )
+    formatter.set_formatter(
+        logging.ERROR,
+        logging.Formatter("%(asctime)s [%(levelname)s] %(name)s - %(message)s"),
+    )
 
     if log_to_console:
         stream_handler = logging.StreamHandler()
@@ -64,7 +75,7 @@ def prepare_logger(
         logger.addHandler(stream_handler)
 
     if log_file:
-        file_handler = logging.FileHandler(log_file, mode='a')
+        file_handler = logging.FileHandler(log_file, mode="a")
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
 

@@ -9,28 +9,24 @@ import h5py
 import numpy as np
 import torch
 import torch.utils.data
+from lib import torch_transforms
+from lib.datasets import dataset_tools
+from lib.datasets.dataset_tools import MASK_TYPES, PE_STRATEGIES
+from lib.datasets.mask_generation import masks_init_filling, overlay_seq_with_clouds
 from omegaconf import DictConfig, ListConfig, OmegaConf
 from torch import Tensor
 from torchvision import transforms
 
-from lib import torch_transforms
-from lib.datasets import dataset_tools
-from lib.datasets.dataset_tools import MASK_TYPES, PE_STRATEGIES
-from lib.datasets.mask_generation import (
-    masks_init_filling,
-    overlay_seq_with_clouds
-)
-
-SPLITS = ['train', 'iid', 'ood', 'extreme', 'seasonal']
-CHANNEL_CONFIG = ['rgb', 'bgr', 'bgr-nir', 'bgr-mask', 'bgr-nir-mask']
+SPLITS = ["train", "iid", "ood", "extreme", "seasonal"]
+CHANNEL_CONFIG = ["rgb", "bgr", "bgr-nir", "bgr-mask", "bgr-nir-mask"]
 
 # Sequence length per data split
 split2seq_length = {
-    'train': 30,
-    'iid_test_split': 30,
-    'ood_test_split': 30,
-    'extreme_test_split': 60,
-    'seasonal_test_split': 210
+    "train": 30,
+    "iid_test_split": 30,
+    "ood_test_split": 30,
+    "extreme_test_split": 60,
+    "seasonal_test_split": 210,
 }
 
 
@@ -142,54 +138,64 @@ class EarthNet2021Dataset(torch.utils.data.Dataset):
                                  purposes, False otherwise.
     """
 
-    def __init__(self,
-                 root: str,
-                 hdf5_file: str | Path | None = None,
-                 preprocessed: bool = False,
-                 split: str = 'train',
-                 mode: Optional[str] = 'train',
-                 channels: str = 'bgr-nir',
-                 filter_settings: Optional[Dict | DictConfig] = None,
-                 crop_settings: Optional[Dict | DictConfig] = None,
-                 pe_strategy: str = 'day-of-year',
-                 mask_kwargs: Optional[Dict | DictConfig] = None,
-                 render_occluded_above_p: Optional[float] = None,
-                 return_cloud_prob: bool = False,
-                 return_class_map: bool = False,
-                 return_cloud_mask: bool = True,
-                 augment: bool = False,
-                 max_seq_length: Optional[int] = None,
-                 verbose: int = 0,
-                 to_export: bool = False
-                 ):
+    def __init__(
+        self,
+        root: str,
+        hdf5_file: str | Path | None = None,
+        preprocessed: bool = False,
+        split: str = "train",
+        mode: Optional[str] = "train",
+        channels: str = "bgr-nir",
+        filter_settings: Optional[Dict | DictConfig] = None,
+        crop_settings: Optional[Dict | DictConfig] = None,
+        pe_strategy: str = "day-of-year",
+        mask_kwargs: Optional[Dict | DictConfig] = None,
+        render_occluded_above_p: Optional[float] = None,
+        return_cloud_prob: bool = False,
+        return_class_map: bool = False,
+        return_cloud_mask: bool = True,
+        augment: bool = False,
+        max_seq_length: Optional[int] = None,
+        verbose: int = 0,
+        to_export: bool = False,
+    ):
 
         if filter_settings is None:
-            filter_settings = {'type': None, 'min_length': 5, 'return_valid_obs_only': False}
+            filter_settings = {
+                "type": None,
+                "min_length": 5,
+                "return_valid_obs_only": False,
+            }
         if crop_settings is None:
-            crop_settings = {'enabled': False, 'type': 'random', 'shape': (64, 64)}
+            crop_settings = {"enabled": False, "type": "random", "shape": (64, 64)}
 
         # -------------------------------------- Verify input parameters -------------------------------------- #
 
         if not os.path.exists(root):
-            raise FileNotFoundError(f"Invalid `root`. Root directory does not exist: {root}")
+            raise FileNotFoundError(
+                f"Invalid `root`. Root directory does not exist: {root}"
+            )
 
         if split not in SPLITS:
-            raise ValueError(f"Invalid `split` parameter. Choose among {SPLITS} to specify `split`.\n")
+            raise ValueError(
+                f"Invalid `split` parameter. Choose among {SPLITS} to specify `split`.\n"
+            )
 
-        if split != 'train':
-            split = split + '_test_split'
+        if split != "train":
+            split = split + "_test_split"
 
         if hdf5_file is None:
-            hdf5_file = Path(root) / (split + '.hdf5')
+            hdf5_file = Path(root) / (split + ".hdf5")
         else:
             hdf5_file = Path(root) / hdf5_file
 
         if not os.path.exists(hdf5_file):
             raise FileNotFoundError(f"Cannot find the hdf5 file: {hdf5_file}")
 
-        if split == 'train' and mode not in ['train', 'val', 'all']:
+        if split == "train" and mode not in ["train", "val", "all"]:
             raise ValueError(
-                "Invalid `mode` parameter. Choose among ['train', 'val', 'all'] to specify `mode`.\n")
+                "Invalid `mode` parameter. Choose among ['train', 'val', 'all'] to specify `mode`.\n"
+            )
 
         if isinstance(filter_settings, dict):
             filter_settings = OmegaConf.create(filter_settings)
@@ -200,54 +206,92 @@ class EarthNet2021Dataset(torch.utils.data.Dataset):
         if isinstance(mask_kwargs, dict):
             mask_kwargs = OmegaConf.create(mask_kwargs)
 
-        if not isinstance(filter_settings, DictConfig) or 'type' not in filter_settings or \
-                filter_settings.type not in [None, 'cloud-free', 'cloud-free_consecutive'] or \
-                ('min_length' in filter_settings and not isinstance(filter_settings.min_length, int)) or \
-                ('max_num_consec_invalid' in filter_settings and not isinstance(filter_settings.max_num_consec_invalid,
-                                                                                int)):
+        if (
+            not isinstance(filter_settings, DictConfig)
+            or "type" not in filter_settings
+            or filter_settings.type
+            not in [None, "cloud-free", "cloud-free_consecutive"]
+            or (
+                "min_length" in filter_settings
+                and not isinstance(filter_settings.min_length, int)
+            )
+            or (
+                "max_num_consec_invalid" in filter_settings
+                and not isinstance(filter_settings.max_num_consec_invalid, int)
+            )
+        ):
             raise RuntimeError(
                 "Invalid `filter_settings` parameter. Define a dictionary with the following keys and value options:\n"
                 "'type': None or str,          # sequence filter type, choose from [None, 'cloud-free', "
                 "'cloud-free_consecutive']\n "
                 "'min_length': int,            # minimum number of frames per sequence\n"
                 "'return_valid_obs_only': bool # True to return filtered frames only, False otherwise\n "
-                "'max_num_consec_invalid': int # maximum number of consecutive invalid frames per sequence\n")
+                "'max_num_consec_invalid': int # maximum number of consecutive invalid frames per sequence\n"
+            )
 
         if not isinstance(crop_settings, DictConfig):
             raise ValueError(
                 "Invalid `crop_settings` parameter. Define a dictionary with the following keys and value options:\n"
                 "'on': bool,                   # True to spatially crop the image time series\n "
                 "'type': str,                  # rectangular crop type, choose from ['random', 'center']\n"
-                "'shape': (int, int)           # crop shape\n")
+                "'shape': (int, int)           # crop shape\n"
+            )
 
         if pe_strategy not in PE_STRATEGIES:
-            raise ValueError(f"Invalid `pe_strategy` parameter. Choose among {PE_STRATEGIES} to specify the strategy "
-                             "used for positional encoding.\n")
+            raise ValueError(
+                f"Invalid `pe_strategy` parameter. Choose among {PE_STRATEGIES} to specify the strategy "
+                "used for positional encoding.\n"
+            )
 
-        if 'enabled' not in crop_settings or not isinstance(crop_settings.enabled, bool):
-            raise ValueError("Invalid `crop_settings['enabled']` parameter. Specify a boolean.")
+        if "enabled" not in crop_settings or not isinstance(
+            crop_settings.enabled, bool
+        ):
+            raise ValueError(
+                "Invalid `crop_settings['enabled']` parameter. Specify a boolean."
+            )
 
         if crop_settings.enabled:
-            if 'type' not in crop_settings or crop_settings.type not in ['random', 'center']:
-                raise ValueError("Invalid `crop_settings['type']` parameter. Choose among ['random', 'center'] to "
-                                 "specify `crop_settings['type']`.\n")
+            if "type" not in crop_settings or crop_settings.type not in [
+                "random",
+                "center",
+            ]:
+                raise ValueError(
+                    "Invalid `crop_settings['type']` parameter. Choose among ['random', 'center'] to "
+                    "specify `crop_settings['type']`.\n"
+                )
 
-            if 'shape' not in crop_settings or not \
-                    (isinstance(crop_settings.shape, (tuple, ListConfig)) and
-                     len(crop_settings.shape) == 2 and isinstance(crop_settings.shape[0], int) and
-                     isinstance(crop_settings.shape[1], int)):
-                raise RuntimeError("Invalid `crop_settings['shape']` parameter. Specify a tuple (int, int).\n")
+            if "shape" not in crop_settings or not (
+                isinstance(crop_settings.shape, (tuple, ListConfig))
+                and len(crop_settings.shape) == 2
+                and isinstance(crop_settings.shape[0], int)
+                and isinstance(crop_settings.shape[1], int)
+            ):
+                raise RuntimeError(
+                    "Invalid `crop_settings['shape']` parameter. Specify a tuple (int, int).\n"
+                )
 
-        if '-mask' in channels and mask_kwargs is None:
-            raise RuntimeError("Cannot concatenate the image time series with associated masks. "
-                               "Please provide a masking strategy. \n")
+        if "-mask" in channels and mask_kwargs is None:
+            raise RuntimeError(
+                "Cannot concatenate the image time series with associated masks. "
+                "Please provide a masking strategy. \n"
+            )
 
-        if mask_kwargs is not None and 'mask_type' in mask_kwargs and mask_kwargs.mask_type not in MASK_TYPES:
-            raise ValueError(f"Invalid `mask_type` parameter. Choose among {MASK_TYPES} to specify the type of masks"
-                             "used for synthetically generating data gaps in cloud-free satellite image time series.\n")
+        if (
+            mask_kwargs is not None
+            and "mask_type" in mask_kwargs
+            and mask_kwargs.mask_type not in MASK_TYPES
+        ):
+            raise ValueError(
+                f"Invalid `mask_type` parameter. Choose among {MASK_TYPES} to specify the type of masks"
+                "used for synthetically generating data gaps in cloud-free satellite image time series.\n"
+            )
 
-        if render_occluded_above_p is not None and not isinstance(render_occluded_above_p, float):
-            raise TypeError("Invalid `render_occluded_above_p` parameter. Specify a float (or None).")
+        if render_occluded_above_p is not None and not isinstance(
+            render_occluded_above_p, float
+        ):
+            raise TypeError(
+                "Invalid `render_occluded_above_p` parameter. Specify a float (or None)."
+            )
 
         if not isinstance(return_cloud_prob, bool):
             raise TypeError("Invalid `return_cloud_prob` parameter. Specify a boolean.")
@@ -265,27 +309,33 @@ class EarthNet2021Dataset(torch.utils.data.Dataset):
         self.hdf5_file = hdf5_file
         self.root = root
         self.split = split
-        self.mode = mode if self.split == 'train' else None
+        self.mode = mode if self.split == "train" else None
 
         # Fixed sequence length? If yes, the `collate_fn` function of the data loader pads samples to the same temporal
         # length before collating them to a batch
-        if filter_settings and filter_settings.get('type', None) is not None:
+        if filter_settings and filter_settings.get("type", None) is not None:
             self.variable_seq_length = filter_settings.return_valid_obs_only
         else:
             self.variable_seq_length = False
 
         # Parameters used for creating synthetic data gaps
         if mask_kwargs is not None:
-            mask_kwargs.mask_type = mask_kwargs.get('mask_type', 'random_clouds')
-            mask_kwargs.ratio_masked_frames = mask_kwargs.get('ratio_masked_frames', 0.5)
-            mask_kwargs.ratio_fully_masked_frames = mask_kwargs.get('ratio_fully_masked_frames', 0.0)
-            mask_kwargs.non_masked_frames = mask_kwargs.get('non_masked_frames', [])
+            mask_kwargs.mask_type = mask_kwargs.get("mask_type", "random_clouds")
+            mask_kwargs.ratio_masked_frames = mask_kwargs.get(
+                "ratio_masked_frames", 0.5
+            )
+            mask_kwargs.ratio_fully_masked_frames = mask_kwargs.get(
+                "ratio_fully_masked_frames", 0.0
+            )
+            mask_kwargs.non_masked_frames = mask_kwargs.get("non_masked_frames", [])
 
-            self.fill_type = mask_kwargs.get('fill_type', 'fill_value')
-            self.fill_value = mask_kwargs.get('fill_value', 1)
-            self.fixed_masking_ratio = mask_kwargs.get('fixed_masking_ratio', False)
-            self.intersect_real_cloud_masks = mask_kwargs.get('intersect_real_cloud_masks', False)
-            self.dilate_cloud_masks = mask_kwargs.get('dilate_cloud_masks', False)
+            self.fill_type = mask_kwargs.get("fill_type", "fill_value")
+            self.fill_value = mask_kwargs.get("fill_value", 1)
+            self.fixed_masking_ratio = mask_kwargs.get("fixed_masking_ratio", False)
+            self.intersect_real_cloud_masks = mask_kwargs.get(
+                "intersect_real_cloud_masks", False
+            )
+            self.dilate_cloud_masks = mask_kwargs.get("dilate_cloud_masks", False)
             self.mask_kwargs = mask_kwargs
         else:
             self.mask_kwargs = None
@@ -302,8 +352,10 @@ class EarthNet2021Dataset(torch.utils.data.Dataset):
         # -------------------------------------- Channel settings -------------------------------------- #
         # Image channels and/or composites
         if channels not in CHANNEL_CONFIG:
-            raise ValueError(f"Unknown channel configuration `{channels}`. Choose among {CHANNEL_CONFIG} to "
-                             "specify `channels`.\n")
+            raise ValueError(
+                f"Unknown channel configuration `{channels}`. Choose among {CHANNEL_CONFIG} to "
+                "specify `channels`.\n"
+            )
 
         self.channels = channels
 
@@ -311,7 +363,7 @@ class EarthNet2021Dataset(torch.utils.data.Dataset):
         # self.s2_channels: used to extract the relevant channels from the hdf5 file
         # self.c_index_rgb and self.c_index_nir: indices of the RGB and NIR channels, w.r.t. the output of
         # the self.__getitem__() call
-        if 'bgr' == self.channels[:3]:
+        if "bgr" == self.channels[:3]:
             # self.channels in ['bgr', 'bgr-nir', 'bgr-mask', 'bgr-nir-mask']
             self.num_channels = 3
             self.c_index_rgb = torch.Tensor([2, 1, 0]).long()
@@ -322,7 +374,7 @@ class EarthNet2021Dataset(torch.utils.data.Dataset):
             self.c_index_rgb = torch.Tensor([0, 1, 2]).long()
             self.s2_channels = [2, 1, 0]
 
-        if '-nir' in self.channels:
+        if "-nir" in self.channels:
             # self.channels in ['bgr-nir', 'bgr-nir-mask']
             self.num_channels += 1
             self.c_index_nir = torch.Tensor([3]).long()
@@ -330,7 +382,7 @@ class EarthNet2021Dataset(torch.utils.data.Dataset):
         else:
             self.c_index_nir = torch.from_numpy(np.array(np.nan))
 
-        if '-mask' in self.channels:
+        if "-mask" in self.channels:
             # self.channels in ['bgr-mask', 'bgr-nir-mask']
             self.num_channels += 1
 
@@ -338,24 +390,32 @@ class EarthNet2021Dataset(torch.utils.data.Dataset):
         self.crop_settings = OmegaConf.create(crop_settings)
 
         # Image size
-        self.image_size = crop_settings.shape if self.crop_settings.enabled else (128, 128)
+        self.image_size = (
+            crop_settings.shape if self.crop_settings.enabled else (128, 128)
+        )
 
         # Cropping function
         if self.crop_settings.enabled:
-            if self.crop_settings.type == 'random':
+            if self.crop_settings.type == "random":
                 self.crop_function = transforms.RandomCrop(self.image_size)
-            elif self.crop_settings.type == 'center':
+            elif self.crop_settings.type == "center":
                 self.crop_function = transforms.CenterCrop(self.image_size)
 
         # -------------------------------------- Filtering settings -------------------------------------- #
         self.filter_settings = OmegaConf.create(filter_settings)
-        self.filter_settings.max_num_consec_invalid = self.filter_settings.get('max_num_consec_invalid', None)
-        self.filter_settings.min_length = self.filter_settings.get('min_length', 0)
+        self.filter_settings.max_num_consec_invalid = self.filter_settings.get(
+            "max_num_consec_invalid", None
+        )
+        self.filter_settings.min_length = self.filter_settings.get("min_length", 0)
         self.max_seq_length = max_seq_length
 
         # Get the sequence length of the (temporally trimmed) satellite image time series
         # (used to compute the size of the model, cf. write_model_structure_to_file() in lib/utils.py)
-        self.seq_length = split2seq_length[self.split] if self.max_seq_length is None else self.max_seq_length
+        self.seq_length = (
+            split2seq_length[self.split]
+            if self.max_seq_length is None
+            else self.max_seq_length
+        )
 
         # Temporal resolution
         self.t_frequency = 5
@@ -365,26 +425,28 @@ class EarthNet2021Dataset(torch.utils.data.Dataset):
 
         # -------------------------------------- Auxiliary data -------------------------------------- #
         # Save whether auxiliary data should be returned
-        self.return_cloud_prob = return_cloud_prob if self.split == 'train' else False
-        self.return_class_map = return_class_map if self.split == 'train' else False
+        self.return_cloud_prob = return_cloud_prob if self.split == "train" else False
+        self.return_class_map = return_class_map if self.split == "train" else False
         self.return_cloud_mask = return_cloud_mask
 
         # -------------------------------------- Data augmentation -------------------------------------- #
-        if (self.split == 'train' and mode == 'val') or self.split != 'train':
+        if (self.split == "train" and mode == "val") or self.split != "train":
             self.augment = False
         else:
             self.augment = augment
-            self.augmentation_function = transforms.Compose([
-                torch_transforms.Rotate(),
-                transforms.RandomVerticalFlip(p=0.5),
-                transforms.RandomHorizontalFlip(p=0.5)
-            ])
+            self.augmentation_function = transforms.Compose(
+                [
+                    torch_transforms.Rotate(),
+                    transforms.RandomVerticalFlip(p=0.5),
+                    transforms.RandomHorizontalFlip(p=0.5),
+                ]
+            )
 
         # -------------------------------------- List of samples -------------------------------------- #
         self.verbose = verbose
 
         # Open hdf5 file
-        self.f = h5py.File(self.hdf5_file, 'r', libver='latest', swmr=True)
+        self.f = h5py.File(self.hdf5_file, "r", libver="latest", swmr=True)
 
         # Get the paths of all data samples (including train/val split) and optionally remove short sequences
         self.paths, self.tiles2samples = self._get_data_samples()
@@ -396,23 +458,28 @@ class EarthNet2021Dataset(torch.utils.data.Dataset):
         return self.num_samples
 
     def __getitem__(
-            self, idx: int, t_sampled: Optional[Tensor] = None, t_masked: Optional[Dict[str, np.ndarray]] = None
+        self,
+        idx: int,
+        t_sampled: Optional[Tensor] = None,
+        t_masked: Optional[Dict[str, np.ndarray]] = None,
     ) -> Dict[str, Any]:
         # For simulation:
         # t_sampled as additional input to make the temporal trimming deterministic
         # t_masked as additional input to make the random masking deterministic
 
         cc: Optional[Tensor] = None
-        class_maps:  Optional[Tensor] = None
+        class_maps: Optional[Tensor] = None
 
-        if not self.preprocessed or (self.split == 'train' and self.mode in ['train', 'all']):
+        if not self.preprocessed or (
+            self.split == "train" and self.mode in ["train", "all"]
+        ):
             # a) TRAINING sequence
             # b) VALIDATION/TEST sequence which is not yet preprocessed and dumped to disk
             sample = self.f[self.paths[idx]]
 
             # Load the entire S2 image time series to apply the same data augmentation to cloud-free and cloudy images,
             # H x W x C x T
-            data = sample['highresdynamic'][:]
+            data = sample["highresdynamic"][:]
 
             # Reshape from (H x W x C x T) to (T x C x H x W)
             data = torch.from_numpy(np.transpose(data, (3, 2, 0, 1)))
@@ -433,9 +500,13 @@ class EarthNet2021Dataset(torch.utils.data.Dataset):
 
             # Temporally subsample/trim the sequence
             if t_sampled is None:
-                t_sampled, masks_valid_obs = self._subsample_sequence(sample, seq_length=images.shape[0])
+                t_sampled, masks_valid_obs = self._subsample_sequence(
+                    sample, seq_length=images.shape[0]
+                )
             else:
-                masks_valid_obs = torch.ones(len(t_sampled),)
+                masks_valid_obs = torch.ones(
+                    len(t_sampled),
+                )
 
             frames_input = images[t_sampled, :, :, :].clone()
             frames_target = images[t_sampled, :, :, :].clone()
@@ -447,7 +518,7 @@ class EarthNet2021Dataset(torch.utils.data.Dataset):
                 class_maps = data[t_sampled, 5, :, :].unsqueeze(1)
             cloud_mask = data[t_sampled, -1, :, :].unsqueeze(1).float()
 
-            if self.render_occluded_above_p and self.render_occluded_above_p > 0.:
+            if self.render_occluded_above_p and self.render_occluded_above_p > 0.0:
                 cloud_mask = self._mask_images_with_cloud_coverage_above_p(cloud_mask)
 
             # Extract the acquisition dates of the subsampled S2 observations in the sequence
@@ -456,82 +527,108 @@ class EarthNet2021Dataset(torch.utils.data.Dataset):
 
             # Generate masks
             if self.mask_kwargs is not None:
-                t_masked, frames_input, masks = self._generate_masks(sample, frames_input, cloud_mask, t_masked)
+                t_masked, frames_input, masks = self._generate_masks(
+                    sample, frames_input, cloud_mask, t_masked
+                )
             else:
-                masks = torch.zeros((frames_input.shape[0], 1, *frames_input.shape[-2:]))
+                masks = torch.zeros(
+                    (frames_input.shape[0], 1, *frames_input.shape[-2:])
+                )
 
         else:
             sample = self.f[self.paths[idx]]
 
             # Load the sequence, T x C x H x W
-            frames_target = torch.from_numpy(sample['frames_target'][:]).float()
+            frames_target = torch.from_numpy(sample["frames_target"][:]).float()
             frames_input = frames_target.clone()
-            masks_valid_obs = torch.ones(frames_input.shape[0],)
+            masks_valid_obs = torch.ones(
+                frames_input.shape[0],
+            )
 
             # Load the acquisition dates
-            dates = [dataset_tools.str2date(date.decode("utf-8")) for date in sample['dates']]
+            dates = [
+                dataset_tools.str2date(date.decode("utf-8")) for date in sample["dates"]
+            ]
 
             if self.return_cloud_prob:
-                cc = torch.from_numpy(sample['cloud_prob'][:]).float()
+                cc = torch.from_numpy(sample["cloud_prob"][:]).float()
             if self.return_class_map:
-                class_maps = torch.from_numpy(sample['classification'][:])
-            cloud_mask = torch.from_numpy(sample['cloud_mask'][:]).float()
+                class_maps = torch.from_numpy(sample["classification"][:])
+            cloud_mask = torch.from_numpy(sample["cloud_mask"][:]).float()
 
             # Load the precomputed masks
             if self.mask_kwargs is not None:
-                frames_input, masks = self._get_precomputed_masks(sample, frames_input, cloud_mask)
+                frames_input, masks = self._get_precomputed_masks(
+                    sample, frames_input, cloud_mask
+                )
             else:
-                masks = torch.zeros((frames_input.shape[0], 1, *frames_input.shape[-2:]))
+                masks = torch.zeros(
+                    (frames_input.shape[0], 1, *frames_input.shape[-2:])
+                )
 
-        if '-mask' in self.channels and self.mask_kwargs is not None:
+        if "-mask" in self.channels and self.mask_kwargs is not None:
             frames_input = torch.cat((frames_input, masks), dim=1)
 
         # Extract the number of days since the first observation in the sequence (= temporal sampling)
-        days = dataset_tools.get_position_for_positional_encoding(dates, 'day-within-sequence')
+        days = dataset_tools.get_position_for_positional_encoding(
+            dates, "day-within-sequence"
+        )
 
         # Get positions for positional encoding
-        position_days = dataset_tools.get_position_for_positional_encoding(dates, self.pe_strategy)
+        position_days = dataset_tools.get_position_for_positional_encoding(
+            dates, self.pe_strategy
+        )
 
         # Assemble output
         out = {
-            'x': frames_input,  # (synthetically masked) satellite image time series, (T x C x H x W)
-            'y': frames_target,  # observed/target satellite image time series, (T x C x H x W)
-            'masks': masks,  # masks applied to `x`, (T x 1 x H x W); pixel with value 1 is masked, 0 otherwise
-            'masks_valid_obs': masks_valid_obs,  # flag to indicate valid time steps, (T, ); 1 if valid, 0 if invalid
-            'position_days': position_days,
-            'days': days,    # temporal sampling, number of days since the first observation in the sequence, (T, )
-            'sample_index': idx,
-            'filepath': self.paths[idx],
-            'c_index_rgb': self.c_index_rgb,
-            'c_index_nir': self.c_index_nir
+            "x": frames_input,  # (synthetically masked) satellite image time series, (T x C x H x W)
+            "y": frames_target,  # observed/target satellite image time series, (T x C x H x W)
+            "masks": masks,  # masks applied to `x`, (T x 1 x H x W); pixel with value 1 is masked, 0 otherwise
+            "masks_valid_obs": masks_valid_obs,  # flag to indicate valid time steps, (T, ); 1 if valid, 0 if invalid
+            "position_days": position_days,
+            "days": days,  # temporal sampling, number of days since the first observation in the sequence, (T, )
+            "sample_index": idx,
+            "filepath": self.paths[idx],
+            "c_index_rgb": self.c_index_rgb,
+            "c_index_nir": self.c_index_nir,
         }
 
         if self.return_cloud_prob:
-            out['cloud_prob'] = cc  # Sen2Cor Cloud Mask (CLD), cloud probability per pixel [0-1], (T x 1 x H x W)
+            out["cloud_prob"] = (
+                cc  # Sen2Cor Cloud Mask (CLD), cloud probability per pixel [0-1], (T x 1 x H x W)
+            )
         if self.return_class_map:
-            out['classification'] = class_maps  # ESA Scene Classification (SCL), 0-11 categories, (T x 1 x H x W)
+            out["classification"] = (
+                class_maps  # ESA Scene Classification (SCL), 0-11 categories, (T x 1 x H x W)
+            )
         if self.return_cloud_mask:
-            out['cloud_mask'] = cloud_mask  # 0: non-occluded pixel, 1: occluded pixel, (T x 1 x H x W), w.r.t. `y`
+            out["cloud_mask"] = (
+                cloud_mask  # 0: non-occluded pixel, 1: occluded pixel, (T x 1 x H x W), w.r.t. `y`
+            )
 
         if self.to_export:
             # List of str, acquisition date for every observation in the sequence
-            out['dates'] = [date.strftime('%Y-%m-%d') for date in dates]
+            out["dates"] = [date.strftime("%Y-%m-%d") for date in dates]
 
-            out['to_export'] = {'t_sampled': t_sampled}
+            out["to_export"] = {"t_sampled": t_sampled}
             if self.mask_kwargs is not None and t_masked is not None:
                 # pyre-ignore[16]: `Optional` has no attribute `__getitem__`.
-                out['to_export']['indices_masked'] = torch.Tensor(t_masked['indices_masked'])
-                if self.mask_kwargs.get('ratio_fully_masked_frames', 0) > 0:
-                    out['to_export']['indices_fully_masked'] = torch.Tensor(t_masked['indices_fully_masked'])
+                out["to_export"]["indices_masked"] = torch.Tensor(
+                    t_masked["indices_masked"]
+                )
+                if self.mask_kwargs.get("ratio_fully_masked_frames", 0) > 0:
+                    out["to_export"]["indices_fully_masked"] = torch.Tensor(
+                        t_masked["indices_fully_masked"]
+                    )
 
         return out
 
     def _generate_masks(
-            self,
-            sample: h5py._hl.group.Group,
-            frames_input: Tensor,
-            cloud_mask_input: Tensor,
-            t_masked: Dict[str, np.ndarray] | None = None
+        self,
+        sample: h5py._hl.group.Group,
+        frames_input: Tensor,
+        cloud_mask_input: Tensor,
+        t_masked: Dict[str, np.ndarray] | None = None,
     ) -> Tuple[Dict[str, np.ndarray], Tensor, Tensor]:
         """
         Uses a sequence of masks (randomly generated or actual cloud mask sequence) to synthetically generate data gaps
@@ -553,23 +650,25 @@ class EarthNet2021Dataset(torch.utils.data.Dataset):
             masks:              torch.Tensor, (T x C x H x W), corresponding sequence of masks.
         """
 
-        if t_masked is None and self.mask_kwargs.mask_type != 'real_clouds':
+        if t_masked is None and self.mask_kwargs.mask_type != "real_clouds":
             # Indices of the frames to be masked w.r.t. the temporally trimmed sequence
             t_masked = dataset_tools.sample_indices_masked_frames(
                 idx_valid_input_frames=np.arange(0, frames_input.shape[0]),
                 ratio_masked_frames=self.mask_kwargs.ratio_masked_frames,
                 ratio_fully_masked_frames=self.mask_kwargs.ratio_fully_masked_frames,
                 non_masked_frames=self.mask_kwargs.non_masked_frames,
-                fixed_masking_ratio=self.fixed_masking_ratio
+                fixed_masking_ratio=self.fixed_masking_ratio,
             )
 
-        if self.mask_kwargs.mask_type == 'random_clouds':
+        if self.mask_kwargs.mask_type == "random_clouds":
             # Randomly sample cloud masks
-            sampled_clouds = self._sample_cloud_masks_from_tiles(sample, len(t_masked['indices_masked']))
+            sampled_clouds = self._sample_cloud_masks_from_tiles(
+                sample, len(t_masked["indices_masked"])
+            )
 
             # Generate a sequence of masks
             masks = torch.zeros((frames_input.shape[0], 1, *frames_input.shape[-2:]))
-            masks[t_masked['indices_masked'], :, :, :] = sampled_clouds
+            masks[t_masked["indices_masked"], :, :, :] = sampled_clouds
 
             # Intersect the randomly generated sequence of cloud masks with the actual cloud masks of the sequence
             if self.intersect_real_cloud_masks:
@@ -577,15 +676,22 @@ class EarthNet2021Dataset(torch.utils.data.Dataset):
 
             # Apply masking
             frames_input, masks = overlay_seq_with_clouds(
-                frames_input, masks, t_masked=None, fill_value=self.fill_value,
-                dilate_cloud_masks=self.dilate_cloud_masks
+                frames_input,
+                masks,
+                t_masked=None,
+                fill_value=self.fill_value,
+                dilate_cloud_masks=self.dilate_cloud_masks,
             )
 
-        elif self.mask_kwargs.mask_type == 'real_clouds':
+        elif self.mask_kwargs.mask_type == "real_clouds":
             # Use the real cloud masks for masking
             frames_input, masks = masks_init_filling(
-                frames_input, cloud_mask_input, None, fill_type='fill_value', fill_value=self.fill_value,
-                dilate_cloud_masks=self.dilate_cloud_masks
+                frames_input,
+                cloud_mask_input,
+                None,
+                fill_type="fill_value",
+                fill_value=self.fill_value,
+                dilate_cloud_masks=self.dilate_cloud_masks,
             )
         else:
             raise NotImplementedError
@@ -593,7 +699,7 @@ class EarthNet2021Dataset(torch.utils.data.Dataset):
         return t_masked, frames_input, masks
 
     def _get_precomputed_masks(
-            self, sample: h5py._hl.group.Group, frames_input: Tensor, cloud_mask: Tensor
+        self, sample: h5py._hl.group.Group, frames_input: Tensor, cloud_mask: Tensor
     ) -> Tuple[Tensor, Tensor]:
         """
         Loads precomputed masks previously dumped to a hdf5 file and generates the masked image time series.
@@ -612,12 +718,19 @@ class EarthNet2021Dataset(torch.utils.data.Dataset):
 
         # Intersect the randomly generated cloud mask sequence with the actual cloud masks of the input image time
         # series
-        if self.mask_kwargs.mask_type == 'random_clouds' and self.intersect_real_cloud_masks:
+        if (
+            self.mask_kwargs.mask_type == "random_clouds"
+            and self.intersect_real_cloud_masks
+        ):
             masks = self._intersect_masks(masks, cloud_mask)
 
         # Mask the input image time series
         frames_input, masks = overlay_seq_with_clouds(
-            frames_input, masks, t_masked=None, fill_value=self.fill_value, dilate_cloud_masks=self.dilate_cloud_masks
+            frames_input,
+            masks,
+            t_masked=None,
+            fill_value=self.fill_value,
+            dilate_cloud_masks=self.dilate_cloud_masks,
         )
 
         return frames_input, masks
@@ -634,33 +747,36 @@ class EarthNet2021Dataset(torch.utils.data.Dataset):
                                 values:  list of str, paths of the valid data samples within the respective tile.
         """
 
-        name = self.mode if self.split == 'train' else self.split
+        name = self.mode if self.split == "train" else self.split
 
-        if self.filter_settings is not None and self.filter_settings.type == 'cloud-free' and \
-                f'path_samples_{name}' in self.f.keys():
+        if (
+            self.filter_settings is not None
+            and self.filter_settings.type == "cloud-free"
+            and f"path_samples_{name}" in self.f.keys()
+        ):
             # Load the list of sample paths previously dumped to the hdf5 file
-            paths = [path.decode("utf-8") for path in self.f[f'path_samples_{name}']]
+            paths = [path.decode("utf-8") for path in self.f[f"path_samples_{name}"]]
         else:
             groups = []
             paths = []
 
-            if self.split == 'train':
-                if self.mode in ['train', 'val']:
-                    if 'samples' in self.f[self.mode]:
-                        groups.append(self.f[self.mode]['samples'])
+            if self.split == "train":
+                if self.mode in ["train", "val"]:
+                    if "samples" in self.f[self.mode]:
+                        groups.append(self.f[self.mode]["samples"])
                     else:
                         groups.append(self.f[self.mode])
-                elif self.mode == 'all':
+                elif self.mode == "all":
                     # Iterate over all samples from both the training and the validation split
-                    if 'samples' in self.f['train']:
-                        groups.append(self.f['train']['samples'])
-                        groups.append(self.f['val']['samples'])
+                    if "samples" in self.f["train"]:
+                        groups.append(self.f["train"]["samples"])
+                        groups.append(self.f["val"]["samples"])
                     else:
-                        groups.append(self.f['train'])
-                        groups.append(self.f['val'])
+                        groups.append(self.f["train"])
+                        groups.append(self.f["val"])
             else:
-                if 'samples' in self.f[name]:
-                    groups.append(self.f[name]['samples'])
+                if "samples" in self.f[name]:
+                    groups.append(self.f[name]["samples"])
                 else:
                     groups.append(self.f[name])
 
@@ -693,7 +809,11 @@ class EarthNet2021Dataset(torch.utils.data.Dataset):
         """
 
         paths = []
-        grp.visit(lambda key: paths.append(grp[key].name) if self._valid_sample(grp[key]) else None)
+        grp.visit(
+            lambda key: (
+                paths.append(grp[key].name) if self._valid_sample(grp[key]) else None
+            )
+        )
 
         return paths
 
@@ -709,7 +829,7 @@ class EarthNet2021Dataset(torch.utils.data.Dataset):
         """
 
         # Extract the acquisition date of the first and the last S2 observation in the sequence
-        start_date, end_date = os.path.basename(sample_path).split('_')[1:3]
+        start_date, end_date = os.path.basename(sample_path).split("_")[1:3]
         start_date = dataset_tools.str2date(start_date)
         end_date = dataset_tools.str2date(end_date)
 
@@ -719,12 +839,15 @@ class EarthNet2021Dataset(torch.utils.data.Dataset):
 
         # Get the acquisition dates of all intermediate S2 observations
         dates = [
-            start_date + dt.timedelta(days=i) for i in range(0, (end_date - start_date).days + 1, self.t_frequency)
+            start_date + dt.timedelta(days=i)
+            for i in range(0, (end_date - start_date).days + 1, self.t_frequency)
         ]
 
         return dates
 
-    def _intersect_masks(self, masks: torch.Tensor, cloud_mask: torch.Tensor) -> torch.Tensor:
+    def _intersect_masks(
+        self, masks: torch.Tensor, cloud_mask: torch.Tensor
+    ) -> torch.Tensor:
         """
         Intersects a randomly generated sequence of cloud masks `masks` with the actual cloud mask sequence of the
         image time series to be masked.
@@ -737,21 +860,26 @@ class EarthNet2021Dataset(torch.utils.data.Dataset):
             masks:      torch.Tensor, (T x 1 x H x W), intersection of `masks` with `cloud_mask`.
         """
 
-        assert masks[0].shape == cloud_mask[0].shape, 'Cannot intersect two sequences of masks with unequal temporal ' \
-                                                      'shape.'
-        assert masks[-2:].shape == cloud_mask[-2:].shape, 'Cannot intersect two sequences of masks with unequal ' \
-                                                      'spatial shape.'
-        assert masks[1].shape == cloud_mask[1].shape, 'Cannot intersect two sequences of masks with unequal ' \
-                                                      'spectral shape.'
+        assert masks[0].shape == cloud_mask[0].shape, (
+            "Cannot intersect two sequences of masks with unequal temporal " "shape."
+        )
+        assert masks[-2:].shape == cloud_mask[-2:].shape, (
+            "Cannot intersect two sequences of masks with unequal " "spatial shape."
+        )
+        assert masks[1].shape == cloud_mask[1].shape, (
+            "Cannot intersect two sequences of masks with unequal " "spectral shape."
+        )
 
-        masks[torch.logical_or(masks > 0., cloud_mask == 1)] = 1
+        masks[torch.logical_or(masks > 0.0, cloud_mask == 1)] = 1
 
-        if self.render_occluded_above_p and self.render_occluded_above_p > 0.:
+        if self.render_occluded_above_p and self.render_occluded_above_p > 0.0:
             masks = self._mask_images_with_cloud_coverage_above_p(masks)
 
         return masks
 
-    def _mask_images_with_cloud_coverage_above_p(self, cloud_mask: torch.Tensor) -> torch.Tensor:
+    def _mask_images_with_cloud_coverage_above_p(
+        self, cloud_mask: torch.Tensor
+    ) -> torch.Tensor:
         """
         Marks all pixels of an image as occluded if its cloud coverage exceeds `self.render_occluded_above_p` [-].
 
@@ -767,8 +895,9 @@ class EarthNet2021Dataset(torch.utils.data.Dataset):
 
         return cloud_mask
 
-
-    def _sample_cloud_masks_from_tiles(self, sample: h5py._hl.group.Group, n: int, p: float = 0.1) -> torch.Tensor:
+    def _sample_cloud_masks_from_tiles(
+        self, sample: h5py._hl.group.Group, n: int, p: float = 0.1
+    ) -> torch.Tensor:
         """
         Randomly samples `n` cloud masks from a given tile.
 
@@ -788,7 +917,9 @@ class EarthNet2021Dataset(torch.utils.data.Dataset):
         cloud_mask = []
         while len(cloud_mask) < n:
             # Extract the cloud masks of a randomly drawn image time series, H x W x 1 x T
-            seq = torch.from_numpy(self.f[random.choice(samples)]['highresdynamic'][:, :, [-1], :]).float()
+            seq = torch.from_numpy(
+                self.f[random.choice(samples)]["highresdynamic"][:, :, [-1], :]
+            ).float()
 
             if self.crop_settings.enabled:
                 seq = self.crop_function(seq)
@@ -803,13 +934,14 @@ class EarthNet2021Dataset(torch.utils.data.Dataset):
         # n x 1 x H x W
         cloud_mask = torch.stack(cloud_mask, dim=3).permute(3, 2, 0, 1)
 
-        if self.render_occluded_above_p and self.render_occluded_above_p > 0.:
+        if self.render_occluded_above_p and self.render_occluded_above_p > 0.0:
             cloud_mask = self._mask_images_with_cloud_coverage_above_p(cloud_mask)
 
         return cloud_mask
 
-
-    def _subsample_sequence(self, sample: h5py._hl.group.Group, seq_length: int) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _subsample_sequence(
+        self, sample: h5py._hl.group.Group, seq_length: int
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Filters/Subsamples the image time series stored in `sample` as follows (cf. `self.filter_settings` and
         `self.max_seq_length`):
@@ -828,31 +960,34 @@ class EarthNet2021Dataset(torch.utils.data.Dataset):
 
         # Generate a mask to exclude invalid frames:
         # a value of 1 indicates a valid frame, whereas a value of 0 marks an invalid frame
-        if self.filter_settings.type == 'cloud-free':
+        if self.filter_settings.type == "cloud-free":
             # Indices of available and cloud-free images
-            masks_valid_obs = torch.from_numpy(sample['valid_obs'][:])
+            masks_valid_obs = torch.from_numpy(sample["valid_obs"][:])
 
-        elif self.filter_settings.type == 'cloud-free_consecutive':
+        elif self.filter_settings.type == "cloud-free_consecutive":
             subseq = self._longest_consecutive_seq(sample)
-            masks_valid_obs = torch.from_numpy(sample['valid_obs'][:])
-            masks_valid_obs[:subseq['start']] = 0
-            masks_valid_obs[subseq['end'] + 1:] = 0
+            masks_valid_obs = torch.from_numpy(sample["valid_obs"][:])
+            masks_valid_obs[: subseq["start"]] = 0
+            masks_valid_obs[subseq["end"] + 1 :] = 0
         else:
-            masks_valid_obs = torch.ones(seq_length, )
+            masks_valid_obs = torch.ones(
+                seq_length,
+            )
 
-        if self.filter_settings.get('return_valid_obs_only', True):
+        if self.filter_settings.get("return_valid_obs_only", True):
             t_sampled = masks_valid_obs.nonzero().view(-1)
         else:
             t_sampled = torch.arange(0, len(masks_valid_obs))
 
         if self.max_seq_length is not None and len(t_sampled) > self.max_seq_length:
             # Randomly select `self.max_seq_length` consecutive frames
-            t_start = np.random.choice(np.arange(0, len(t_sampled) - self.max_seq_length + 1))
+            t_start = np.random.choice(
+                np.arange(0, len(t_sampled) - self.max_seq_length + 1)
+            )
             t_end = t_start + self.max_seq_length
             t_sampled = t_sampled[t_start:t_end]
 
         return t_sampled, masks_valid_obs[t_sampled]
-
 
     def _valid_sample(self, sample: h5py._hl.group.Group) -> bool:
         """
@@ -868,46 +1003,61 @@ class EarthNet2021Dataset(torch.utils.data.Dataset):
             bool, True if the h5py group `sample` is a valid data sample, False otherwise.
         """
 
-        if isinstance(sample, h5py.Group) and 'highresdynamic' in sample.keys():
+        if isinstance(sample, h5py.Group) and "highresdynamic" in sample.keys():
             if self.filter_settings.type is None:
                 return True
-            if self.filter_settings.type == 'cloud-free':
-                seq_length = sample['idx_good_frames'].size
+            if self.filter_settings.type == "cloud-free":
+                seq_length = sample["idx_good_frames"].size
 
                 # Check number of valid frames
                 if seq_length >= self.filter_settings.min_length:
                     if self.filter_settings.max_num_consec_invalid is not None:
                         # Check number of consecutive invalid frames
-                        max_num_consec_invalid = self._count_max_num_consecutive_invalid_frames(sample)
+                        max_num_consec_invalid = (
+                            self._count_max_num_consecutive_invalid_frames(sample)
+                        )
 
-                        if max_num_consec_invalid <= self.filter_settings.max_num_consec_invalid:
+                        if (
+                            max_num_consec_invalid
+                            <= self.filter_settings.max_num_consec_invalid
+                        ):
                             # (i) Minimal sequence length is ok, and (ii) max. number of consecutive invalid frames
                             # is below the threshold
                             return True
                         if self.verbose == 1:
-                            print(f"Too many consecutive invalid frames within the sequence "
-                                  f"({max_num_consec_invalid} < {self.filter_settings.max_num_consec_invalid}): "
-                                  f"{sample.name}")
+                            print(
+                                f"Too many consecutive invalid frames within the sequence "
+                                f"({max_num_consec_invalid} < {self.filter_settings.max_num_consec_invalid}): "
+                                f"{sample.name}"
+                            )
                         return False
 
                     # Minimal sequence length is ok
                     return True
                 if self.verbose == 1:
-                    print(f"Too short sequence ({seq_length} < {self.filter_settings.min_length}): {sample.name}")
+                    print(
+                        f"Too short sequence ({seq_length} < {self.filter_settings.min_length}): {sample.name}"
+                    )
                 return False
-            if self.filter_settings.type == 'cloud-free_consecutive':
-                seq_length = self._longest_consecutive_seq(sample)['len']
+            if self.filter_settings.type == "cloud-free_consecutive":
+                seq_length = self._longest_consecutive_seq(sample)["len"]
                 if seq_length >= self.filter_settings.min_length:
                     return True
                 if self.verbose == 1:
-                    print(f"Too short sequence ({seq_length} < {self.filter_settings.min_length}): {sample.name}")
+                    print(
+                        f"Too short sequence ({seq_length} < {self.filter_settings.min_length}): {sample.name}"
+                    )
                 return False
-            raise NotImplementedError(f'Unknown sequence filter {self.filter_settings.type}.\n')
+            raise NotImplementedError(
+                f"Unknown sequence filter {self.filter_settings.type}.\n"
+            )
 
         return False
 
     @staticmethod
-    def _count_max_num_consecutive_invalid_frames(sample: h5py._hl.group.Group) -> float:
+    def _count_max_num_consecutive_invalid_frames(
+        sample: h5py._hl.group.Group,
+    ) -> float:
         """
         Counts the maximum number of consecutive invalid (cloudy/foggy/unavailable) images within an image time series.
 
@@ -918,7 +1068,7 @@ class EarthNet2021Dataset(torch.utils.data.Dataset):
             float, maximum number of consecutive invalid images within the given satellite image time series.
         """
 
-        masks_valid_obs = sample['valid_obs'][:]
+        masks_valid_obs = sample["valid_obs"][:]
 
         count = 0
         max_count = -math.inf
@@ -950,10 +1100,10 @@ class EarthNet2021Dataset(torch.utils.data.Dataset):
                             'len':    int, temporal length of the subsequence.
         """
 
-        idx_frames = sample['idx_good_frames'][:]
+        idx_frames = sample["idx_good_frames"][:]
 
         # Count number of consecutive cloud-free images
-        subseq = {'start': 0, 'end': 0, 'len': 0}
+        subseq = {"start": 0, "end": 0, "len": 0}
         count = 1
         start = 0
 
@@ -961,10 +1111,10 @@ class EarthNet2021Dataset(torch.utils.data.Dataset):
             if idx_frames[i] + 1 == idx_frames[i + 1]:
                 end = i + 1
                 count += 1
-                if count > subseq['len']:
-                    subseq['start'] = idx_frames[start]
-                    subseq['end'] = idx_frames[end]
-                    subseq['len'] = count
+                if count > subseq["len"]:
+                    subseq["start"] = idx_frames[start]
+                    subseq["end"] = idx_frames[end]
+                    subseq["len"] = count
             else:
                 start = i + 1
                 count = 1

@@ -1,22 +1,25 @@
-from pathlib import Path
 import sys
+from pathlib import Path
+
 sys.path.append(str(Path(__file__).parents[2]))
-from typing import Tuple
 import ast
 import json
-from typing import Dict, List, Optional, Union
 import math
+from typing import Dict, List, Optional, Tuple, Union
+
 import numpy as np
 import pandas as pd
 import rasterio
 import torch
-torch.multiprocessing.set_sharing_strategy('file_system')
-from rasterio.windows import Window
-from torch.utils.data import Dataset, DataLoader, Subset
-from tqdm.auto import tqdm
-from dataloader_CIRCA.tools.data_processor import SentinelDataProcessor
-from dataloader_CIRCA.datasets import CircaPatchDataSet
+
+torch.multiprocessing.set_sharing_strategy("file_system")
 import h5py
+from rasterio.windows import Window
+from torch.utils.data import DataLoader, Dataset, Subset
+from tqdm.auto import tqdm
+
+from dataloader_CIRCA.datasets import CircaPatchDataSet
+from dataloader_CIRCA.tools.data_processor import SentinelDataProcessor
 
 
 class UTILISE_HDF5_Dataset(CircaPatchDataSet):
@@ -56,8 +59,12 @@ class UTILISE_HDF5_Dataset(CircaPatchDataSet):
         cloud_prob_corrected = SentinelDataProcessor.cloud_mask_correction(cloud_prob)
         TRESHOLD = 1
         cloud_mask = (cloud_prob_corrected > TRESHOLD).astype(np.float32)
-        idx_good_frames = SentinelDataProcessor.filter_dates(np.stack([snow_masks, cloud_prob_corrected], axis=-1))
-        idx_cloudy_frames = np.asarray([d for d in range(len(dates_S2)) if d not in idx_good_frames])
+        idx_good_frames = SentinelDataProcessor.filter_dates(
+            np.stack([snow_masks, cloud_prob_corrected], axis=-1)
+        )
+        idx_cloudy_frames = np.asarray(
+            [d for d in range(len(dates_S2)) if d not in idx_good_frames]
+        )
         dates_S1, index_S1, orbit_type = SentinelDataProcessor.get_pairedS1(
             dates_S2,
             self.dates_dict[patch_data.mgrs25]["S1"]["ASC"],
@@ -73,12 +80,12 @@ class UTILISE_HDF5_Dataset(CircaPatchDataSet):
                 "S1": patch_S1_array,
                 "S1_dates": dates_S1,
             },
-            "S2": { 
+            "S2": {
                 "S2": patch_S2_array,
                 "S2_dates": dates_S2,
                 "cloud_mask": cloud_mask,
                 "cloud_prob": cloud_prob_corrected,
-                },
+            },
             "idx_cloudy_frames": idx_cloudy_frames.tolist(),
             "idx_good_frames": idx_good_frames.tolist(),
             "idx_impaired_frames": idx_cloudy_frames.tolist(),
@@ -87,25 +94,30 @@ class UTILISE_HDF5_Dataset(CircaPatchDataSet):
 
 def pytorch_dict_2_hdf5(dataset, output_file, num_workers=8):
     dataloader = DataLoader(
-            dataset=dataset,
-            batch_size=1,
-            shuffle=False,
-            num_workers=num_workers,
-            drop_last=False,
-            prefetch_factor=2,
+        dataset=dataset,
+        batch_size=1,
+        shuffle=False,
+        num_workers=num_workers,
+        drop_last=False,
+        prefetch_factor=2,
     )
     progress_bar = tqdm(total=len(dataset))
-    with h5py.File(output_file, 'w') as hf:
-        data_group = hf.create_group('ROIs')
-        hf.attrs['num_samples'] = len(dataset)
+    with h5py.File(output_file, "w") as hf:
+        data_group = hf.create_group("ROIs")
+        hf.attrs["num_samples"] = len(dataset)
         for i, sample in enumerate(dataloader):
-            sample_group = data_group.create_group(f'{i}')
+            sample_group = data_group.create_group(f"{i}")
             for key, value in sample.items():
                 if isinstance(value, dict):
-                    sample_subgroup = sample_group.create_group(f'{key}')
+                    sample_subgroup = sample_group.create_group(f"{key}")
                     for meta_key, meta_value in value.items():
                         if isinstance(meta_value, torch.Tensor):
-                            sample_subgroup.create_dataset(meta_key, data=meta_value, compression='gzip', compression_opts=9)
+                            sample_subgroup.create_dataset(
+                                meta_key,
+                                data=meta_value,
+                                compression="gzip",
+                                compression_opts=9,
+                            )
                         else:
                             sample_subgroup.create_dataset(meta_key, data=meta_value)
                 else:
@@ -131,7 +143,7 @@ if __name__ == "__main__":
         overlap=overlap,
         # load_dataset="datasetCIRCAUnCRtainTS.csv",
     )
-    output_file =  store_dai / "tmp/speillet/debug_circa.hdf5"
+    output_file = store_dai / "tmp/speillet/debug_circa.hdf5"
 
     print("Conversion du dataset PyTorch en HDF5...")
     if SUBSET:

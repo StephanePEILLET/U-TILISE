@@ -2,33 +2,33 @@ from enum import Enum
 
 
 class ActivationType(Enum):
-    RELU = 'relu'
-    LRELU = 'lrelu'
-    PRELU = 'prelu'
-    MISH = 'mish'
-    GELU = 'gelu'
-    TANH = 'tanh'
-    SIGMOID = 'sigmoid'
+    RELU = "relu"
+    LRELU = "lrelu"
+    PRELU = "prelu"
+    MISH = "mish"
+    GELU = "gelu"
+    TANH = "tanh"
+    SIGMOID = "sigmoid"
 
 
 class LTAENormType(Enum):
-    GROUP = 'group'
-    LAYER = 'layer'
+    GROUP = "group"
+    LAYER = "layer"
 
 
 class NormType(Enum):
-    BATCH = 'batch'
-    GROUP = 'group'
-    INSTANCE = 'instance'
+    BATCH = "batch"
+    GROUP = "group"
+    INSTANCE = "instance"
     NONE = None
 
 
 class UpConvType(Enum):
-    TRANSPOSE = 'transpose'
-    BILINEAR = 'bilinear'
+    TRANSPOSE = "transpose"
+    BILINEAR = "bilinear"
 
 
 class TemporalAggregationMode(Enum):
-    ATT_GROUP = 'att_group'
-    ATT_MEAN = 'att_mean'
+    ATT_GROUP = "att_group"
+    ATT_MEAN = "att_mean"
     NONE = None

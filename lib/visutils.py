@@ -8,16 +8,18 @@ from matplotlib import pyplot as plt
 from torch import Tensor
 
 COLORMAPS = {
-    'rgb': None,
-    'cloud_prob': 'YlOrBr',
-    'binary_mask': 'gray',
-    'error': 'Reds',
-    'att': 'magma',
-    's1': 'gray'
+    "rgb": None,
+    "cloud_prob": "YlOrBr",
+    "binary_mask": "gray",
+    "error": "Reds",
+    "att": "magma",
+    "s1": "gray",
 }
 
 
-def apply_brightness_factor(data: np.ndarray | Tensor, factor: float = 3.0) -> np.ndarray | Tensor:
+def apply_brightness_factor(
+    data: np.ndarray | Tensor, factor: float = 3.0
+) -> np.ndarray | Tensor:
 
     data = data * factor
 
@@ -30,14 +32,14 @@ def apply_brightness_factor(data: np.ndarray | Tensor, factor: float = 3.0) -> n
 
 
 def gallery(
-        data: np.ndarray | Tensor,
-        ncols: int = 10,
-        border_thickness: int = 2,
-        border_color: Literal['black', 'white'] = 'black',
-        brightness_factor: float = 3.0
+    data: np.ndarray | Tensor,
+    ncols: int = 10,
+    border_thickness: int = 2,
+    border_color: Literal["black", "white"] = "black",
+    brightness_factor: float = 3.0,
 ) -> np.ndarray | Tensor:
 
-    if border_color not in ['black', 'white']:
+    if border_color not in ["black", "white"]:
         raise ValueError("Choose either 'white' or 'black' as border color.\n")
 
     if isinstance(data, torch.Tensor):
@@ -54,29 +56,59 @@ def gallery(
     ncols = min(data.shape[0], ncols)
     nrows = math.ceil(seq_length / ncols)
 
-    if border_color == 'black':
-        padded = np.zeros((seq_length, height + 2*border_thickness, width + 2*border_thickness, n_channels))
+    if border_color == "black":
+        padded = np.zeros(
+            (
+                seq_length,
+                height + 2 * border_thickness,
+                width + 2 * border_thickness,
+                n_channels,
+            )
+        )
     else:
-        padded = np.ones((seq_length, height + 2*border_thickness, width + 2*border_thickness, n_channels))
+        padded = np.ones(
+            (
+                seq_length,
+                height + 2 * border_thickness,
+                width + 2 * border_thickness,
+                n_channels,
+            )
+        )
 
-    padded[:, border_thickness:-border_thickness, border_thickness:-border_thickness, :] = data
+    padded[
+        :, border_thickness:-border_thickness, border_thickness:-border_thickness, :
+    ] = data
 
-    if nrows*ncols != seq_length:
+    if nrows * ncols != seq_length:
         # Add frames to complement the last row of the gallery
-        if border_color == 'black':
-            dummy_frames = np.zeros((nrows*ncols - seq_length, height + 2*border_thickness, width + 2*border_thickness,
-                                     n_channels))
+        if border_color == "black":
+            dummy_frames = np.zeros(
+                (
+                    nrows * ncols - seq_length,
+                    height + 2 * border_thickness,
+                    width + 2 * border_thickness,
+                    n_channels,
+                )
+            )
         else:
-            dummy_frames = np.ones((nrows*ncols - seq_length, height + 2*border_thickness, width + 2*border_thickness,
-                                    n_channels))
+            dummy_frames = np.ones(
+                (
+                    nrows * ncols - seq_length,
+                    height + 2 * border_thickness,
+                    width + 2 * border_thickness,
+                    n_channels,
+                )
+            )
         padded = np.concatenate((padded, dummy_frames), axis=0)
 
     height += 2 * border_thickness
     width += 2 * border_thickness
 
-    result = (padded.reshape(nrows, ncols, height, width, n_channels)
-              .swapaxes(1, 2)
-              .reshape(height*nrows, width*ncols, n_channels))
+    result = (
+        padded.reshape(nrows, ncols, height, width, n_channels)
+        .swapaxes(1, 2)
+        .reshape(height * nrows, width * ncols, n_channels)
+    )
 
     if isinstance(data, torch.Tensor):
         result = torch.from_numpy(result)
@@ -85,18 +117,20 @@ def gallery(
 
 
 def sequence2gallery(
-        data: np.ndarray | Tensor,
-        variable: Literal['rgb', 'binary_mask', 'att', 'cloud_prob', 's1'] = 'rgb',
-        ncols: int = 10,
-        border_thickness: int = 2,
-        border_color: Literal['black', 'white'] = 'black',
-        indices_rgb: List[int] | List[float] | Tensor = [0, 1, 2],
-        brightness_factor: float = 1,
-        dpi: int = 300,
-        vmin: Optional[float] = None,
-        vmax: Optional[float] = None,
-        return_grid: bool = False
-) -> Union[matplotlib.figure.Figure, Tuple[matplotlib.figure.Figure, np.ndarray | Tensor]]:
+    data: np.ndarray | Tensor,
+    variable: Literal["rgb", "binary_mask", "att", "cloud_prob", "s1"] = "rgb",
+    ncols: int = 10,
+    border_thickness: int = 2,
+    border_color: Literal["black", "white"] = "black",
+    indices_rgb: List[int] | List[float] | Tensor = [0, 1, 2],
+    brightness_factor: float = 1,
+    dpi: int = 300,
+    vmin: Optional[float] = None,
+    vmax: Optional[float] = None,
+    return_grid: bool = False,
+) -> Union[
+    matplotlib.figure.Figure, Tuple[matplotlib.figure.Figure, np.ndarray | Tensor]
+]:
     """
     Plots an image time series as a grid.
 
@@ -125,35 +159,40 @@ def sequence2gallery(
     if isinstance(data, np.ndarray):
         data = torch.from_numpy(data)
 
-    assert (variable in ['rgb', 'binary_mask', 'att', 'cloud_prob', 's1'])
-    if variable == 'rgb':
-        assert (data.dim() == 4 and data.shape[1] >= 3)
-    elif variable in ['att', 's1']:
-        assert (data.dim() == 4 or (data.dim() == 3 and data.shape[1] != 1))
+    assert variable in ["rgb", "binary_mask", "att", "cloud_prob", "s1"]
+    if variable == "rgb":
+        assert data.dim() == 4 and data.shape[1] >= 3
+    elif variable in ["att", "s1"]:
+        assert data.dim() == 4 or (data.dim() == 3 and data.shape[1] != 1)
 
-    if variable == 'rgb':
+    if variable == "rgb":
         data = data[:, indices_rgb, :, :]
-        cmap = COLORMAPS['rgb']
-    elif variable in ['att', 'binary_mask', 'cloud_prob', 's1']:
+        cmap = COLORMAPS["rgb"]
+    elif variable in ["att", "binary_mask", "cloud_prob", "s1"]:
         if data.dim() == 3:
             data = data.unsqueeze(dim=1)
         cmap = COLORMAPS[variable]
-    elif variable == 'binary_mask':
-        cmap = COLORMAPS['binary_mask']
-    elif variable == 'cloud_prob':
-        cmap = COLORMAPS['cloud_prob']
+    elif variable == "binary_mask":
+        cmap = COLORMAPS["binary_mask"]
+    elif variable == "cloud_prob":
+        cmap = COLORMAPS["cloud_prob"]
     else:
-        cmap =None
+        cmap = None
 
-    if variable == 'att':
+    if variable == "att":
         brightness_factor = 1
 
-    grid = gallery(data, ncols=ncols, border_thickness=border_thickness, border_color=border_color,
-                   brightness_factor=brightness_factor)
+    grid = gallery(
+        data,
+        ncols=ncols,
+        border_thickness=border_thickness,
+        border_color=border_color,
+        brightness_factor=brightness_factor,
+    )
 
     fig = plt.figure(dpi=dpi)
     plt.imshow(grid, cmap, vmin=vmin, vmax=vmax)
-    plt.axis('off')
+    plt.axis("off")
 
     if return_grid:
         return fig, grid
