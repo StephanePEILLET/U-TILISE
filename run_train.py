@@ -1,18 +1,22 @@
 import argparse
 import logging
-import logging.config
 import os
 import sys
 from argparse import ArgumentParser
 
 import torch
+from omegaconf import OmegaConf
+
 from lib import config_utils, data_utils, utils
 from lib.formatter import RawFormatter
 from lib.logger import prepare_logger
-from omegaconf import OmegaConf
+
+# Constants
+MIN_ARGS_COUNT = 2
+PROGRAM_TITLE = "U-TILISE: A Sequence-to-sequence Model for Cloud Removal in Optical Satellite Time Series (Training)"
 
 parser = ArgumentParser(
-    description="U-TILISE: A Sequence-to-sequence Model for Cloud Removal in Optical Satellite Time Series (Training)",
+    description=PROGRAM_TITLE,
     formatter_class=RawFormatter,
 )
 parser.add_argument(
@@ -32,23 +36,16 @@ parser.add_argument(
     default=False,
     help="Use Weights & Biases instead of TensorBoard",
 )
-parser.add_argument(
-    "--wandb_project", type=str, default="utilise", help="Wandb project name"
-)
+parser.add_argument("--wandb_project", type=str, default="utilise", help="Wandb project name")
 
 
-def main(args: argparse.Namespace) -> None:
-    prog_name = "U-TILISE: A Sequence-to-sequence Model for Cloud Removal in Optical Satellite Time Series (Training)"
-    print("\n{}\n{}\n".format(prog_name, "=" * len(prog_name)))
-
+def setup_configuration(args: argparse.Namespace) -> OmegaConf:
+    """Setup and merge configuration files."""
     if not os.path.exists(args.config_file):
-        raise FileNotFoundError(
-            f"ERROR: Cannot find the yaml configuration file: {args.config_file}"
-        )
+        raise FileNotFoundError(f"ERROR: Cannot find the yaml configuration file: {args.config_file}")
 
     # Import the user configuration file
     cfg_custom = config_utils.read_config(args.config_file)
-
     if not cfg_custom:
         sys.exit(1)
 
@@ -61,37 +58,32 @@ def main(args: argparse.Namespace) -> None:
         config.wandb = OmegaConf.create()
         config.wandb.project = args.wandb_project
 
-    # Create the output directory. The name of the output directory is a combination of the current date, time, and an
-    # optional suffix.
+    return config
+
+
+def setup_logging(config: OmegaConf) -> logging.Logger:
+    """Setup logging configuration."""
+    # Create the output directory
     config.output.experiment_folder = utils.create_output_directory(config)
 
     # Set up the logger
-    log_file = (
-        os.path.join(config.output.experiment_folder, "run.log")
-        if config.output.experiment_folder
-        else None
-    )
-    logger = prepare_logger(
-        "root_logger", level=logging.INFO, log_to_console=True, log_file=log_file
-    )
+    log_file = os.path.join(config.output.experiment_folder, "run.log") if config.output.experiment_folder else None
+    return prepare_logger("root_logger", level=logging.INFO, log_to_console=True, log_file=log_file)
 
-    # Print runtime arguments to the console
-    logger.info("Configuration file: %s", args.config_file)
-    logger.info("\nSettings\n--------\n")
-    config_utils.print_config(config, logger=logger)
 
-    if config.misc.random_seed is not None:
-        utils.set_seed(config.misc.random_seed)
-
-    # ------------------------------------------------- Data loaders ------------------------------------------------- #
+def setup_data_loaders(
+    config: OmegaConf, logger: logging.Logger
+) -> tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader]:
+    """Initialize and return train and validation data loaders."""
     logger.info("\nInitialize data loader (training set)...")
     train_loader = data_utils.get_dataloader(
         config,
-        phase="val",
+        phase="train",
         pin_memory=config.misc.pin_memory,
         drop_last=True,
         logger=logger,
     )
+
     logger.info("Initialize data loader (validation set)...\n")
     val_loader = data_utils.get_dataloader(
         config,
@@ -103,19 +95,17 @@ def main(args: argparse.Namespace) -> None:
 
     logger.info("Number of training samples: %d", train_loader.dataset.__len__())
     logger.info("Number of validation samples: %d", val_loader.dataset.__len__())
-    logger.info(
-        "Variable sequence lengths: %r\n", train_loader.dataset.variable_seq_length
-    )
+    logger.info("Variable sequence lengths: %r\n", train_loader.dataset.variable_seq_length)
 
-    # ----------------------------------------- Prepare the output directory ----------------------------------------- #
-    logger.info(
-        "\nPrepare output folders and files\n--------------------------------\n"
-    )
+    return train_loader, val_loader
+
+
+def setup_output_directories(config: OmegaConf, logger: logging.Logger) -> None:
+    """Setup output directories and save configuration files."""
+    logger.info("\nPrepare output folders and files\n--------------------------------\n")
 
     # Save the path of the checkpoint directory
-    config.output.checkpoint_dir = os.path.join(
-        config.output.experiment_folder, "checkpoints"
-    )
+    config.output.checkpoint_dir = os.path.join(config.output.experiment_folder, "checkpoints")
     os.makedirs(config.output.checkpoint_dir, exist_ok=True)
     logger.info("Model weights will be stored in: %s\n", config.output.checkpoint_dir)
 
@@ -123,21 +113,19 @@ def main(args: argparse.Namespace) -> None:
     config_file = os.path.join(config.output.experiment_folder, "config.yaml")
     config_utils.write_config(config, config_file)
 
-    # ----------------------------------------------- Define the model ----------------------------------------------- #
+
+def setup_model(config: OmegaConf, train_loader: torch.utils.data.DataLoader, logger: logging.Logger):
+    """Setup and configure the model."""
     logger.info("\nModel Architecture\n------------------\n")
     logger.info("Architecture: %s", config.method.model_type)
 
     input_dim = train_loader.dataset.num_channels
     model, args_model = utils.get_model(config, input_dim, logger)
-    logger.info(
-        "Number of trainable parameters: %d\n", utils.count_model_parameters(model)
-    )
+    logger.info("Number of trainable parameters: %d\n", utils.count_model_parameters(model))
 
-    # Log model parameters to filek
+    # Log model parameters to file
     config_file = os.path.join(config.output.experiment_folder, "model_config.yaml")
-    config_utils.write_config(
-        OmegaConf.create({config.method.model_type: args_model}), config_file
-    )
+    config_utils.write_config(OmegaConf.create({config.method.model_type: args_model}), config_file)
 
     # Write model architecture to txt file
     if config.output.plot_model_txt:
@@ -152,29 +140,67 @@ def main(args: argparse.Namespace) -> None:
             train_loader.dataset.image_size,
         )
 
-    # --------------------------------------------------- Training --------------------------------------------------- #
+    return model, args_model
+
+
+def setup_training_components(config: OmegaConf, model, logger: logging.Logger):
+    """Setup optimizer and scheduler for training."""
+    optimizer = utils.get_optimizer(config, model, logger)
+    scheduler = utils.get_scheduler(config, optimizer, logger)
+    return optimizer, scheduler
+
+
+def log_system_info(logger: logging.Logger) -> None:
+    """Log system and environment information."""
     logger.info("\nPrepare training\n----------------\n")
     logger.info("Python version: %s", sys.version)
     logger.info("Torch version: %s", torch.__version__)
     logger.info("CUDA version: %s\n", torch.version.cuda)
 
-    # Get optimizer and learning rate scheduler
-    optimizer = utils.get_optimizer(config, model, logger)
-    scheduler = utils.get_scheduler(config, optimizer, logger)
+
+def main(args: argparse.Namespace) -> None:
+    """Main training function."""
+    print(f"\n{PROGRAM_TITLE}\n{'=' * len(PROGRAM_TITLE)}\n")
+
+    # Setup configuration
+    config = setup_configuration(args)
+
+    # Setup logging
+    logger = setup_logging(config)
+
+    # Print runtime arguments to the console
+    logger.info("Configuration file: %s", args.config_file)
+    logger.info("\nSettings\n--------\n")
+    config_utils.print_config(config, logger=logger)
+
+    if config.misc.random_seed is not None:
+        utils.set_seed(config.misc.random_seed)
+
+    # Setup data loaders
+    train_loader, val_loader = setup_data_loaders(config, logger)
+
+    # Setup output directories
+    setup_output_directories(config, logger)
+
+    # Setup model
+    model, _ = setup_model(config, train_loader, logger)
+
+    # Log system information
+    log_system_info(logger)
+
+    # Setup training components
+    optimizer, scheduler = setup_training_components(config, model, logger)
 
     if config.misc.random_seed is not None:
         utils.set_seed(config.misc.random_seed)
 
     # Initialize the trainer and start training
-    trainer = utils.get_trainer(
-        config, train_loader, val_loader, model, optimizer, scheduler
-    )
+    trainer = utils.get_trainer(config, train_loader, val_loader, model, optimizer, scheduler)
     trainer.train()
 
 
 if __name__ == "__main__":
-
-    if len(sys.argv) < 2:
+    if len(sys.argv) < MIN_ARGS_COUNT:
         parser.print_help()
         sys.exit(1)
 
