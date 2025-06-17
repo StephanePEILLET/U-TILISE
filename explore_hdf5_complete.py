@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Script complet pour explorer l'architecture d'un fichier HDF5 avec Rich
-Combine l'exploration générale et les détails des patches S1/S2
+Script générique pour explorer l'architecture d'un fichier HDF5 avec Rich
+Affiche la structure, les statistiques et les détails des groupes de données
 """
 
 from pathlib import Path
@@ -17,6 +17,7 @@ from rich.tree import Tree
 # Constantes
 BYTES_TO_MB = 1024**2
 BYTES_TO_GB = 1024**3
+MAX_DISPLAYED_ITEMS = 10  # Limite d'affichage pour éviter la surcharge
 
 
 def format_size(size_bytes: int) -> str:
@@ -148,23 +149,37 @@ def create_statistics_table(total_datasets: int, total_size: int,
     return table
 
 
-def find_first_patch(f: h5py.File) -> tuple[Optional[str], Optional[h5py.Group]]:
-    """Trouve le premier patch disponible"""
-    for zone_key in list(f.keys())[:1]:
-        zone = f[zone_key]
-        for mgrs_key in list(zone.keys())[:1]:
-            mgrs = zone[mgrs_key]
-            for patch_key in list(mgrs.keys())[:1]:
-                patch_path = f"{zone_key}/{mgrs_key}/{patch_key}"
-                return patch_path, mgrs[patch_key]
-    return None, None
+def find_first_data_group(f: h5py.File) -> tuple[Optional[str], Optional[h5py.Group]]:
+    """Trouve le premier groupe de données disponible avec une structure hiérarchique"""
+    def find_deepest_group(group, path="", max_depth=3):
+        """Trouve récursivement le groupe le plus profond contenant des datasets"""
+        if max_depth <= 0:
+            return None, None
+            
+        for key, obj in list(group.items())[:3]:  # Limite à 3 items pour éviter la complexité
+            current_path = f"{path}/{key}" if path else key
+            
+            if isinstance(obj, h5py.Group):
+                # Si ce groupe contient des datasets, on le retourne
+                has_datasets = any(isinstance(item, h5py.Dataset) for item in obj.values())
+                if has_datasets:
+                    return current_path, obj
+                
+                # Sinon on continue récursivement
+                result_path, result_group = find_deepest_group(obj, current_path, max_depth - 1)
+                if result_group is not None:
+                    return result_path, result_group
+        
+        return None, None
+    
+    return find_deepest_group(f)
 
 
-def create_patch_table(patch_path: str, patch: h5py.Group) -> Table:
-    """Crée un tableau détaillé pour un patch"""
-    patch_name = patch_path.split('/')[-1]
+def create_data_group_table(group_path: str, group: h5py.Group) -> Table:
+    """Crée un tableau détaillé pour un groupe de données"""
+    group_name = group_path.split('/')[-1]
     table = Table(
-        title=f"📊 Exemple de patch: {patch_name}",
+        title=f"📊 Exemple de groupe: {group_name}",
         show_header=True,
         header_style="bold magenta",
         title_style="bold cyan"
@@ -174,81 +189,84 @@ def create_patch_table(patch_path: str, patch: h5py.Group) -> Table:
     table.add_column("Type", style="blue", width=10)
     table.add_column("Taille", style="red", width=10)
 
-    # Datasets S1
-    if 'S1' in patch:
-        s1_group = patch['S1']
-        for i, s1_key in enumerate(list(s1_group.keys())[:1]):  # Premier dataset
-            s1_dataset = s1_group[s1_key]
-            if isinstance(s1_dataset, h5py.Dataset):
-                size_info = format_size(s1_dataset.nbytes) if s1_dataset.size > 0 else "0 B"
-                table.add_row(
-                    f"🛰️ S1_{s1_key}",
-                    str(s1_dataset.shape),
-                    str(s1_dataset.dtype),
-                    size_info
-                )
+    # Afficher tous les datasets du groupe (limité pour éviter la surcharge)
+    dataset_count = 0
+    for key, obj in group.items():
+        if isinstance(obj, h5py.Dataset) and dataset_count < MAX_DISPLAYED_ITEMS:
+            size_info = format_size(obj.nbytes) if obj.size > 0 else "0 B"
+            # Icône basée sur la dimensionnalité
+            if len(obj.shape) == 1:
+                icon = "📈"
+            elif len(obj.shape) == 2:
+                icon = "🗂️"
+            elif len(obj.shape) >= 3:
+                icon = "📊"
+            else:
+                icon = "📄"
 
-    # Datasets S2
-    if 'S2' in patch:
-        s2_group = patch['S2']
-        for i, s2_key in enumerate(list(s2_group.keys())[:2]):  # Deux premiers
-            s2_dataset = s2_group[s2_key]
-            if isinstance(s2_dataset, h5py.Dataset):
-                size_info = format_size(s2_dataset.nbytes) if s2_dataset.size > 0 else "0 B"
-                table.add_row(
-                    f"🌍 S2_{s2_key}",
-                    str(s2_dataset.shape),
-                    str(s2_dataset.dtype),
-                    size_info
-                )
-
-    # Métadonnées
-    if 'idx_good_frames' in patch:
-        meta_dataset = patch['idx_good_frames']
-        if isinstance(meta_dataset, h5py.Dataset):
             table.add_row(
-                "📋 idx_good_frames",
-                str(meta_dataset.shape),
-                str(meta_dataset.dtype),
-                "< 1MB"
+                f"{icon} {key}",
+                str(obj.shape),
+                str(obj.dtype),
+                size_info
             )
+            dataset_count += 1
+        elif isinstance(obj, h5py.Group) and dataset_count < MAX_DISPLAYED_ITEMS:
+            # Afficher les sous-groupes aussi
+            table.add_row(
+                f"📁 {key}",
+                f"Groupe ({len(obj.keys())} items)",
+                "group",
+                "-"
+            )
+            dataset_count += 1
+
+    if dataset_count == MAX_DISPLAYED_ITEMS and len(group.keys()) > MAX_DISPLAYED_ITEMS:
+        remaining = len(group.keys()) - MAX_DISPLAYED_ITEMS
+        table.add_row("...", f"+ {remaining} autres", "...", "...")
 
     return table
 
 
-def get_frame_statistics(patch: h5py.Group) -> str:
-    """Calcule les statistiques des frames"""
-    good_frames = len(patch['idx_good_frames']) if 'idx_good_frames' in patch else 0
-    cloudy_frames = len(patch['idx_cloudy_frames']) if 'idx_cloudy_frames' in patch else 0
-    total_frames = good_frames + cloudy_frames
-    cloud_ratio = (cloudy_frames / total_frames * 100) if total_frames > 0 else 0
-
-    return f"{good_frames} bonnes | {cloudy_frames} nuageuses ({cloud_ratio:.0f}% nuages)"
+def get_group_statistics(group: h5py.Group) -> str:
+    """Calcule les statistiques générales d'un groupe"""
+    dataset_count = sum(1 for obj in group.values() if isinstance(obj, h5py.Dataset))
+    subgroup_count = sum(1 for obj in group.values() if isinstance(obj, h5py.Group))
+    
+    stats = []
+    if dataset_count > 0:
+        stats.append(f"{dataset_count} datasets")
+    if subgroup_count > 0:
+        stats.append(f"{subgroup_count} sous-groupes")
+    
+    return " | ".join(stats) if stats else "Groupe vide"
 
 
 def create_summary_table() -> Table:
-    """Crée le tableau de résumé des données satellitaires"""
+    """Crée un tableau de résumé générique des types de données"""
     table = Table(
-        title="🛰️ Types de données par satellite",
+        title="📋 Résumé des types de données",
         show_header=True,
         header_style="bold magenta"
     )
-    table.add_column("Satellite", style="cyan", no_wrap=True)
-    table.add_column("Datasets typiques", style="green")
-    table.add_column("Dimensions attendues", style="yellow")
-    table.add_column("Usage", style="blue")
+    table.add_column("Type", style="cyan", no_wrap=True)
+    table.add_column("Description", style="green")
+    table.add_column("Utilisation typique", style="blue")
 
     table.add_row(
-        "🛰️ Sentinel-1",
-        "S1, S1_dates",
-        "(T, 4, H, W)",
-        "Données SAR multi-temporelles"
+        "📊 Datasets multidimensionnels",
+        "Tableaux de données (3D, 4D+)",
+        "Données temporelles, images, matrices"
     )
     table.add_row(
-        "🌍 Sentinel-2",
-        "S2, S2_dates, cloud_mask, cloud_prob",
-        "(T, 10, H, W)",
-        "Données optiques + masques nuages"
+        "📈 Datasets 1D/2D",
+        "Vecteurs et matrices",
+        "Séries temporelles, métadonnées"
+    )
+    table.add_row(
+        "📁 Groupes hiérarchiques",
+        "Organisation des données",
+        "Structure logique, catégorisation"
     )
 
     return table
@@ -285,27 +303,27 @@ def display_tree_section(f: h5py.File, console: Console) -> None:
     console.print(tree)
 
 
-def display_patch_section(f: h5py.File, console: Console) -> None:
-    """Affiche la section des détails de patch"""
-    patch_path, patch_found = find_first_patch(f)
-    if patch_found:
-        patch_table = create_patch_table(patch_path, patch_found)
-        console.print(patch_table)
+def display_data_group_section(f: h5py.File, console: Console) -> None:
+    """Affiche la section des détails d'un groupe de données"""
+    group_path, group_found = find_first_data_group(f)
+    if group_found:
+        group_table = create_data_group_table(group_path, group_found)
+        console.print(group_table)
 
-        # Statistiques du patch
-        frame_stats = get_frame_statistics(patch_found)
-        console.print(f"[dim]📈 {frame_stats}[/dim]")
+        # Statistiques du groupe
+        group_stats = get_group_statistics(group_found)
+        console.print(f"[dim]📈 {group_stats}[/dim]")
 
-        # Résumé des types de données S1/S2
-        console.print("\n📋 [bold]Résumé des données satellitaires:[/bold]")
+        # Résumé générique des types de données
+        console.print("\n📋 [bold]Résumé des types de données:[/bold]")
         summary_table = create_summary_table()
         console.print(summary_table)
     else:
-        console.print("❌ [red]Aucun patch trouvé[/red]")
+        console.print("❌ [red]Aucun groupe de données trouvé[/red]")
 
 
 def explore_hdf5_complete(file_path: str, show_tree: bool = True,
-                          show_stats: bool = True, show_patch: bool = True) -> None:
+                          show_stats: bool = True, show_data_group: bool = True) -> None:
     """Explore complètement la structure d'un fichier HDF5 avec Rich"""
     console = Console()
 
@@ -334,8 +352,8 @@ def explore_hdf5_complete(file_path: str, show_tree: bool = True,
             if show_tree:
                 display_tree_section(f, console)
 
-            if show_patch:
-                display_patch_section(f, console)
+            if show_data_group:
+                display_data_group_section(f, console)
 
     except PermissionError:
         console.print("❌ [red]Permissions insuffisantes pour lire le fichier[/red]")
@@ -347,10 +365,10 @@ def explore_hdf5_complete(file_path: str, show_tree: bool = True,
 
 if __name__ == "__main__":
     file_path = "/home/SPeillet/Downloads/data/toy_circa_ligth_0.5.hdf5"
-    
+
     # Exploration complète
-    explore_hdf5_complete(file_path, show_tree=True, show_stats=True, show_patch=True)
-    
+    explore_hdf5_complete(file_path, show_tree=True, show_stats=True, show_data_group=True)
+
     # Exemples d'utilisation alternative :
-    # explore_hdf5_complete(file_path, show_tree=False, show_stats=True, show_patch=False)
-    # explore_hdf5_complete(file_path, show_tree=True, show_stats=False, show_patch=True)
+    # explore_hdf5_complete(file_path, show_tree=False, show_stats=True, show_data_group=False)
+    # explore_hdf5_complete(file_path, show_tree=True, show_stats=False, show_data_group=True)
