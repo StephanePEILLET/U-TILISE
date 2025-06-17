@@ -20,9 +20,13 @@ Compatible with: CIRCA/UTILISE HDF5 datasets
 
 import sys
 from pathlib import Path
-from typing import Any, List, Tuple, Dict
+from typing import Any
 import numpy as np
 import h5py
+import pandas as pd
+import json
+import argparse
+from datetime import datetime
 
 # Import Rich for beautiful output
 from rich.console import Console
@@ -30,14 +34,35 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.progress import track
 
-# Import local compute_stats functions
-sys.path.append(str(Path(__file__).parent.parent / "dataloader_CIRCA" / "datasets"))
-try:
-    from compute_stats import compute_tensor_histogram, set_n_bins
-except ImportError as e:
-    print(f"❌ Could not import compute_stats.py: {e}")
-    print("Make sure the path is correct and the module exists.")
-    sys.exit(1)
+NUM_DIMS = 4
+
+
+# Local implementation of compute_stats functions to avoid import issues
+def compute_tensor_histogram(
+    tensor: np.ndarray,
+    n_bins: int = 100,
+    range_min: int = -32768,
+    range_max: int = 32767,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Compute histogram of values in a tensor within specified range."""
+    # Flatten the tensor
+    flat_tensor = tensor.reshape(-1)
+    
+    # Compute histogram
+    hist, bin_edges = np.histogram(
+        flat_tensor,
+        bins=n_bins,
+        range=(range_min, range_max)
+    )
+    return hist, bin_edges
+
+
+def set_n_bins():
+    """Set the number of bins for histogram computation based on int16 range."""
+    n_bins = 65536  # Full range for uint16 data
+    range_min = np.iinfo(np.int16).min
+    range_max = np.iinfo(np.int16).max
+    return n_bins, range_min, range_max
 
 console = Console()
 
@@ -47,7 +72,7 @@ HISTOGRAM_BINS = 65536  # Full range for uint16 data
 SAMPLE_SIZE_THRESHOLD = 50_000_000  # 50M elements threshold for sampling
 
 
-def accumulate_band_histograms(s2_datasets: List[Tuple[str, h5py.Dataset]]) -> Tuple[np.ndarray, int]:
+def accumulate_band_histograms(s2_datasets: list[tuple[str, h5py.Dataset]]) -> tuple[np.ndarray, int]:
     """
     Accumulate histograms across all S2 datasets for each band.
     
@@ -56,7 +81,7 @@ def accumulate_band_histograms(s2_datasets: List[Tuple[str, h5py.Dataset]]) -> T
         
     Returns:
         Tuple of (accumulated_histograms, total_pixels) where:
-        - accumulated_histograms: array of shape (n_bands, n_bins) 
+        - accumulated_histograms: array of shape (n_bands, n_bins)
         - total_pixels: total number of pixels processed per band
     """
     
@@ -68,12 +93,14 @@ def accumulate_band_histograms(s2_datasets: List[Tuple[str, h5py.Dataset]]) -> T
     total_pixels = 0
     n_bands = None
     
-    for dataset_path, dataset in track(s2_datasets, description="Processing S2 datasets and accumulating histograms..."):
+    for dataset_path, dataset in track(
+        s2_datasets, description="Processing S2 datasets and accumulating histograms..."
+    ):
         # Load data
         data = dataset[:]
         
         # Verify 4D structure (T, C, H, W)
-        if len(data.shape) != 4:
+        if len(data.shape) != NUM_DIMS:
             continue
             
         T, C, H, W = data.shape
@@ -83,18 +110,14 @@ def accumulate_band_histograms(s2_datasets: List[Tuple[str, h5py.Dataset]]) -> T
             n_bands = C
             accumulated_histograms = np.zeros((n_bands, n_bins), dtype=np.int64)
         
-        # Verify consistent number of bands
-        if C != n_bands:
-            continue
-        
         # Process each band separately
         for band_idx in range(n_bands):
             band_data = data[:, band_idx, :, :].reshape(-1)  # Flatten T×H×W
             
             # Sample data if too large
-            if len(band_data) > SAMPLE_SIZE_THRESHOLD:
-                sample_indices = np.random.choice(len(band_data), SAMPLE_SIZE_THRESHOLD, replace=False)
-                band_data = band_data[sample_indices]
+            # if len(band_data) > SAMPLE_SIZE_THRESHOLD:
+            #     sample_indices = np.random.choice(len(band_data), SAMPLE_SIZE_THRESHOLD, replace=False)
+            #     band_data = band_data[sample_indices]
             
             # Compute histogram for this band
             hist, _ = compute_tensor_histogram(
@@ -113,7 +136,7 @@ def accumulate_band_histograms(s2_datasets: List[Tuple[str, h5py.Dataset]]) -> T
     return accumulated_histograms, total_pixels
 
 
-def compute_global_band_statistics(accumulated_histograms: np.ndarray, total_pixels: int) -> Dict[str, Any]:
+def compute_global_band_statistics(accumulated_histograms: np.ndarray, total_pixels: int) -> dict[str, Any]:
     """
     Compute global mean and std for each band from accumulated histograms.
     
@@ -183,7 +206,7 @@ def compute_global_band_statistics(accumulated_histograms: np.ndarray, total_pix
     }
 
 
-def create_global_stats_table(global_stats: Dict[str, Any]) -> Table:
+def create_global_stats_table(global_stats: dict[str, Any]) -> Table:
     """Create a Rich table for global band statistics."""
     table = Table(title="🌍 Global S2 Band Statistics (All Datasets Combined)", show_header=True, header_style="bold magenta")
     table.add_column("Band", style="yellow", no_wrap=True, width=6)
@@ -218,7 +241,7 @@ def create_global_stats_table(global_stats: Dict[str, Any]) -> Table:
     return table
 
 
-def find_s2_datasets(hdf5_file: h5py.File) -> List[Tuple[str, h5py.Dataset]]:
+def find_s2_datasets(hdf5_file: h5py.File) -> list[tuple[str, h5py.Dataset]]:
     """Find all S2 datasets in the HDF5 file.
     
     Recursively searches for datasets named 'S2' within S2 groups.
@@ -239,7 +262,7 @@ def find_s2_datasets(hdf5_file: h5py.File) -> List[Tuple[str, h5py.Dataset]]:
     return s2_datasets
 
 
-def compute_basic_statistics(data: np.ndarray) -> Dict[str, float]:
+def compute_basic_statistics(data: np.ndarray) -> dict[str, float]:
     """Compute basic statistical measures for tensor data.
     
     Args:
@@ -264,7 +287,7 @@ def compute_basic_statistics(data: np.ndarray) -> Dict[str, float]:
     }
 
 
-def compute_band_statistics(data: np.ndarray) -> List[Dict[str, float]]:
+def compute_band_statistics(data: np.ndarray) -> list[dict[str, float]]:
     """Compute statistics for each spectral band separately.
     
     Assumes data shape is (time, bands, height, width).
@@ -275,7 +298,7 @@ def compute_band_statistics(data: np.ndarray) -> List[Dict[str, float]]:
     Returns:
         List of statistics dictionaries, one per band
     """
-    if len(data.shape) != 4:
+    if len(data.shape) != NUM_DIMS:
         console.print(f"⚠️ Expected 4D data, got {len(data.shape)}D. Skipping band analysis.")
         return []
     
@@ -291,7 +314,7 @@ def compute_band_statistics(data: np.ndarray) -> List[Dict[str, float]]:
     return band_stats
 
 
-def compute_temporal_statistics(data: np.ndarray) -> Dict[str, Any]:
+def compute_temporal_statistics(data: np.ndarray) -> dict[str, Any]:
     """Compute statistics across the temporal dimension.
     
     Args:
@@ -300,7 +323,7 @@ def compute_temporal_statistics(data: np.ndarray) -> Dict[str, Any]:
     Returns:
         Dictionary with temporal statistics
     """
-    if len(data.shape) != 4:
+    if len(data.shape) != NUM_DIMS:
         return {'error': 'Expected 4D data for temporal analysis'}
     
     time_steps, n_bands, height, width = data.shape
@@ -328,12 +351,12 @@ def compute_temporal_statistics(data: np.ndarray) -> Dict[str, Any]:
     }
 
 
-def create_basic_stats_table(stats: Dict[str, float], title: str) -> Table:
+def create_basic_stats_table(stats: dict[str, float], title: str) -> Table:
     """Create a Rich table for basic statistics."""
     table = Table(title=title, show_header=True, header_style="bold magenta")
     table.add_column("Metric", style="cyan", no_wrap=True)
     table.add_column("Value", style="green")
-    
+
     table.add_row("📊 Count", f"{stats['count']:,}")
     table.add_row("📈 Mean", f"{stats['mean']:.2f}")
     table.add_row("📉 Std Dev", f"{stats['std']:.2f}")
@@ -344,11 +367,11 @@ def create_basic_stats_table(stats: Dict[str, float], title: str) -> Table:
     table.add_row("📊 Q75", f"{stats['q75']:.2f}")
     table.add_row("✅ Non-zero", f"{stats['non_zero_count']:,}")
     table.add_row("⭕ Zero", f"{stats['zero_count']:,}")
-    
+
     return table
 
 
-def create_band_stats_table(band_stats: List[Dict[str, float]]) -> Table:
+def create_band_stats_table(band_stats: list[dict[str, float]]) -> Table:
     """Create a Rich table for band-wise statistics."""
     table = Table(title="📊 Band-wise Statistics", show_header=True, header_style="bold magenta")
     table.add_column("Band", style="yellow", no_wrap=True)
@@ -372,7 +395,7 @@ def create_band_stats_table(band_stats: List[Dict[str, float]]) -> Table:
     return table
 
 
-def create_temporal_stats_table(temporal_stats: Dict[str, Any]) -> Table:
+def create_temporal_stats_table(temporal_stats: dict[str, Any]) -> Table:
     """Create a Rich table for temporal statistics."""
     table = Table(title="⏰ Temporal Statistics", show_header=True, header_style="bold magenta")
     table.add_column("Metric", style="cyan", no_wrap=True)
@@ -423,7 +446,7 @@ def analyze_s2_dataset(dataset_path: str, dataset: h5py.Dataset) -> None:
     console.print(stats_table)
     
     # Band-wise statistics (if 4D data)
-    if len(data.shape) == 4:
+    if len(data.shape) == NUM_DIMS:
         console.print("🎨 Computing band-wise statistics...")
         band_stats = compute_band_statistics(data)
         if band_stats:
@@ -431,7 +454,7 @@ def analyze_s2_dataset(dataset_path: str, dataset: h5py.Dataset) -> None:
             console.print(band_table)
     
     # Temporal statistics (if 4D data)
-    if len(data.shape) == 4:
+    if len(data.shape) == NUM_DIMS:
         console.print("⏰ Computing temporal statistics...")
         temporal_stats = compute_temporal_statistics(data)
         temporal_table = create_temporal_stats_table(temporal_stats)
@@ -450,14 +473,14 @@ def analyze_s2_dataset(dataset_path: str, dataset: h5py.Dataset) -> None:
                 sample_data = flat_data[indices]
             else:
                 sample_data = data
-            
+
             # Get optimal parameters for uint16 histogram
             n_bins, range_min, range_max = set_n_bins()
-            
+
             hist, bins = compute_tensor_histogram(
-                sample_data, 
-                n_bins=n_bins, 
-                range_min=range_min, 
+                sample_data,
+                n_bins=n_bins,
+                range_min=range_min,
                 range_max=range_max
             )
             
@@ -487,27 +510,124 @@ def analyze_s2_dataset(dataset_path: str, dataset: h5py.Dataset) -> None:
             console.print(f"❌ Error computing histogram: {e}")
 
 
-def get_file_path() -> str:
-    """Get HDF5 file path from command line or search for files."""
-    if len(sys.argv) > 1:
-        file_path = sys.argv[1]
-        if not Path(file_path).exists():
-            console.print(f"❌ [red]File '{file_path}' does not exist[/red]")
-            sys.exit(1)
-        return file_path
+def create_global_stats_dataframe(global_stats: dict[str, Any]) -> pd.DataFrame:
+    """Create a pandas DataFrame from global band statistics.
     
-    # Search for HDF5 files
-    search_patterns = ["*.hdf5", "../*.hdf5", "data/*.hdf5", "/home/SPeillet/Downloads/data/*.hdf5"]
+    Args:
+        global_stats: Dictionary with global statistics per band
+        
+    Returns:
+        DataFrame with band statistics
+    """
+    band_stats = global_stats['band_statistics']
     
-    from glob import glob
-    for pattern in search_patterns:
-        files = glob(pattern)
-        if files:
-            return files[0]
+    # Convert to DataFrame
+    df = pd.DataFrame(band_stats)
     
-    console.print("❌ [red]No HDF5 file found. Please specify a file.[/red]")
-    console.print("Usage: python analyze_s2_stats.py <file.hdf5>")
-    sys.exit(1)
+    # Add formatted band column
+    df['Band_ID'] = df['band_index'].apply(lambda x: f"B{x:02d}")
+    
+    # Reorder columns for better presentation
+    column_order = ['Band_ID', 'band_index', 'mean', 'std', 'variance', 
+                   'actual_min', 'actual_max', 'total_counts', 'non_zero_bins', 'coverage_percent']
+    df = df[column_order]
+    
+    return df
+
+
+def export_statistics_to_json(global_stats: dict[str, Any], output_path: str) -> None:
+    """Export statistics to JSON file via DataFrame.
+    
+    Args:
+        global_stats: Dictionary with global statistics
+        output_path: Path for the output JSON file
+    """
+    # Create DataFrame
+    df = create_global_stats_dataframe(global_stats)
+    
+    # Prepare complete statistics dictionary
+    export_data = {
+        'metadata': {
+            'analysis_timestamp': datetime.now().isoformat(),
+            'total_datasets_processed': len(global_stats.get('dataset_paths', [])),
+            'n_bands': global_stats['n_bands'],
+            'total_pixels_per_band': global_stats['total_pixels_per_band'],
+            'histogram_bins': global_stats['histogram_bins']
+        },
+        'band_statistics': df.to_dict('records'),
+        'summary': {
+            'mean_across_bands': float(df['mean'].mean()),
+            'std_across_bands': float(df['std'].mean()),
+            'min_value_global': float(df['actual_min'].min()),
+            'max_value_global': float(df['actual_max'].max()),
+            'average_coverage': float(df['coverage_percent'].mean())
+        }
+    }
+    
+    # Export to JSON
+    with open(output_path, 'w', encoding='utf-8') as f:
+        json.dump(export_data, f, indent=2, ensure_ascii=False)
+    
+    console.print(f"📄 Statistics exported to: [bold green]{output_path}[/bold green]")
+
+
+def parse_arguments() -> argparse.Namespace:
+    """Parse command line arguments.
+    
+    Returns:
+        Parsed arguments namespace
+    """
+    parser = argparse.ArgumentParser(
+        description="Analyze S2 tensor statistics from HDF5 files",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python analyze_s2_stats.py /path/to/file.hdf5
+  python analyze_s2_stats.py /path/to/file.hdf5 --output stats.json
+        """
+    )
+    
+    parser.add_argument(
+        'hdf5_file',
+        type=str,
+        help='Path to the HDF5 file to analyze'
+    )
+    
+    parser.add_argument(
+        '--output', '-o',
+        type=str,
+        default=None,
+        help='Output JSON file path (default: auto-generated based on input filename)'
+    )
+    
+    return parser.parse_args()
+
+
+def get_file_path() -> tuple[str, str]:
+    """Get HDF5 file path and output path from command line arguments.
+    
+    Returns:
+        Tuple of (input_file_path, output_file_path)
+    """
+    args = parse_arguments()
+    
+    # Validate input file
+    input_path = Path(args.hdf5_file)
+    if not input_path.exists():
+        console.print(f"❌ [red]File '{input_path}' does not exist[/red]")
+        sys.exit(1)
+    
+    if not input_path.suffix.lower() in ['.hdf5', '.h5']:
+        console.print(f"⚠️ [yellow]Warning: File '{input_path}' does not have .hdf5/.h5 extension[/yellow]")
+    
+    # Determine output path
+    if args.output:
+        output_path = args.output
+    else:
+        # Auto-generate output filename
+        output_path = input_path.parent / f"{input_path.stem}_s2_statistics.json"
+    
+    return str(input_path), str(output_path)
 
 
 def main():
@@ -517,48 +637,56 @@ def main():
         style="bold blue",
         border_style="blue"
     ))
-    
-    # Get file path
-    file_path = get_file_path()
-    console.print(f"📁 Analyzing file: [bold green]{file_path}[/bold green]")
-    
+
+    # Get file paths from command line arguments
+    input_file_path, output_file_path = get_file_path()
+    console.print(f"📁 Analyzing file: [bold green]{input_file_path}[/bold green]")
+    console.print(f"📄 Output will be saved to: [bold cyan]{output_file_path}[/bold cyan]")
+
     try:
-        with h5py.File(file_path, 'r') as f:
+        with h5py.File(input_file_path, 'r') as f:
             # Find all S2 datasets
             console.print("🔍 Searching for S2 datasets...")
             s2_datasets = find_s2_datasets(f)
-            
+
             if not s2_datasets:
                 console.print("❌ [red]No S2 datasets found in the file.[/red]")
                 console.print("Expected datasets at paths like: '/*/S2/S2'")
                 return
-            
+
             console.print(f"✅ Found {len(s2_datasets)} S2 dataset(s)")
-            
+
             # Accumulate histograms across all S2 datasets
             accumulated_histograms, total_pixels = accumulate_band_histograms(s2_datasets)
-            
+
             if accumulated_histograms is None:
                 console.print("❌ [red]No valid S2 datasets found for histogram accumulation.[/red]")
                 return
-            
+
             # Compute global statistics from accumulated histograms
             global_stats = compute_global_band_statistics(accumulated_histograms, total_pixels)
-            
+
+            # Add dataset paths to global stats for metadata
+            global_stats['dataset_paths'] = [path for path, _ in s2_datasets]
+
             # Display global statistics table
             console.print("\n")
             global_table = create_global_stats_table(global_stats)
             console.print(global_table)
-            
+
+            # Export statistics to JSON
+            console.print("📄 Exporting statistics to JSON...")
+            export_statistics_to_json(global_stats, output_file_path)
+
             # Display summary
             console.print(f"\n📋 [bold]Summary:[/bold]")
             console.print(f"   📊 Processed datasets: {len(s2_datasets)}")
             console.print(f"   🎨 Spectral bands: {global_stats['n_bands']}")
             console.print(f"   🔢 Total pixels per band: {global_stats['total_pixels_per_band']:,}")
             console.print(f"   📈 Histogram bins: {global_stats['histogram_bins']:,}")
-                
+
         console.print("\n✅ [bold green]Global statistics analysis complete![/bold green]")
-        
+
     except Exception as e:
         console.print(f"❌ [red]Error analyzing file: {e}[/red]")
         sys.exit(1)
