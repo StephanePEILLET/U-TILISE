@@ -20,8 +20,11 @@ Compatible with: CIRCA/UTILISE HDF5 datasets
 
 import argparse
 import json
+import os
 import sys
+import traceback
 from datetime import datetime
+from multiprocessing import Pool
 from pathlib import Path
 from typing import Any
 
@@ -76,17 +79,16 @@ BAND_LABELS_DICT = {
     "S2": ["B02", "B03", "B04", "B05", "B06", "B07", "B08", "B08A", "B11", "B12"],
     "S1": ["sigma VV", "sigma VH", "coherence VV", "coherence VH"]
 }
-CURRENT_BAND_LABELS = []
 
 
-def get_band_label(band_idx: int) -> str:
+def get_band_label(band_idx: int, band_labels: list[str]) -> str:
     """Return the human-readable label for a given band index.
 
-    Uses the globally-set CURRENT_BAND_LABELS.
+    Uses the provided band_labels list.
     Falls back to a formatted index if the label list is incomplete.
     """
-    if 0 <= band_idx < len(CURRENT_BAND_LABELS):
-        return CURRENT_BAND_LABELS[band_idx]
+    if 0 <= band_idx < len(band_labels):
+        return band_labels[band_idx]
     return f"Band {band_idx:02d}"
 
 
@@ -96,7 +98,7 @@ def accumulate_band_histograms(datasets: list[tuple[str, h5py.Dataset]]) -> tupl
     
     Args:
         datasets: List of (path, dataset) tuples
-
+        
     Returns:
         Tuple of (accumulated_histograms, total_pixels) where:
         - accumulated_histograms: array of shape (n_bands, n_bins)
@@ -219,7 +221,7 @@ def compute_global_band_statistics(accumulated_histograms: np.ndarray, total_pix
     }
 
 
-def create_global_stats_table(global_stats: dict[str, Any]) -> Table:
+def create_global_stats_table(global_stats: dict[str, Any], band_labels: list[str]) -> Table:
     """Create a Rich table for global band statistics."""
     table = Table(title="🌍 Global Band Statistics (All Datasets Combined)",
                   show_header=True,
@@ -244,7 +246,7 @@ def create_global_stats_table(global_stats: dict[str, Any]) -> Table:
             min_display = f"{min_val:6.0f}"
 
         table.add_row(
-            get_band_label(stats['band_index']),
+            get_band_label(stats['band_index'], band_labels),
             f"{stats['mean']:8.2f}",
             f"{stats['std']:8.2f}",
             min_display,
@@ -278,11 +280,12 @@ def find_datasets(hdf5_file: h5py.File, key_path: str) -> list[tuple[str, h5py.D
     return datasets
 
 
-def create_global_stats_dataframe(global_stats: dict[str, Any]) -> pd.DataFrame:
+def create_global_stats_dataframe(global_stats: dict[str, Any], band_labels: list[str]) -> pd.DataFrame:
     """Create a pandas DataFrame from global band statistics.
     
     Args:
         global_stats: Dictionary with global statistics per band
+        band_labels: List of labels for the current bands.
         
     Returns:
         DataFrame with band statistics
@@ -293,7 +296,7 @@ def create_global_stats_dataframe(global_stats: dict[str, Any]) -> pd.DataFrame:
     df = pd.DataFrame(band_stats)
 
     # Add formatted band column
-    df['Band_ID'] = df['band_index'].apply(lambda x: get_band_label(int(x)))
+    df['Band_ID'] = df['band_index'].apply(lambda x: get_band_label(int(x), band_labels))
 
     # Reorder columns for better presentation
     column_order = [
@@ -305,15 +308,16 @@ def create_global_stats_dataframe(global_stats: dict[str, Any]) -> pd.DataFrame:
     return df
 
 
-def export_statistics_to_json(global_stats: dict[str, Any], output_path: str) -> None:
+def export_statistics_to_json(global_stats: dict[str, Any], output_path: str, band_labels: list[str]) -> None:
     """Export statistics to JSON file via DataFrame.
     
     Args:
         global_stats: Dictionary with global statistics
         output_path: Path for the output JSON file
+        band_labels: List of labels for the current bands.
     """
     # Create DataFrame
-    df = create_global_stats_dataframe(global_stats)
+    df = create_global_stats_dataframe(global_stats, band_labels)
 
     # Prepare complete statistics dictionary
     export_data = {
@@ -352,14 +356,17 @@ def parse_arguments() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Analyze S2 data (default)
+  # Analyze S2 data sequentially (default)
   python analyze_s2_stats.py /path/to/file.hdf5
 
-  # Analyze S1 data
-  python analyze_s2_stats.py /path/to/file.hdf5 --key-path S1/S1
-  
-  # Analyze both S1 and S2 data
+  # Analyze S1 and S2 data sequentially
   python analyze_s2_stats.py /path/to/file.hdf5 --key-path S1/S1 S2/S2
+  
+  # Analyze in parallel using multiprocessing
+  python analyze_s2_stats.py /path/to/file.hdf5 -k S1/S1 S2/S2 --multiprocessing
+
+  # Analyze in parallel with a specific number of workers
+  python analyze_s2_stats.py /path/to/file.hdf5 -k S1/S1 S2/S2 --multiprocessing -w 2
 
   # Specify a base output file name (key will be appended)
   python analyze_s2_stats.py /path/to/file.hdf5 -k S1/S1 S2/S2 -o /path/to/output/stats.json
@@ -387,6 +394,19 @@ Examples:
         help='One or more path-like keys for datasets to find (e.g., "S1/S1" "S2/S2")'
     )
 
+    parser.add_argument(
+        '--multiprocessing',
+        action='store_true',
+        help='Run analysis in parallel using multiple processes.'
+    )
+
+    parser.add_argument(
+        '--workers', '-w',
+        type=int,
+        default=None,
+        help='Number of worker processes to use. Defaults to a sane value based on CPU count.'
+    )
+
     return parser.parse_args()
 
 
@@ -405,96 +425,156 @@ def get_args() -> argparse.Namespace:
         sys.exit(1)
 
     if input_path.suffix.lower() not in ['.hdf5', '.h5']:
-        console.print(f"⚠️ [yellow]Warning: File '{input_path}' does not have .hdf5/.h5 extension[/yellow]")
+        console.print(
+            f"⚠️ [yellow]Warning: File '{input_path}' does not have .hdf5/.h5 "
+            "extension[/yellow]"
+        )
 
     return args
 
 
-def analyze_key_path(key_path: str, hdf5_file: h5py.File, args: argparse.Namespace):
-    """Run analysis for a single key path within the HDF5 file."""
-    console.print(Panel(f"Analyzing key: [bold yellow]{key_path}[/bold yellow]", expand=False, border_style="blue"))
+def analyze_key_path_worker(args_tuple: tuple[str, argparse.Namespace]) -> dict[str, Any]:
+    """
+    Run analysis for a single key path. Designed to be called by a multiprocessing pool.
+    
+    Args:
+        args_tuple: A tuple containing the key_path and the script's arguments.
+        
+    Returns:
+        A dictionary containing the results of the analysis for printing.
+    """
+    key_path, args = args_tuple
 
-    # Set current band labels based on key path
-    data_type = key_path.split('/')[0]
-    global CURRENT_BAND_LABELS
-    CURRENT_BAND_LABELS = BAND_LABELS_DICT.get(data_type, [])
+    try:
+        # Set current band labels based on key path
+        data_type = key_path.split('/')[0]
+        band_labels = BAND_LABELS_DICT.get(data_type, [])
 
-    # Determine output path
-    input_path = Path(args.hdf5_file)
-    key_suffix = key_path.replace('/', '_')
-    if args.output:
-        # If a base output is given, append key to it
-        output_path_obj = Path(args.output)
-        output_path = output_path_obj.parent / f"{output_path_obj.stem}_{key_suffix}{output_path_obj.suffix}"
-    else:
-        # Auto-generate output filename
-        output_path = input_path.parent / f"{input_path.stem}_{key_suffix}_statistics.json"
+        # Determine output path
+        input_path = Path(args.hdf5_file)
+        key_suffix = key_path.replace('/', '_')
+        if args.output:
+            # If a base output is given, append key to it
+            output_path_obj = Path(args.output)
+            output_path = output_path_obj.parent / f"{output_path_obj.stem}_{key_suffix}{output_path_obj.suffix}"
+        else:
+            # Auto-generate output filename
+            output_path = input_path.parent / f"{input_path.stem}_{key_suffix}_statistics.json"
 
-    console.print(f"📄 Output will be saved to: [bold cyan]{output_path}[/bold cyan]")
+        with h5py.File(args.hdf5_file, 'r') as hdf5_file:
+            datasets = find_datasets(hdf5_file, key_path)
 
-    # Find all datasets
-    console.print(f"🔍 Searching for '{key_path}' datasets...")
-    datasets = find_datasets(hdf5_file, key_path)
+            if not datasets:
+                return {'success': False, 'key_path': key_path, 'error': f"No '{key_path}' datasets found."}
 
-    if not datasets:
-        console.print(f"❌ [red]No '{key_path}' datasets found in the file.[/red]")
-        return
+            accumulated_histograms, total_pixels = accumulate_band_histograms(datasets)
 
-    console.print(f"✅ Found {len(datasets)} '{key_path}' dataset(s)")
+            if accumulated_histograms is None:
+                return {'success': False, 'key_path': key_path, 'error': "No valid datasets for histogram accumulation."}
 
-    # Accumulate histograms across all datasets
-    accumulated_histograms, total_pixels = accumulate_band_histograms(datasets)
+            global_stats = compute_global_band_statistics(accumulated_histograms, total_pixels)
+            global_stats['dataset_paths'] = [path for path, _ in datasets]
 
-    if accumulated_histograms is None:
-        console.print(f"❌ [red]No valid datasets found for '{key_path}' for histogram accumulation.[/red]")
-        return
+            global_table = create_global_stats_table(global_stats, band_labels)
 
-    # Compute global statistics from accumulated histograms
-    global_stats = compute_global_band_statistics(accumulated_histograms, total_pixels)
-    global_stats['dataset_paths'] = [path for path, _ in datasets]
+            export_statistics_to_json(global_stats, str(output_path), band_labels)
 
-    # Display global statistics table
-    console.print("\n")
-    global_table = create_global_stats_table(global_stats)
-    console.print(global_table)
+            summary = {
+                "Processed datasets": len(datasets),
+                "Spectral bands": global_stats['n_bands'],
+                "Total pixels per band": f"{global_stats['total_pixels_per_band']:,}",
+                "Histogram bins": f"{global_stats['histogram_bins']:,}",
+            }
 
-    # Export statistics to JSON
-    console.print("📄 Exporting statistics to JSON...")
-    export_statistics_to_json(global_stats, str(output_path))
-
-    # Display summary
-    console.print(f"\n📋 [bold]Summary for {key_path}:[/bold]")
-    console.print(f"   📊 Processed datasets: {len(datasets)}")
-    console.print(f"   🎨 Spectral bands: {global_stats['n_bands']}")
-    console.print(f"   🔢 Total pixels per band: {global_stats['total_pixels_per_band']:,}")
-    console.print(f"   📈 Histogram bins: {global_stats['histogram_bins']:,}")
+            return {
+                'success': True,
+                'key_path': key_path,
+                'table': global_table,
+                'summary': summary,
+                'output_path': str(output_path)
+            }
+    except Exception:
+        return {'success': False, 'key_path': key_path, 'error': traceback.format_exc()}
 
 
 def main():
     """Main analysis function."""
-    console.print(Panel.fit(
-        "🛰️  Tensor Statistics Analyzer\n[bold cyan]Global mean/std computation across all datasets[/bold cyan]",
-        style="bold blue",
-        border_style="blue"
-    ))
+    title = (
+        "🛰️  Tensor Statistics Analyzer\n[bold cyan]Global mean/std computation "
+        "across all datasets[/bold cyan]"
+    )
+    console.print(Panel.fit(title, style="bold blue", border_style="blue"))
 
     args = get_args()
     input_file_path = args.hdf5_file
     console.print(f"📁 Analyzing file: [bold green]{input_file_path}[/bold green]")
 
-    try:
-        with h5py.File(input_file_path, 'r') as f:
-            for key_path in args.key_path:
-                try:
-                    analyze_key_path(key_path, f, args)
-                except Exception as e:
-                    console.print(f"❌ [red]An unexpected error occurred while processing '{key_path}': {e}[/red]")
+    # Prepare arguments for workers
+    worker_args = [(key_path, args) for key_path in args.key_path]
 
-        console.print("\n✅ [bold green]Analysis complete for all specified keys![/bold green]")
+    results = []
 
-    except Exception as e:
-        console.print(f"❌ [red]Error opening file: {e}[/red]")
-        sys.exit(1)
+    if args.multiprocessing:
+        if args.workers:
+            num_processes = args.workers
+        else:
+            # Use half the available CPUs, with a max of 8, to be reasonable
+            num_processes = min(os.cpu_count() // 2, 8) if os.cpu_count() else 4
+
+        console.print(
+            f"⚙️  Starting analysis with {num_processes} processes..."
+        )
+        try:
+            with Pool(processes=num_processes) as pool:
+                # Use imap_unordered to get results as they are completed
+                gen = pool.imap_unordered(analyze_key_path_worker, worker_args)
+
+                for result in track(
+                    gen, total=len(worker_args), description="Processing keys..."
+                ):
+                    results.append(result)
+        except Exception as e:
+            console.print(
+                "❌ [red]A critical error occurred during multiprocessing: "
+                f"{e}[/red]"
+            )
+            sys.exit(1)
+    else:
+        console.print("⚙️  Running analysis sequentially...")
+        for arg_tuple in worker_args:
+            results.append(analyze_key_path_worker(arg_tuple))
+
+    # Process results sequentially to avoid garbled output
+    console.print("\n--- Analysis Results ---")
+    for result in sorted(results, key=lambda x: x['key_path']):
+        console.print("")
+        if result['success']:
+            console.print(
+                Panel(
+                    f"Results for: [bold yellow]{result['key_path']}[/bold yellow]",
+                    expand=False,
+                    border_style="green"
+                )
+            )
+            console.print(
+                "📄 Statistics exported to: "
+                f"[bold green]{result['output_path']}[/bold green]"
+            )
+            console.print(result['table'])
+            console.print(f"\n📋 [bold]Summary for {result['key_path']}:[/bold]")
+            for k, v in result['summary'].items():
+                console.print(f"   - {k}: {v}")
+        else:
+            console.print(
+                Panel(
+                    f"Failed: [bold red]{result['key_path']}[/bold red]",
+                    expand=False,
+                    border_style="red"
+                )
+            )
+            console.print(f"❌ Error: {result['error']}")
+
+    console.print("\n✅ [bold green]Analysis complete for all specified keys![/bold green]")
 
 
 if __name__ == "__main__":
