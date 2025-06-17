@@ -8,7 +8,7 @@ def compute_tensor_histogram(
     tensor: Union[torch.Tensor, np.ndarray],
     n_bins: int = 100,
     range_min: int = np.iinfo(np.int16).min,
-    range_max: int = np.iinfo(np.int16).max
+    range_max: int = np.iinfo(np.int16).max,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Compute histogram of values in a tensor (T x C x H x W) within specified range.
@@ -18,7 +18,7 @@ def compute_tensor_histogram(
         n_bins: Number of bins for the histogram
         range_min: Minimum value of the range (default: np.int16 min)
         range_max: Maximum value of the range (default: np.int16 max)
-        
+
     Returns:
         tuple containing:
             - hist: Array of histogram values
