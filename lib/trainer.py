@@ -1,3 +1,4 @@
+import json
 import logging
 import logging.config
 import os
@@ -5,21 +6,21 @@ import time
 from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
+import prodict
 import torch
 import torchvision.utils
 import wandb
+from omegaconf import DictConfig, ListConfig, OmegaConf
+from prodict import Prodict
+from torch import Tensor
+from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
+
 from lib import logger, visutils
 from lib.data_utils import compute_false_color, extract_sample, to_device
 from lib.logger import AverageMeter
 from lib.loss import TrainLoss
 from lib.metrics import EvalMetrics
-from omegaconf import DictConfig, ListConfig, OmegaConf
-from torch import Tensor
-from torch.utils.tensorboard import SummaryWriter
-from tqdm import tqdm
-
-import prodict
-from prodict import Prodict
 
 OBJECTIVE = {
     "l1": "min",
@@ -65,6 +66,7 @@ class Trainer:
         optimizer,
         scheduler,
     ):
+        self.train_loss_dict, self.val_loss_dict = {}, {}
         self.args = args
         self.use_wandb = bool("wandb" in args)
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -74,12 +76,14 @@ class Trainer:
         self.optimizer = optimizer
         self.scheduler = scheduler
         self.model.to(self.device)
-        self.args.accum_iter = self.args.get(
-            "accum_iter", 1
-        )  # accumulate gradients for `accum_iter` iterations
+        self.args.accum_iter = self.args.get("accum_iter", 1)  # accumulate gradients for `accum_iter` iterations
 
         self.compute_losses = TrainLoss(self.args.loss)
         self.compute_metrics = EvalMetrics(self.args.metrics)
+        self.num_train_iter = 0
+        self.num_val_iter = 0
+        self.train_loss_iter_dict = {}
+        self.val_loss_iter_dict = {}
 
         # Losses: Initialize statistics
         self.train_stats = self._stats_meter(stats_type="loss")
@@ -94,12 +98,9 @@ class Trainer:
 
         os.makedirs(self.args.save_dir, exist_ok=True)
         os.makedirs(self.args.checkpoint_dir, exist_ok=True)
-        self.args.path_model_best = os.path.join(
-            self.args.checkpoint_dir, "Model_best.pth"
-        )
-        self.args.path_model_last = os.path.join(
-            self.args.checkpoint_dir, "Model_last.pth"
-        )
+
+        self.args.path_model_best = os.path.join(self.args.checkpoint_dir, "Model_best.pth")
+        self.args.path_model_last = os.path.join(self.args.checkpoint_dir, "Model_last.pth")
         self.logger = logger.prepare_logger(
             "train_logger",
             level=logging.INFO,
@@ -154,10 +155,7 @@ class Trainer:
         self.model.load_state_dict(checkpoint["model_state_dict"])
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
-        if (
-            self.args.get("load_scheduler_state_dict", True)
-            and "scheduler_state_dict" in checkpoint
-        ):
+        if self.args.get("load_scheduler_state_dict", True) and "scheduler_state_dict" in checkpoint:
             self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
 
         # Extract the last training epoch
@@ -169,12 +167,8 @@ class Trainer:
         self.best_loss = checkpoint["best_loss"]
         self.epoch_best_loss = checkpoint["epoch"]
 
-        self.logger.info(
-            "\n\nRestoring the pretrained model from epoch %d.", self.epoch - 1
-        )
-        self.logger.info(
-            "Successfully loaded pretrained model weights from %s.\n", path
-        )
+        self.logger.info("\n\nRestoring the pretrained model from epoch %d.", self.epoch - 1)
+        self.logger.info("Successfully loaded pretrained model weights from %s.\n", path)
         self.logger.info("Current best loss %.4f\n", self.best_loss)
 
     def _save_checkpoint(self, filepath: str) -> None:
@@ -200,10 +194,7 @@ class Trainer:
                     step=self.iter,
                 )
                 wandb.log(
-                    {
-                        "train_metrics/" + k: v.avg
-                        for k, v in self.train_metrics.items()
-                    },
+                    {"train_metrics/" + k: v.avg for k, v in self.train_metrics.items()},
                     step=self.iter,
                 )
             else:
@@ -213,30 +204,24 @@ class Trainer:
 
                 stats = {"val_metrics/" + k: v.avg for k, v in self.val_metrics.items()}
                 wandb.log(stats, step=self.iter)
+        elif phase == "train":
+            for k, v in self.train_stats.items():
+                # self.train_loss_dict
+                self.writer.add_scalar("train_losses/" + k, v.avg, self.iter)
+            for k, v in self.train_metrics.items():
+                self.writer.add_scalar("train_metrics/" + k, v.avg, self.iter)
         else:
-            if phase == "train":
-                for k, v in self.train_stats.items():
-                    self.writer.add_scalar("train_losses/" + k, v.avg, self.iter)
-                for k, v in self.train_metrics.items():
-                    self.writer.add_scalar("train_metrics/" + k, v.avg, self.iter)
-            else:
-                for k, v in self.val_stats.items():
-                    self.writer.add_scalar("val_losses/" + k, v.avg, self.iter)
-                for k, v in self.val_metrics.items():
-                    self.writer.add_scalar("val_metrics/" + k, v.avg, self.iter)
+            for k, v in self.val_stats.items():
+                self.writer.add_scalar("val_losses/" + k, v.avg, self.iter)
+            for k, v in self.val_metrics.items():
+                self.writer.add_scalar("val_metrics/" + k, v.avg, self.iter)
 
         # Write validation stats and metrics to the log file
         if phase == "val":
             self.logger.info(
-                (
-                    f"val:\tEpoch: {self.epoch}\t"
-                    + "".join(
-                        [f"{k}: {v.avg:.5f}\t" for k, v in self.val_stats.items()]
-                    )
-                    + "".join(
-                        [f"{k}: {v.avg:.5f}\t" for k, v in self.val_metrics.items()]
-                    )
-                )
+                f"val:\tEpoch: {self.epoch}\t"
+                + "".join([f"{k}: {v.avg:.5f}\t" for k, v in self.val_stats.items()])
+                + "".join([f"{k}: {v.avg:.5f}\t" for k, v in self.val_metrics.items()])
             )
 
     def _log_iter_epoch(self) -> None:
@@ -282,7 +267,6 @@ class Trainer:
         stats = self._stats_dict(stats_type)
         for key, _ in stats.items():
             meters[key] = AverageMeter()
-
         return meters
 
     def _visualize_sample_wandb(self, sample_index: Optional[int] = None) -> None:
@@ -322,15 +306,9 @@ class Trainer:
                     torchvision.utils.make_grid(
                         [
                             # gallery (grid of frames) reshaped from (H x W x C) to (C x H x W)
-                            visutils.gallery(
-                                x[:, indices_rgb, :, :], ncols=ncols
-                            ).permute(2, 0, 1),
-                            visutils.gallery(
-                                y_pred[:, indices_rgb, :, :], ncols=ncols
-                            ).permute(2, 0, 1),
-                            visutils.gallery(
-                                y[:, indices_rgb, :, :], ncols=ncols
-                            ).permute(2, 0, 1),
+                            visutils.gallery(x[:, indices_rgb, :, :], ncols=ncols).permute(2, 0, 1),
+                            visutils.gallery(y_pred[:, indices_rgb, :, :], ncols=ncols).permute(2, 0, 1),
+                            visutils.gallery(y[:, indices_rgb, :, :], ncols=ncols).permute(2, 0, 1),
                         ],
                         nrow=1,
                     ),
@@ -349,9 +327,7 @@ class Trainer:
                             [
                                 # gallery reshaped from (H x W x C) to (C x H x W)
                                 visutils.gallery(
-                                    compute_false_color(
-                                        x, index_rgb=indices_rgb, index_nir=index_nir
-                                    ),
+                                    compute_false_color(x, index_rgb=indices_rgb, index_nir=index_nir),
                                     ncols=ncols,
                                 ).permute(2, 0, 1),
                                 visutils.gallery(
@@ -363,9 +339,7 @@ class Trainer:
                                     ncols=ncols,
                                 ).permute(2, 0, 1),
                                 visutils.gallery(
-                                    compute_false_color(
-                                        y, index_rgb=indices_rgb, index_nir=index_nir
-                                    ),
+                                    compute_false_color(y, index_rgb=indices_rgb, index_nir=index_nir),
                                     ncols=ncols,
                                 ).permute(2, 0, 1),
                             ],
@@ -417,25 +391,17 @@ class Trainer:
                         self.epoch_best_loss = self.epoch
                         self._save_checkpoint(self.args.path_model_best)
                         if self.use_wandb:
-                            wandb.run.summary["best_loss"] = (
-                                self.val_stats.total_loss.avg
-                            )
+                            wandb.run.summary["best_loss"] = self.val_stats.total_loss.avg
                             wandb.run.summary["epoch_best_loss"] = self.epoch
 
                     # Plot inference
-                    if (
-                        self.epoch + 1
-                    ) % self.args.plot_every_n_epochs == 0 and self.use_wandb:
+                    if (self.epoch + 1) % self.args.plot_every_n_epochs == 0 and self.use_wandb:
                         self._visualize_sample_wandb()  # Plot a random validation sample
                         if self.args.get("plot_val_sample", None) is not None:
                             # Plot specific validation sample(s)
                             if isinstance(self.args.plot_val_sample, int):
-                                self._visualize_sample_wandb(
-                                    sample_index=self.args.plot_val_sample
-                                )
-                            elif isinstance(
-                                self.args.plot_val_sample, (list, ListConfig)
-                            ):
+                                self._visualize_sample_wandb(sample_index=self.args.plot_val_sample)
+                            elif isinstance(self.args.plot_val_sample, (list, ListConfig)):
                                 for idx in self.args.plot_val_sample:
                                     self._visualize_sample_wandb(sample_index=idx)
 
@@ -454,10 +420,18 @@ class Trainer:
 
                 self.epoch += 1
 
+        with open(os.path.join(self.args.save_dir, "train_loss.json"), "w") as f:
+            json.dump(self.train_loss_dict, f, indent=4)
+        with open(os.path.join(self.args.save_dir, "val_loss.json"), "w") as f:
+            json.dump(self.val_loss_dict, f, indent=4)
+        with open(os.path.join(self.args.save_dir, "train_loss_iter.json"), "w") as f:
+            json.dump(self.train_loss_iter_dict, f, indent=4)
+        with open(os.path.join(self.args.save_dir, "val_loss_iter.json"), "w") as f:
+            json.dump(self.val_loss_iter_dict, f, indent=4)
+
         time_elapsed = int(time.time() - start_time)
         self.logger.info(
-            "\n\nTraining finished!\nTraining time: %dd %dh %dm %ds"
-            % seconds_to_dd_hh_mm_ss(time_elapsed)
+            "\n\nTraining finished!\nTraining time: %dd %dh %dm %ds" % seconds_to_dd_hh_mm_ss(time_elapsed)
         )
         self.logger.info("\nBest model at epoch: %d", self.epoch_best_loss)
         self.logger.info(f"Validation loss of the best model: {self.best_loss:.4f}")
@@ -475,6 +449,7 @@ class Trainer:
         self.model.train()
 
         # Clear gradients
+        # self.model.zero_grad(set_to_none=True)
         for param in self.model.parameters():
             param.grad = None
 
@@ -482,16 +457,15 @@ class Trainer:
             tnr_train.set_description("Training")
             tnr_train.set_postfix(
                 epoch=self.epoch,
-                training_loss=np.nan,
+                training_loss=-np.inf,
                 **{k: v.avg for (k, v) in self.train_metrics.items()},
             )
 
             for i, batch in enumerate(tnr_train):
-                self._log_iter_epoch()
-                loss_dict, metrics, loss = self.inference_one_batch(
-                    batch, phase="train"
-                )
-
+                self._log_iter_epoch()  # Itération à l'epoch
+                loss_dict, metrics, loss = self.inference_one_batch(batch, phase="train")
+                self.train_loss_iter_dict[self.num_train_iter] = loss_dict
+                self.num_train_iter += 1
                 # Update to stats_meter
                 # self.train_stats.update(**loss_dict)
                 # self.train_metrics.update(**metrics)
@@ -503,26 +477,16 @@ class Trainer:
                 loss = loss / self.args.accum_iter
                 loss.backward()
 
-                if ((i + 1) % self.args.accum_iter == 0) or (
-                    i + 1 == len(self.dataloader["train"])
-                ):
+                if ((i + 1) % self.args.accum_iter == 0) or (i + 1 == len(self.dataloader["train"])):
                     # Gradient clipping
-                    if (
-                        getattr(self.args, "gradient_clip_norm", False)
-                        and self.args.gradient_clip_norm > 0.0
-                    ):
+                    if getattr(self.args, "gradient_clip_norm", False) and self.args.gradient_clip_norm > 0.0:
                         torch.nn.utils.clip_grad_norm_(
                             self.model.parameters(),
                             self.args.gradient_clip_norm,
                         )
 
-                    elif (
-                        getattr(self.args, "gradient_clip_value", False)
-                        and self.args.gradient_clip_value > 0.0
-                    ):
-                        torch.nn.utils.clip_grad_value_(
-                            self.model.parameters(), self.args.gradient_clip_value
-                        )
+                    elif getattr(self.args, "gradient_clip_value", False) and self.args.gradient_clip_value > 0.0:
+                        torch.nn.utils.clip_grad_value_(self.model.parameters(), self.args.gradient_clip_value)
 
                     self.optimizer.step()
 
@@ -530,9 +494,7 @@ class Trainer:
                     for param in self.model.parameters():
                         param.grad = None
 
-                if (i + 1) % min(
-                    self.args.logstep_train, len(self.dataloader["train"])
-                ) == 0:
+                if (i + 1) % min(self.args.logstep_train, len(self.dataloader["train"])) == 0:
                     self._log_stats_meter(phase="train")
 
                     tnr_train.set_postfix(
@@ -556,6 +518,11 @@ class Trainer:
 
                 self.iter += 1
 
+            self.train_loss_dict[self.epoch] = {
+                "avg": self.train_stats.total_loss.avg,
+                "val": self.train_stats.total_loss.val,
+            }
+
     def validate_epoch(self, tnr=None) -> None:
         # Initialize stats meter
         self.val_stats = self._stats_meter(stats_type="loss")
@@ -566,14 +533,22 @@ class Trainer:
             tnr_val.set_description("Validation")
             tnr_val.set_postfix(epoch=self.epoch)
 
-            for _, batch in enumerate(tnr_val):
+            for batch_idx, batch in enumerate(tnr_val):
                 loss_dict, metrics = self.inference_one_batch(batch, phase="val")
+
+                self.val_loss_iter_dict[self.num_val_iter] = loss_dict
+                self.num_val_iter += 1
 
                 # Update to stats_meter
                 for key, value in loss_dict.items():
                     self.val_stats[key].update(value)
                 for key, value in metrics.items():
                     self.val_metrics[key].update(value)
+
+        self.val_loss_dict[self.epoch] = {
+            "avg": self.val_stats.total_loss.avg,
+            "val": self.val_stats.total_loss.val,
+        }
 
         if tnr is not None:
             tnr.set_postfix(
@@ -584,11 +559,32 @@ class Trainer:
             )
 
     def inference_one_batch(
-        self, batch: Dict[str, Any], phase: str
-    ) -> (
-        Tuple[Dict[str, float], Dict[str, float], Tensor]
-        | Tuple[Dict[str, float], Dict[str, float]]
-    ):
+        self,
+        batch: Dict[str, Any],
+        phase: str,
+    ) -> Tuple[Dict[str, float], Dict[str, float], Tensor] | Tuple[Dict[str, float], Dict[str, float]]:
+        """
+        Perform inference on a single batch of data.
+        Args:
+            batch (Dict[str, Any]): Input batch containing 'x' (input data) and
+                'position_days' (temporal position information).
+            phase (str): Training phase, must be one of "train", "val", or "test".
+        Returns:
+            Tuple containing:
+            - For training phase: (loss_dict, metrics, loss) where:
+                - loss_dict (Dict[str, float]): Dictionary of computed losses
+                - metrics (Dict[str, float]): Dictionary of evaluation metrics
+                - loss (Tensor): Combined loss tensor for backpropagation
+            - For validation/test phases: (loss_dict, metrics) where:
+                - loss_dict (Dict[str, float]): Dictionary of computed losses
+                - metrics (Dict[str, float]): Dictionary of evaluation metrics
+        Raises:
+            AssertionError: If phase is not one of "train", "val", or "test".
+        Note:
+            - For training phase, gradients are computed and loss tensor is returned
+            - For validation/test phases, inference is performed with torch.no_grad()
+            - Input batch is automatically moved to the appropriate device
+        """
         assert phase in ["train", "val", "test"]
 
         batch = to_device(batch, self.device)
@@ -600,7 +596,7 @@ class Trainer:
             # Compute losses and evaluation metrics
             loss_dict, loss = self.compute_losses(batch, y_pred)
             metrics = self.compute_metrics(batch, y_pred)
-
+            # Diff en loss_dict
             return loss_dict, metrics, loss
 
         # if phase == "val" or "test"

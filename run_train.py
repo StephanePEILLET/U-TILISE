@@ -78,7 +78,8 @@ def setup_data_loaders(
     logger.info("\nInitialize data loader (training set)...")
     train_loader = data_utils.get_dataloader(
         config,
-        phase="train",
+        # phase="train",
+        phase="val",  # Pour le debug
         pin_memory=config.misc.pin_memory,
         drop_last=True,
         logger=logger,
@@ -139,7 +140,6 @@ def setup_model(config: OmegaConf, train_loader: torch.utils.data.DataLoader, lo
             input_dim,
             train_loader.dataset.image_size,
         )
-
     return model, args_model
 
 

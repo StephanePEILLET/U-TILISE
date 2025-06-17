@@ -1,20 +1,22 @@
 import collections.abc
 import logging
 import re
-from typing import Dict, List, Optional, Tuple, Union
+from functools import partial
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
-from lib.datasets import DATASETS, EarthNet2021Dataset, SEN12MSCRTSDataset
 from omegaconf import DictConfig
 from torch import Tensor
 from torch.nn import functional as F
-from torchvision import transforms
+from torch.utils.data import Dataset
+
+from lib.datasets import DATASETS, EarthNet2021Dataset, SEN12MSCRTSDataset
 
 np_str_obj_array_pattern = re.compile(r"[SaUO]")
 
 
-def to_device(sample: Dict, device: torch.device = torch.device("cuda")) -> Dict:
+def to_device(sample: Dict[str, Any], device: torch.device = torch.device("cuda")) -> Dict[str, Any]:
     sample_out = {}
     for key, val in sample.items():
         if isinstance(val, torch.Tensor):
@@ -34,7 +36,7 @@ def to_device(sample: Dict, device: torch.device = torch.device("cuda")) -> Dict
 
 
 def extract_sample(
-    sample: Dict,
+    sample: Dict[str, Any],
 ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Union[float, int]]:
     inputs = sample["x"]
     target = sample["y"]
@@ -52,7 +54,7 @@ def extract_sample(
     return inputs, target, masks, mask_valid, cloud_mask, indices_rgb, index_nir
 
 
-def pad_tensor(x, l, pad_value=0):
+def pad_tensor(x: Tensor, l: int, pad_value: Union[int, float] = 0) -> Tensor:
     """
     Source: https://github.com/VSainteuf/utae-paps/blob/main/src/utils.py
     """
@@ -62,7 +64,7 @@ def pad_tensor(x, l, pad_value=0):
     return F.pad(x, pad=pad, value=pad_value)
 
 
-def pad_collate(batch, pad_value=0):
+def pad_collate(batch: List[Any], pad_value: Union[int, float] = 0) -> Any:
     """
     Modified version of: https://github.com/VSainteuf/utae-paps/blob/main/src/utils.py
     """
@@ -85,16 +87,11 @@ def pad_collate(batch, pad_value=0):
             # out = elem.new(storage)
             out = elem.new(storage).resize_(len(batch), *list(batch[0].size()))
         return torch.stack(batch, 0, out=out)
-    if (
-        elem_type.__module__ == "numpy"
-        and elem_type.__name__ != "str_"
-        and elem_type.__name__ != "string_"
-    ):
+    if elem_type.__module__ == "numpy" and elem_type.__name__ not in {"str_", "string_"}:
         if elem_type.__name__ in ("ndarray", "memmap"):
             # array of string classes and object
             if np_str_obj_array_pattern.search(elem.dtype.str) is not None:
                 raise TypeError(f"Format not managed : {elem.dtype}")
-
             return pad_collate([torch.as_tensor(b) for b in batch])
         if elem.shape == ():  # scalars
             return torch.as_tensor(batch)
@@ -130,21 +127,18 @@ def get_dataloader(
     """Returns a torch.utils.data.DataLoader instance."""
 
     dset = get_dataset(config, phase, logger)
-    variable_seq_length = (
-        getattr(dset, "variable_seq_length", False)
-        and config.training_settings.batch_size > 1
-    )
-    shuffle = config["misc"]["run_mode"] != "test"
+    variable_seq_length = getattr(dset, "variable_seq_length", False) and config.training_settings.batch_size > 1
+    # shuffle = config["misc"]["run_mode"] != "test"
 
     if variable_seq_length:
-        collate_fn = lambda x: pad_collate(x, pad_value=config.method.pad_value)
+        collate_fn = partial(pad_collate, pad_value=config.method.pad_value)
     else:
         collate_fn = None
 
     loader = torch.utils.data.DataLoader(
         dataset=dset,
         batch_size=config.training_settings.batch_size,
-        shuffle=shuffle,
+        shuffle=False,
         num_workers=config.misc.num_workers,
         collate_fn=collate_fn,
         pin_memory=pin_memory,
@@ -154,9 +148,7 @@ def get_dataloader(
     return loader
 
 
-def get_dataset(
-    config: DictConfig, phase: str, logger: Optional[logging.Logger] = None
-):
+def get_dataset(config: DictConfig, phase: str, logger: Optional[logging.Logger] = None) -> Dataset:
     """Returns a torch.utils.data.Dataset instance."""
 
     from lib.utils import without_keys
@@ -199,9 +191,7 @@ def get_dataset(
     return dset
 
 
-def compute_false_color(
-    x: Tensor, index_rgb: Tensor | List[int | float], index_nir: int | float
-) -> Tensor:
+def compute_false_color(x: Tensor, index_rgb: Union[Tensor, List[int]], index_nir: Union[int, float]) -> Tensor:
     """
     Returns the false color composite (NIR, R, G) for every time step of the input sequence or
     for the single input image.
@@ -221,6 +211,4 @@ def compute_false_color(
             dim=1,
         )
 
-    return torch.stack(
-        (x[index_nir, ...], x[index_rgb[0], ...], x[index_rgb[1], ...]), dim=1
-    )
+    return torch.stack((x[index_nir, ...], x[index_rgb[0], ...], x[index_rgb[1], ...]), dim=1)

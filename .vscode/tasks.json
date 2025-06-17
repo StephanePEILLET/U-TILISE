@@ -9,7 +9,7 @@
             "command": "rm",
             "args": [
                 "-rf",
-                "/home/SPeillet/pac_rpg/cloud_reconstructions/outputs/train",
+                "/home/SPeillet/Downloads/data/outputs/train",
             ]
         },
         {
@@ -18,7 +18,7 @@
             "command": "rm",
             "args": [
                 "-rf",
-                "/home/SPeillet/pac_rpg/cloud_reconstructions/outputs/inference",
+                "/home/SPeillet/Downloads/data/outputs/inference",
             ]
         }
     ]

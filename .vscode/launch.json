@@ -22,7 +22,7 @@
             "args": [
                 "./configs/config_circa_train.yaml",
                 "--save_dir",
-                "/home/SPeillet/pac_rpg/cloud_reconstructions/outputs/train",
+                "/home/SPeillet/Downloads/data/outputs/train",
             ]
         },
     ]

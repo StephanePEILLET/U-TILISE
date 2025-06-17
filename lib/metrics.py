@@ -3,15 +3,13 @@ from typing import Any, Dict, Literal
 
 import torch
 import torchgeometry as tgm
-from lib.data_utils import extract_sample
+from prodict import Prodict
 from torch import Tensor
 
-from prodict import Prodict
+from lib.data_utils import extract_sample
 
 
-def compute_sam(
-    predicted: Tensor, target: Tensor, units: Literal["deg", "rad"] = "rad"
-) -> Tensor:
+def compute_sam(predicted: Tensor, target: Tensor, units: Literal["deg", "rad"] = "rad") -> Tensor:
     """
     Computes the spectral angle mapper (SAM) averaged over all time steps and batch samples.
 
@@ -30,9 +28,7 @@ def compute_sam(
     # Compute the SAM score for all pixels with vector norm > 0
     flag = torch.logical_and(predicted_norm != 0.0, target_norm != 0.0)
     if torch.any(flag):
-        spectral_angles = torch.clamp(
-            dot_product[flag] / (predicted_norm[flag] * target_norm[flag]), -1, 1
-        ).acos()
+        spectral_angles = torch.clamp(dot_product[flag] / (predicted_norm[flag] * target_norm[flag]), -1, 1).acos()
         sam_score = torch.mean(spectral_angles)
 
         if units == "deg":
@@ -48,7 +44,7 @@ class EvalMetrics:
     Computes the metrics used to monitor the training progress or for evaluation.
     """
 
-    def __init__(self, args: Dict):
+    def __init__(self, args: dict):
         self.args = args
         self.masked_metrics = args.get("masked_metrics", False)
         self.sam_units = args.get("sam_units", "rad")
@@ -61,22 +57,16 @@ class EvalMetrics:
         self.mae = lambda predicted, target: torch.mean(torch.abs(predicted - target))
 
         # MSE (mean squared error)
-        self.mse = lambda predicted, target: torch.mean(
-            torch.square(predicted - target)
-        )
+        self.mse = lambda predicted, target: torch.mean(torch.square(predicted - target))
 
         # RMSE (root mean square error)
-        self.rmse = lambda predicted, target: torch.sqrt(
-            torch.mean(torch.square(predicted - target))
-        )
+        self.rmse = lambda predicted, target: torch.sqrt(torch.mean(torch.square(predicted - target)))
 
         # SSIM (structural similarity index)
         self.dssim = tgm.losses.SSIM(5, reduction="mean")
 
         # PSNR (peak signal-to-noise ratio)
-        self.psnr = lambda predicted, target: 20 * torch.log10(
-            1 / self.rmse(predicted, target)
-        )
+        self.psnr = lambda predicted, target: 20 * torch.log10(1 / self.rmse(predicted, target))
 
     def __call__(self, batch: Dict[str, Any], predicted: Tensor) -> Dict[str, float]:
         """
@@ -123,9 +113,7 @@ class EvalMetrics:
 
         # Structural similarity index (SSIM) evaluated over all images
         if self.args.get("ssim", False):
-            dssim = self.dssim(
-                predicted, target
-            )  # outputs (1 - SSIM)/2; structural dissimilarity
+            dssim = self.dssim(predicted, target)  # outputs (1 - SSIM)/2; structural dissimilarity
             metrics["ssim"] = 1 - 2 * dssim
 
             # Structural similarity index (SSIM) evaluated over all images with data gaps
