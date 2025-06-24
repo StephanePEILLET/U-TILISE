@@ -17,6 +17,7 @@ data:                                      # See lib/datasets/EarthNet2021Datase
     max_seq_length: 10                     # Maximum temporal sequence length. Set to None to skip temporal trimming.
     render_occluded_above_p: 0.9           # Minimum cloud cover [-] to fully mask an input image. Set to None to keep original cloud masks.
     return_cloud_mask: true                # Set to True if metrics/masked_metrics is True.
+    stats: null
 
 mask:
     mask_type: random_clouds               # Strategy for synthetic data gap generation. ['random_clouds', 'real_clouds']
@@ -27,8 +28,8 @@ mask:
     intersect_real_cloud_masks: false      # True to intersect randomly sampled cloud masks with the actual cloud mask sequence, False otherwise.
     dilate_cloud_masks: false              # True to dilate the cloud masks before masking, False otherwise.
     fill_type: fill_value                  # Strategy for initializing masked pixels. ['fill_value', 'white_noise', 'mean']
-    fill_value: 1                         # Pixel value of masked pixels. Used if fill_type == 'fill_value'.
- 
+    fill_value: 1                          # Pixel value of masked pixels. Used if fill_type == 'fill_value'.
+
 method:
     model_type: utilise
     pad_value: 0

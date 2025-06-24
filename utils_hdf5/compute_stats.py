@@ -80,15 +80,25 @@ BAND_LABELS_DICT = {
     "S1": ["sigma VV", "sigma VH", "coherence VV", "coherence VH"]
 }
 
+BAND_OFFSETS = {
+    "S2": 0,
+    "S1": len(BAND_LABELS_DICT["S2"])  # S1 bands start after S2 bands
+}
 
-def get_band_label(band_idx: int, band_labels: list[str]) -> str:
-    """Return the human-readable label for a given band index.
 
-    Uses the provided band_labels list.
+def get_band_label(band_idx: int, data_type: str) -> str:
+    """Return the human-readable label for a given band index, considering data type.
+
+    Uses the provided band_labels list and offsets.
     Falls back to a formatted index if the label list is incomplete.
     """
-    if 0 <= band_idx < len(band_labels):
-        return band_labels[band_idx]
+    band_labels = BAND_LABELS_DICT.get(data_type, [])
+    offset = BAND_OFFSETS.get(data_type, 0)
+
+    lookup_idx = band_idx - offset
+
+    if 0 <= lookup_idx < len(band_labels):
+        return band_labels[lookup_idx]
     return f"Band {band_idx:02d}"
 
 
@@ -245,8 +255,13 @@ def create_global_stats_table(global_stats: dict[str, Any], band_labels: list[st
         else:
             min_display = f"{min_val:6.0f}"
 
+        # We need to know the data type to get the right label
+        # This is a bit of a hack since the table function doesn't know the data type.
+        # We infer it from the number of bands.
+        data_type = "S2" if len(band_labels) == 10 else "S1"
+
         table.add_row(
-            get_band_label(stats['band_index'], band_labels),
+            get_band_label(stats['band_index'], data_type),
             f"{stats['mean']:8.2f}",
             f"{stats['std']:8.2f}",
             min_display,
@@ -280,23 +295,28 @@ def find_datasets(hdf5_file: h5py.File, key_path: str) -> list[tuple[str, h5py.D
     return datasets
 
 
-def create_global_stats_dataframe(global_stats: dict[str, Any], band_labels: list[str]) -> pd.DataFrame:
+def create_global_stats_dataframe(global_stats: dict[str, Any], data_type: str) -> pd.DataFrame:
     """Create a pandas DataFrame from global band statistics.
     
     Args:
         global_stats: Dictionary with global statistics per band
-        band_labels: List of labels for the current bands.
+        data_type: The type of data being processed ('S1' or 'S2')
         
     Returns:
         DataFrame with band statistics
     """
     band_stats = global_stats['band_statistics']
+    offset = BAND_OFFSETS.get(data_type, 0)
+
+    # Adjust band indices with the offset
+    for stat in band_stats:
+        stat['band_index'] += offset
 
     # Convert to DataFrame
     df = pd.DataFrame(band_stats)
 
     # Add formatted band column
-    df['Band_ID'] = df['band_index'].apply(lambda x: get_band_label(int(x), band_labels))
+    df['Band_ID'] = df['band_index'].apply(lambda x: get_band_label(int(x), data_type))
 
     # Reorder columns for better presentation
     column_order = [
@@ -306,43 +326,6 @@ def create_global_stats_dataframe(global_stats: dict[str, Any], band_labels: lis
     df = df[column_order]
 
     return df
-
-
-def export_statistics_to_json(global_stats: dict[str, Any], output_path: str, band_labels: list[str]) -> None:
-    """Export statistics to JSON file via DataFrame.
-    
-    Args:
-        global_stats: Dictionary with global statistics
-        output_path: Path for the output JSON file
-        band_labels: List of labels for the current bands.
-    """
-    # Create DataFrame
-    df = create_global_stats_dataframe(global_stats, band_labels)
-
-    # Prepare complete statistics dictionary
-    export_data = {
-        'metadata': {
-            'analysis_timestamp': datetime.now().isoformat(),
-            'total_datasets_processed': len(global_stats.get('dataset_paths', [])),
-            'n_bands': global_stats['n_bands'],
-            'total_pixels_per_band': global_stats['total_pixels_per_band'],
-            'histogram_bins': global_stats['histogram_bins']
-        },
-        'band_statistics': df.to_dict('records'),
-        'summary': {
-            'mean_across_bands': float(df['mean'].mean()),
-            'std_across_bands': float(df['std'].mean()),
-            'min_value_global': float(df['actual_min'].min()),
-            'max_value_global': float(df['actual_max'].max()),
-            'average_coverage': float(df['coverage_percent'].mean())
-        }
-    }
-
-    # Export to JSON
-    with open(output_path, 'w', encoding='utf-8') as f:
-        json.dump(export_data, f, indent=2, ensure_ascii=False)
-
-    console.print(f"📄 Statistics exported to: [bold green]{output_path}[/bold green]")
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -368,8 +351,8 @@ Examples:
   # Analyze in parallel with a specific number of workers
   python analyze_s2_stats.py /path/to/file.hdf5 -k S1/S1 S2/S2 --multiprocessing -w 2
 
-  # Specify a base output file name (key will be appended)
-  python analyze_s2_stats.py /path/to/file.hdf5 -k S1/S1 S2/S2 -o /path/to/output/stats.json
+  # Specify a single output file name for all statistics
+  python analyze_s2_stats.py /path/to/file.hdf5 -k S1/S1 S2/S2 -o /path/to/output/all_stats.json
 """
     )
 
@@ -383,7 +366,7 @@ Examples:
         '--output', '-o',
         type=str,
         default=None,
-        help='Base output JSON file path. The key path will be appended to avoid overwrites.'
+        help='Output JSON file path. If not provided, it will be auto-generated.'
     )
 
     parser.add_argument(
@@ -450,17 +433,6 @@ def analyze_key_path_worker(args_tuple: tuple[str, argparse.Namespace]) -> dict[
         data_type = key_path.split('/')[0]
         band_labels = BAND_LABELS_DICT.get(data_type, [])
 
-        # Determine output path
-        input_path = Path(args.hdf5_file)
-        key_suffix = key_path.replace('/', '_')
-        if args.output:
-            # If a base output is given, append key to it
-            output_path_obj = Path(args.output)
-            output_path = output_path_obj.parent / f"{output_path_obj.stem}_{key_suffix}{output_path_obj.suffix}"
-        else:
-            # Auto-generate output filename
-            output_path = input_path.parent / f"{input_path.stem}_{key_suffix}_statistics.json"
-
         with h5py.File(args.hdf5_file, 'r') as hdf5_file:
             datasets = find_datasets(hdf5_file, key_path)
 
@@ -470,14 +442,34 @@ def analyze_key_path_worker(args_tuple: tuple[str, argparse.Namespace]) -> dict[
             accumulated_histograms, total_pixels = accumulate_band_histograms(datasets)
 
             if accumulated_histograms is None:
-                return {'success': False, 'key_path': key_path, 'error': "No valid datasets for histogram accumulation."}
+                error_msg = "No valid datasets for histogram accumulation."
+                return {'success': False, 'key_path': key_path, 'error': error_msg}
 
             global_stats = compute_global_band_statistics(accumulated_histograms, total_pixels)
             global_stats['dataset_paths'] = [path for path, _ in datasets]
 
-            global_table = create_global_stats_table(global_stats, band_labels)
+            # Create DataFrame from stats
+            df = create_global_stats_dataframe(global_stats, data_type)
 
-            export_statistics_to_json(global_stats, str(output_path), band_labels)
+            # Prepare export data dictionary
+            export_data = {
+                'metadata': {
+                    'total_datasets_processed': len(global_stats.get('dataset_paths', [])),
+                    'n_bands': global_stats['n_bands'],
+                    'total_pixels_per_band': global_stats['total_pixels_per_band'],
+                    'histogram_bins': global_stats['histogram_bins']
+                },
+                'band_statistics': df.to_dict('records'),
+                'summary': {
+                    'mean_across_bands': float(df['mean'].mean()),
+                    'std_across_bands': float(df['std'].mean()),
+                    'min_value_global': float(df['actual_min'].min()),
+                    'max_value_global': float(df['actual_max'].max()),
+                    'average_coverage': float(df['coverage_percent'].mean())
+                }
+            }
+
+            global_table = create_global_stats_table(global_stats, band_labels)
 
             summary = {
                 "Processed datasets": len(datasets),
@@ -491,7 +483,7 @@ def analyze_key_path_worker(args_tuple: tuple[str, argparse.Namespace]) -> dict[
                 'key_path': key_path,
                 'table': global_table,
                 'summary': summary,
-                'output_path': str(output_path)
+                'data_for_json': export_data
             }
     except Exception:
         return {'success': False, 'key_path': key_path, 'error': traceback.format_exc()}
@@ -546,6 +538,10 @@ def main():
 
     # Process results sequentially to avoid garbled output
     console.print("\n--- Analysis Results ---")
+
+    all_stats_data = {}
+    successful_results = [r for r in results if r.get('success')]
+
     for result in sorted(results, key=lambda x: x['key_path']):
         console.print("")
         if result['success']:
@@ -555,10 +551,6 @@ def main():
                     expand=False,
                     border_style="green"
                 )
-            )
-            console.print(
-                "📄 Statistics exported to: "
-                f"[bold green]{result['output_path']}[/bold green]"
             )
             console.print(result['table'])
             console.print(f"\n📋 [bold]Summary for {result['key_path']}:[/bold]")
@@ -573,6 +565,43 @@ def main():
                 )
             )
             console.print(f"❌ Error: {result['error']}")
+
+    # Aggregate and export all statistics to a single JSON file
+    if successful_results:
+        for result in successful_results:
+            all_stats_data[result['key_path']] = result['data_for_json']
+
+        # Determine final output path
+        input_path = Path(args.hdf5_file)
+        if args.output:
+            output_path = Path(args.output)
+            # Ensure it has a .json extension
+            if output_path.suffix.lower() != '.json':
+                output_path = output_path.with_suffix('.json')
+        else:
+            # Auto-generate output filename if not provided
+            output_path = input_path.parent / f"{input_path.stem}_statistics.json"
+
+        # Prepare the final JSON structure with global metadata
+        final_json_output = {
+            'global_metadata': {
+                'analysis_timestamp': datetime.now().isoformat(),
+                'input_file': str(input_path.resolve()),
+                'keys_analyzed': list(all_stats_data.keys()),
+            },
+            'statistics': all_stats_data
+        }
+
+        # Export to a single JSON file
+        try:
+            with open(output_path, 'w', encoding='utf-8') as f:
+                json.dump(final_json_output, f, indent=2, ensure_ascii=False)
+            console.print(
+                "\n📄 All statistics exported to: "
+                f"[bold green]{output_path}[/bold green]"
+            )
+        except OSError as e:
+            console.print(f"❌ [red]Error writing to JSON file {output_path}: {e}[/red]")
 
     console.print("\n✅ [bold green]Analysis complete for all specified keys![/bold green]")
 

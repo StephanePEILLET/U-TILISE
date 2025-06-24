@@ -1,3 +1,8 @@
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).parents[1]))
+
 import math
 import os
 from enum import Enum
@@ -5,11 +10,12 @@ from typing import Any, Dict, List, Literal, Optional, Tuple
 
 import matplotlib
 import torch
+from matplotlib import pyplot as plt
+from torch import Tensor, nn
+
 from lib import config_utils, data_utils, utils, visutils
 from lib.models import MODELS
 from lib.visutils import COLORMAPS
-from matplotlib import pyplot as plt
-from torch import Tensor, nn
 
 
 class Method(Enum):
@@ -39,9 +45,7 @@ class Imputation:
         self.config_file_train = config_file_train
 
         if self.method == Method.TRIVIAL and self.mode == Mode.NONE:
-            raise ValueError(
-                f"No mode specified. Choose among {[mode.value for mode in Mode]}."
-            )
+            raise ValueError(f"No mode specified. Choose among {[mode.value for mode in Mode]}.")
 
         if self.method == Method.UTILISE:
             if self.checkpoint is None:
@@ -56,18 +60,14 @@ class Imputation:
                 )
 
             if not os.path.isfile(self.checkpoint):
-                raise FileNotFoundError(
-                    f"Cannot find the model weights: {self.checkpoint}\n"
-                )
+                raise FileNotFoundError(f"Cannot find the model weights: {self.checkpoint}\n")
 
             # Read the configuration file used during training
             self.config = config_utils.read_config(self.config_file_train)
 
             # Extract the temporal window size and the number of channels used during training
             self.temporal_window = self.config.data.max_seq_length
-            self.num_channels = data_utils.get_dataset(
-                self.config, phase=self.config.misc.run_mode
-            ).num_channels
+            self.num_channels = data_utils.get_dataset(self.config, phase=self.config.misc.run_mode).num_channels
 
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         _ = torch.set_grad_enabled(False)
@@ -104,21 +104,15 @@ class Imputation:
         if isinstance(self.model, MODELS["utilise"]):
             batch = data_utils.to_device(batch, self.device)
             if return_att:
-                y_pred, att = impute_sequence(
-                    self.model, batch, self.temporal_window, return_att=True
-                )
+                y_pred, att = impute_sequence(self.model, batch, self.temporal_window, return_att=True)
                 if att is not None:
                     att = att.cpu()
             else:
-                y_pred = impute_sequence(
-                    self.model, batch, self.temporal_window, return_att=False
-                )
+                y_pred = impute_sequence(self.model, batch, self.temporal_window, return_att=False)
             batch = data_utils.to_device(batch, "cpu")
             y_pred = y_pred.cpu()
         else:
-            y_pred = self.model(
-                batch["x"], cloud_mask=batch["masks"], days=batch["days"]
-            )
+            y_pred = self.model(batch["x"], cloud_mask=batch["masks"], days=batch["days"])
 
         if return_att:
             return batch, y_pred, att
@@ -163,9 +157,7 @@ def impute_sequence(
         reached_end = False
 
         while not reached_end:
-            y_pred_chunk = model(
-                x[:, t_start:t_end], batch_positions=positions[:, t_start:t_end]
-            )
+            y_pred_chunk = model(x[:, t_start:t_end], batch_positions=positions[:, t_start:t_end])
 
             if t_start == 0:
                 # Initialize the full-length output sequence
@@ -178,9 +170,7 @@ def impute_sequence(
                 # Move the temporal window
                 t_start_old = t_start
                 t_end_old = t_end
-                t_start, t_end = move_temporal_window_next(
-                    t_start, t_max, temporal_window, cloud_coverage
-                )
+                t_start, t_end = move_temporal_window_next(t_start, t_max, temporal_window, cloud_coverage)
             else:
                 # Find the indices of those frames that have been processed by both the previous and the current
                 # temporal window
@@ -199,10 +189,7 @@ def impute_sequence(
                 # the lowest:
                 # use this frame to switch from the previous imputation results to the current imputation results
                 error = torch.mean(
-                    torch.abs(
-                        y_pred[:, t_candidates]
-                        - y_pred_chunk[:, t_candidates - t_start]
-                    ),
+                    torch.abs(y_pred[:, t_candidates] - y_pred_chunk[:, t_candidates - t_start]),
                     dim=(0, 2, 3, 4),
                 )
                 t_switch = error.argmin().item() + t_start
@@ -214,9 +201,7 @@ def impute_sequence(
                     # Move the temporal window
                     t_start_old = t_start
                     t_end_old = t_end
-                    t_start, t_end = move_temporal_window_next(
-                        t_start_old, t_max, temporal_window, cloud_coverage
-                    )
+                    t_start, t_end = move_temporal_window_next(t_start_old, t_max, temporal_window, cloud_coverage)
 
     if return_att:
         return y_pred, att
@@ -269,31 +254,28 @@ def move_temporal_window_next(
     if t_start + temporal_window > t_max:
         # Reduce the stride such that the end of the temporal window coincides with the end of the entire sequence
         t_start, t_end = move_temporal_window_end(t_max, temporal_window)
+    # Check if the start of the next temporal window is mostly cloud-free
+    elif cloud_coverage[t_start] <= 0.1:
+        # Keep the default stride and ensure that the temporal window does not exceed the sequence length
+        t_end = t_start + temporal_window
+        if t_end > t_max:
+            t_start, t_end = move_temporal_window_end(t_max, temporal_window)
     else:
-        # Check if the start of the next temporal window is mostly cloud-free
-        if cloud_coverage[t_start] <= 0.1:
-            # Keep the default stride and ensure that the temporal window does not exceed the sequence length
-            t_end = t_start + temporal_window
-            if t_end > t_max:
-                t_start, t_end = move_temporal_window_end(t_max, temporal_window)
-        else:
-            # Find the least cloudy frame within [t_start + stride - dt, t_start + stride + dt]
-            dt = math.ceil(stride / 2)
-            left = max(0, t_start - dt)
-            right = min(t_start + dt + 1, t_max)
+        # Find the least cloudy frame within [t_start + stride - dt, t_start + stride + dt]
+        dt = math.ceil(stride / 2)
+        left = max(0, t_start - dt)
+        right = min(t_start + dt + 1, t_max)
 
-            # Frame(s) with the lowest cloud coverage within [t_start + stride - dt, t_start + stride + dt]
-            t_candidates = (
-                cloud_coverage[left:right] == cloud_coverage[left:right].min()
-            ).nonzero(as_tuple=True)[0] + left
+        # Frame(s) with the lowest cloud coverage within [t_start + stride - dt, t_start + stride + dt]
+        t_candidates = (cloud_coverage[left:right] == cloud_coverage[left:right].min()).nonzero(as_tuple=True)[0] + left
 
-            # Take the frame closest to the standard stride
-            t_start = t_candidates[torch.abs(t_candidates - t_start).argmin()].item()
+        # Take the frame closest to the standard stride
+        t_start = t_candidates[torch.abs(t_candidates - t_start).argmin()].item()
 
-            # Ensure that the temporal window does not exceed the sequence length
-            t_end = t_start + temporal_window
-            if t_end > t_max:
-                t_start, t_end = move_temporal_window_end(t_max, temporal_window)
+        # Ensure that the temporal window does not exceed the sequence length
+        t_end = t_start + temporal_window
+        if t_end > t_max:
+            t_start, t_end = move_temporal_window_end(t_max, temporal_window)
 
     return t_start, t_end
 
@@ -352,9 +334,7 @@ def visualize_att_for_one_head_across_time(
     fig, axes = plt.subplots(nrows=seq_length + 1, ncols=1, figsize=figsize)
 
     # Plot satellite image time series
-    grid = visutils.gallery(
-        seq[batch, :, indices_rgb, :, :], brightness_factor=brightness_factor
-    )
+    grid = visutils.gallery(seq[batch, :, indices_rgb, :, :], brightness_factor=brightness_factor)
     axes[0].imshow(grid, COLORMAPS["rgb"])
     axes[0].set_title("Input sequence", fontsize=fontsize)
 
@@ -367,13 +347,9 @@ def visualize_att_for_one_head_across_time(
 
     # Plot attention mask for attention head `head` across all time steps
     for t in range(seq_length):
-        grid = visutils.gallery(
-            att[head, batch, t, :, :, :].unsqueeze(1), brightness_factor=1
-        )
+        grid = visutils.gallery(att[head, batch, t, :, :, :].unsqueeze(1), brightness_factor=1)
         axes[t + 1].imshow(grid, COLORMAPS["att"], vmin=vmin, vmax=vmax)
-        axes[t + 1].set_title(
-            f"Attention mask, head {head}, target frame {t}", fontsize=fontsize
-        )
+        axes[t + 1].set_title(f"Attention mask, head {head}, target frame {t}", fontsize=fontsize)
 
     for ax in axes.ravel():
         ax.set_axis_off()
@@ -430,9 +406,7 @@ def visualize_att_for_target_t_across_heads(
     fig, axes = plt.subplots(nrows=n_heads + 1, ncols=1, figsize=figsize, dpi=dpi)
 
     # Plot input sequence
-    grid = visutils.gallery(
-        seq[batch, :, indices_rgb, :, :], brightness_factor=brightness_factor
-    )
+    grid = visutils.gallery(seq[batch, :, indices_rgb, :, :], brightness_factor=brightness_factor)
 
     if highlight_t_target:
         # Create a red frame to highlight the target frame
@@ -445,27 +419,19 @@ def visualize_att_for_target_t_across_heads(
         if t_target < 0:
             t_target = seq.shape[1] - abs(t_target)
 
-        grid[0 : (2 * border_thickness + 1), t_target * W : (t_target + 1) * W, :] = (
-            frame_color
-        )
-        grid[-2 * border_thickness : :, t_target * W : (t_target + 1) * W, :3] = (
-            frame_color
-        )
-        grid[
-            :, t_target * W - border_thickness : t_target * W + border_thickness, :
-        ] = frame_color
+        grid[0 : (2 * border_thickness + 1), t_target * W : (t_target + 1) * W, :] = frame_color
+        grid[-2 * border_thickness : :, t_target * W : (t_target + 1) * W, :3] = frame_color
+        grid[:, t_target * W - border_thickness : t_target * W + border_thickness, :] = frame_color
         grid[
             :,
-            ((t_target + 1) * W - border_thickness) : (t_target + 1) * W
-            + border_thickness,
+            ((t_target + 1) * W - border_thickness) : (t_target + 1) * W + border_thickness,
             :,
         ] = frame_color
 
         if t_target == seq.shape[1] - 1:
             grid[
                 :,
-                ((t_target + 1) * W - 2 * border_thickness) : (t_target + 1) * W
-                + border_thickness,
+                ((t_target + 1) * W - 2 * border_thickness) : (t_target + 1) * W + border_thickness,
                 :,
             ] = frame_color
         elif t_target == 0:
@@ -483,13 +449,9 @@ def visualize_att_for_target_t_across_heads(
 
     # Plot attention masks per head for frame `t_target`
     for head in range(n_heads):
-        grid = visutils.gallery(
-            att[head, batch, t_target, :, :, :].unsqueeze(1), brightness_factor=1
-        )
+        grid = visutils.gallery(att[head, batch, t_target, :, :, :].unsqueeze(1), brightness_factor=1)
         axes[head + 1].imshow(grid, COLORMAPS["att"], vmin=vmin, vmax=vmax)
-        axes[head + 1].set_title(
-            f"Attention mask, head {head}, target frame {t_target}", fontsize=fontsize
-        )
+        axes[head + 1].set_title(f"Attention mask, head {head}, target frame {t_target}", fontsize=fontsize)
 
     for ax in axes.ravel():
         ax.set_axis_off()

@@ -10,6 +10,7 @@ import torch
 
 torch.multiprocessing.set_sharing_strategy("file_system")
 
+import albumentations as A
 import h5py
 from omegaconf import DictConfig, OmegaConf
 from torch import Tensor
@@ -137,6 +138,7 @@ class CIRCA_HDF5_Dataset(CircaPatchDataSet):
         channels: Optional[str] = "all",
         sampling_random: Optional[float] = None,
         process_data: bool = True,
+        stats: Optional[DictConfig] = None,
     ):
         self.rng = np.random.default_rng(seed=SEED)
         if hdf5_file_read is None:
@@ -158,13 +160,25 @@ class CIRCA_HDF5_Dataset(CircaPatchDataSet):
             self.include_S1 = include_S1
             self.image_size = image_size
             self.process_data = process_data
+            self.transform = None
+            if stats is not None and isinstance(stats, DictConfig):
+                self.stats = stats
+                self.transform = A.Compose(
+                    [
+                        A.Normalize(
+                            mean=self.stats["means"],
+                            std=self.stats["stds"],
+                            max_pixel_value=255.0,
+                        ),
+                        A.pytorch.transforms.ToTensorV2(),
+                    ]
+                )
 
         # TODO Potentiellement stocker dans le hdf5 les hparams sur le filtrage les channels et les masks
         self.render_occluded_above_p = render_occluded_above_p  # Fully occlude images with high cloud cover
         self.pe_strategy = pe_strategy
         self.augment = augment
-        self.channels = channels
-        self.num_channels, self.c_index_rgb, self.c_index_nir, self.s2_channels = self.setup_channels()
+        self.num_channels, self.c_index_rgb, self.c_index_nir, self.s2_channels = self.setup_channels(channels)
         (
             self.filter_settings,
             self.variable_seq_length,
@@ -218,7 +232,7 @@ class CIRCA_HDF5_Dataset(CircaPatchDataSet):
         """
         list all files in a given HDF5 file and return their details in a DataFrame.
 
-        This method iterates through the hierarchical structure of the HDF5 file,
+        This method iterates through the hierarchical structure of the HDF5 filetrue
         extracting the MGRS levels, MGRS25 levels, and window names, and compiles
         them into a pandas DataFrame.
 
@@ -240,13 +254,23 @@ class CIRCA_HDF5_Dataset(CircaPatchDataSet):
                     patches_dataset = pd.concat([patches_dataset, pd.DataFrame(data)], ignore_index=True)
         return patches_dataset
 
-    def setup_channels(self):
-        num_channels = 10
-        c_index_rgb = torch.Tensor([2, 1, 0]).long()
-        c_index_nir = torch.Tensor([6]).long()
-        s2_channels = list(np.arange(10))
+    def setup_channels(self, channels: str):
+        if channels == "all":
+            num_channels = 10
+            c_index_rgb = torch.Tensor([2, 1, 0]).long()
+            c_index_nir = torch.Tensor([6]).long()
+            s2_channels = list(np.arange(10))
+        elif channels == "bgr-nir":
+            num_channels = 4
+            c_index_rgb = torch.Tensor([2, 1, 0]).long()
+            c_index_nir = torch.Tensor([6]).long()
+            s2_channels = [0, 1, 2, 6]
+        else:
+            raise ValueError(f"Channels {channels} not recognized. Use 'all' or 'bgr-nir'.")
+
         if self.include_S1:
             num_channels += 4
+
         return num_channels, c_index_rgb, c_index_nir, s2_channels
 
     def setup_filter_settings(
@@ -734,6 +758,10 @@ class CIRCA_HDF5_Dataset(CircaPatchDataSet):
         """
         patch_data = self.etl_item(item=item)
 
+        # Select the correct channels
+        if self.num_channels != patch_data["S2"]["S2"].shape[1]:
+            patch_data["S2"]["S2"] = patch_data["S2"]["S2"][:, self.s2_channels, :, :]
+
         if t_sampled is None:
             t_sampled, masks_valid_obs = self.subsample_sequence(patch_data["valid_obs"])
         masks_valid_obs = patch_data["valid_obs"][t_sampled]
@@ -742,9 +770,13 @@ class CIRCA_HDF5_Dataset(CircaPatchDataSet):
             patch_data["S2"]["S2"][t_sampled].clone(),
             patch_data["S2"]["S2"][t_sampled].clone(),
         )
+
         if self.process_data:
             frames_input = SentinelDataProcessor.process_MS(frames_input)
+            frames_target = SentinelDataProcessor.process_MS(frames_target)
+
         s2_dates = np.asarray(patch_data["S2"]["S2_dates"])[t_sampled]
+
         if self.include_S1:
             s1 = patch_data["S1"]["S1"][t_sampled]
             if self.process_data:
