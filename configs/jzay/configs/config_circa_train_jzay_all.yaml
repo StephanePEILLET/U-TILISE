@@ -40,7 +40,7 @@ scheduler:
     gamma: 0.5
 
 training_settings:
-    batch_size: 2                          # Batch size.
+    batch_size: 5                          # Batch size.
     num_epochs: 70                       # Number of training epochs.
 
 metrics:
