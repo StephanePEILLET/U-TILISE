@@ -13,10 +13,11 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import torch
 import torchinfo
+from omegaconf import DictConfig, OmegaConf
+
 from lib.models import MODELS
 from lib.models.weight_init import weight_init
 from lib.trainer import Trainer
-from omegaconf import DictConfig, OmegaConf
 
 
 def create_output_directory(config: DictConfig) -> str:
@@ -30,19 +31,13 @@ def create_output_directory(config: DictConfig) -> str:
         output_directory:   str, path of the output directory.
     """
 
-    if (
-        "output" in config
-        and "output_directory" in config.output
-        and isinstance(config.output.output_directory, str)
-    ):
+    if "output" in config and "output_directory" in config.output and isinstance(config.output.output_directory, str):
         os.makedirs(config.output.output_directory, exist_ok=True)
 
         if "suffix" in config.output and isinstance(config.output.suffix, str):
             # The name of the output directory is the current date and time, followed by a suffix defined in the
             # configuration file
-            name = (
-                datetime.now().strftime("%Y-%m-%d_%H-%M") + "_" + config.output.suffix
-            )
+            name = datetime.now().strftime("%Y-%m-%d_%H-%M") + "_" + config.output.suffix
         else:
             # The name of the output directory is the current date and time without suffix
             name = datetime.now().strftime("%Y-%m-%d_%H-%M")
@@ -118,9 +113,7 @@ def get_default_model_settings(model, args_model: DictConfig) -> None:
             args_model[param] = val.value if isinstance(val, Enum) else val
 
 
-def get_model(
-    config: DictConfig, input_dim: int, logger: Optional[logging.Logger] = None
-):
+def get_model(config: DictConfig, input_dim: int, logger: Optional[logging.Logger] = None):
     """
     Returns a model instance and its parameter settings.
 
@@ -140,13 +133,9 @@ def get_model(
         if logger is not None:
             logger.error(f"{model_type} model is not implemented.\n")
         else:
-            raise NotImplementedError(
-                f"ERROR: {model_type} model is not implemented.\n"
-            )
+            raise NotImplementedError(f"ERROR: {model_type} model is not implemented.\n")
 
-    args_model = (
-        deepcopy(config[model_type]) if model_type in config else OmegaConf.create()
-    )
+    args_model = deepcopy(config[model_type]) if model_type in config else OmegaConf.create()
 
     if model_type == "utilise":
         args_model.input_dim = input_dim
@@ -196,21 +185,16 @@ def get_optimizer(config: DictConfig, model, logger: Optional[logging.Logger] = 
             weight_decay=config.optimizer.weight_decay,
             momentum=config.optimizer.momentum,
         )
+    elif logger is not None:
+        logger.error(f"{config.optimizer.name} optimizer is not implemented.\n")
+        sys.exit(1)
     else:
-        if logger is not None:
-            logger.error(f"{config.optimizer.name} optimizer is not implemented.\n")
-            sys.exit(1)
-        else:
-            raise NotImplementedError(
-                f"ERROR: {config.optimizer.name} optimizer is not implemented.\n"
-            )
+        raise NotImplementedError(f"ERROR: {config.optimizer.name} optimizer is not implemented.\n")
 
     return optimizer
 
 
-def get_scheduler(
-    config: DictConfig, optimizer, logger: Optional[logging.Logger] = None
-):
+def get_scheduler(config: DictConfig, optimizer, logger: Optional[logging.Logger] = None):
     """
     Returns a learning rate scheduler instance.
 
@@ -229,31 +213,22 @@ def get_scheduler(
         settings = without_keys(config.scheduler, ["name", "enabled"])
 
         if name == "ReduceLROnPlateau":
-            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-                optimizer, mode="min", verbose=True, **settings
-            )
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", verbose=True, **settings)
         elif name == "StepLR":
-            scheduler = torch.optim.lr_scheduler.StepLR(
-                optimizer, verbose=False, **settings
-            )
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, verbose=False, **settings)
         elif name == "MultiStepLR":
             scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, **settings)
         elif name == "ExponentialLR":
-            scheduler = torch.optim.lr_scheduler.ExponentialLR(
-                optimizer, verbose=False, **settings
-            )
+            scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, verbose=False, **settings)
         elif name == "CosineAnnealingLR":
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
                 optimizer, verbose=False, T_max=config.training_settings.num_epochs
             )
+        elif logger:
+            logger.error(f"{name} learning rate scheduler is not implemented.\n")
+            sys.exit(1)
         else:
-            if logger:
-                logger.error(f"{name} learning rate scheduler is not implemented.\n")
-                sys.exit(1)
-            else:
-                raise NotImplementedError(
-                    f"ERROR: {name} learning rate scheduler is not implemented.\n"
-                )
+            raise NotImplementedError(f"ERROR: {name} learning rate scheduler is not implemented.\n")
     else:
         scheduler = None
 
@@ -262,6 +237,8 @@ def get_scheduler(
 
 def get_trainer(
     config: DictConfig,
+    train_dset: torch.utils.data.Dataset,
+    val_dset: torch.utils.data.Dataset,
     train_loader: torch.utils.data.DataLoader,
     val_loader: torch.utils.data.DataLoader,
     model,
@@ -325,15 +302,11 @@ def get_trainer(
                 shutil.copy(path_model, Path(args.checkpoint_dir) / "Model_best.pth")
         else:
             # Pretrained model logged in tensorboard
-            experiment_tboard_log_dir = (
-                experiment_directory.parent / "logs" / experiment_directory.name
-            )
+            experiment_tboard_log_dir = experiment_directory.parent / "logs" / experiment_directory.name
 
             # Find the previous tensorboard files and copy them to the new experiments output folder
             if os.path.isdir(experiment_tboard_log_dir):
-                tb_files = glob.glob(
-                    os.path.join(experiment_tboard_log_dir, "events.*")
-                )
+                tb_files = glob.glob(os.path.join(experiment_tboard_log_dir, "events.*"))
                 for tb_file in tb_files:
                     shutil.copy(tb_file, Path(args.checkpoint_dir) / Path(tb_file).name)
     else:
@@ -342,7 +315,16 @@ def get_trainer(
 
     args.max_seq_length = args.data.max_seq_length
 
-    return Trainer(args, train_loader, val_loader, model, optimizer, scheduler)
+    return Trainer(
+        args,
+        train_dset,
+        val_dset,
+        train_loader,
+        val_loader,
+        model,
+        optimizer,
+        scheduler,
+    )
 
 
 def set_seed(seed: int) -> None:

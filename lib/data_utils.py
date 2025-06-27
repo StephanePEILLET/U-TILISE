@@ -6,6 +6,8 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
+import torch.utils
+import torch.utils.data
 from omegaconf import DictConfig
 from torch import Tensor
 from torch.nn import functional as F
@@ -118,17 +120,19 @@ def pad_collate(batch: List[Any], pad_value: Union[int, float] = 0) -> Any:
 
 
 def get_dataloader(
+    dset: torch.utils.data.Dataset,
     config: DictConfig,
-    phase: str,
     pin_memory: bool = True,
     drop_last: bool = False,
-    logger: Optional[logging.Logger] = None,
+    subset: Optional[Union[bool, int]] = False,
 ) -> torch.utils.data.dataloader.DataLoader:
     """Returns a torch.utils.data.DataLoader instance."""
 
-    dset = get_dataset(config, phase, logger)
     variable_seq_length = getattr(dset, "variable_seq_length", False) and config.training_settings.batch_size > 1
     # shuffle = config["misc"]["run_mode"] != "test"
+
+    if subset:
+        dset = torch.utils.data.Subset(dset, range(subset))
 
     if variable_seq_length:
         collate_fn = partial(pad_collate, pad_value=config.method.pad_value)
@@ -144,7 +148,6 @@ def get_dataloader(
         pin_memory=pin_memory,
         drop_last=drop_last,
     )
-
     return loader
 
 
@@ -182,12 +185,11 @@ def get_dataset(config: DictConfig, phase: str, logger: Optional[logging.Logger]
     else:
         augment = False
         dset = Dataset(
-            **without_keys(config.data, ["dataset"]),
+            **without_keys(config.data, ["dataset", "subset"]),
             mask_kwargs=config.mask,
-            augment=False,
-            # phase=phase,
+            augment=augment,
+            phase=phase,
         )
-
     return dset
 
 

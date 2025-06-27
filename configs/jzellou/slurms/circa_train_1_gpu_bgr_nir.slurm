@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=all       # nom du job
+#SBATCH --job-name=bgr_nir       # nom du job
 #SBATCH --nodes=1                    # on demande 2 noeuds
 #SBATCH --ntasks-per-node=1          # avec 2 tache par noeud (= nombre de GPU ici)
 #SBATCH --gres=gpu:1                 # nombre de GPU (1/4 des GPU)
@@ -26,5 +26,5 @@ eval "$(conda shell.bash hook)"
 conda deactivate
 conda activate cloud_reconstruction
 
-srun --cpu-bind=none python /mnt/common/hdd/home/SPeillet/U-TILISE/run_train.py /mnt/common/hdd/home/SPeillet/U-TILISE/configs/config_circa_train_jzellou_all.yaml --save_dir /mnt/common/hdd/home/SPeillet/outputs
+srun --cpu-bind=none python /mnt/common/hdd/home/SPeillet/U-TILISE/run_train.py /mnt/common/hdd/home/SPeillet/U-TILISE/configs/jzellou/configs/config_circa_train_jzellou_bgr_nir.yaml --save_dir /mnt/common/hdd/home/SPeillet/outputs
 echo "Job complete"

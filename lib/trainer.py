@@ -60,6 +60,8 @@ class Trainer:
     def __init__(
         self,
         args: DictConfig,
+        train_dset: torch.utils.data.Dataset,
+        val_dset: torch.utils.data.Dataset,
         train_loader: torch.utils.data.dataloader.DataLoader,
         val_loader: torch.utils.data.dataloader.DataLoader,
         model,
@@ -70,7 +72,7 @@ class Trainer:
         self.args = args
         self.use_wandb = bool("wandb" in args)
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
+        self.dataset = {"train": train_dset, "val": val_dset}
         self.dataloader = {"train": train_loader, "val": val_loader}
         self.model = model
         self.optimizer = optimizer
@@ -276,7 +278,7 @@ class Trainer:
 
         else:
             # Get specific sample and introduce batch dimension
-            batch = self.dataloader["val"].dataset.__getitem__(sample_index)
+            batch = self.dataset["val"].__getitem__(sample_index)
             for k, v in batch.items():
                 if isinstance(v, torch.Tensor):
                     batch[k] = v.unsqueeze(0)

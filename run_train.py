@@ -71,32 +71,52 @@ def setup_logging(config: OmegaConf) -> logging.Logger:
     return prepare_logger("root_logger", level=logging.INFO, log_to_console=True, log_file=log_file)
 
 
+def setup_datasets(
+    config: OmegaConf,
+    logger: logging.Logger,
+):
+    train_dset = data_utils.get_dataset(config, phase="train", logger=logger)
+    val_dset = data_utils.get_dataset(config, phase="val", logger=logger)
+    return train_dset, val_dset
+
+
 def setup_data_loaders(
-    config: OmegaConf, logger: logging.Logger
+    train_dset: torch.utils.data.Dataset,
+    val_dset: torch.utils.data.Dataset,
+    config: OmegaConf,
+    logger: logging.Logger,
 ) -> tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader]:
     """Initialize and return train and validation data loaders."""
     logger.info("\nInitialize data loader (training set)...")
+
+    subset = config.data.get("subset", False)
+    if subset and isinstance(config.data.subset, bool):
+        subset = 10
+
     train_loader = data_utils.get_dataloader(
+        train_dset,
         config,
-        # phase="train",
-        phase="val",  # Pour le debug
         pin_memory=config.misc.pin_memory,
         drop_last=True,
-        logger=logger,
+        subset=subset,
     )
 
     logger.info("Initialize data loader (validation set)...\n")
     val_loader = data_utils.get_dataloader(
+        val_dset,
         config,
-        phase="val",
         pin_memory=config.misc.pin_memory,
         drop_last=False,
-        logger=logger,
+        subset=subset,
     )
 
-    logger.info("Number of training samples: %d", train_loader.dataset.__len__())
-    logger.info("Number of validation samples: %d", val_loader.dataset.__len__())
-    logger.info("Variable sequence lengths: %r\n", train_loader.dataset.variable_seq_length)
+    if subset:
+        logger.info("Number of training samples: %d", subset)
+        logger.info("Number of validation samples: %d", subset)
+    else:
+        logger.info("Number of training samples: %d", train_dset.__len__())
+        logger.info("Number of validation samples: %d", val_dset.__len__())
+    logger.info("Variable sequence lengths: %r\n", train_dset.variable_seq_length)
 
     return train_loader, val_loader
 
@@ -115,12 +135,12 @@ def setup_output_directories(config: OmegaConf, logger: logging.Logger) -> None:
     config_utils.write_config(config, config_file)
 
 
-def setup_model(config: OmegaConf, train_loader: torch.utils.data.DataLoader, logger: logging.Logger):
+def setup_model(config: OmegaConf, train_dset: torch.utils.data.Dataset, logger: logging.Logger):
     """Setup and configure the model."""
     logger.info("\nModel Architecture\n------------------\n")
     logger.info("Architecture: %s", config.method.model_type)
 
-    input_dim = train_loader.dataset.num_channels
+    input_dim = train_dset.num_channels
     model, args_model = utils.get_model(config, input_dim, logger)
     logger.info("Number of trainable parameters: %d\n", utils.count_model_parameters(model))
 
@@ -136,9 +156,9 @@ def setup_model(config: OmegaConf, train_loader: torch.utils.data.DataLoader, lo
             file,
             model,
             config.training_settings.batch_size,
-            train_loader.dataset.seq_length,
+            train_dset.seq_length,
             input_dim,
-            train_loader.dataset.image_size,
+            train_dset.image_size,
         )
     return model, args_model
 
@@ -176,14 +196,17 @@ def main(args: argparse.Namespace) -> None:
     if config.misc.random_seed is not None:
         utils.set_seed(config.misc.random_seed)
 
+    # Setup datasets
+    train_dset, val_dset = setup_datasets(config, logger)
+
     # Setup data loaders
-    train_loader, val_loader = setup_data_loaders(config, logger)
+    train_loader, val_loader = setup_data_loaders(train_dset, val_dset, config, logger)
 
     # Setup output directories
     setup_output_directories(config, logger)
 
     # Setup model
-    model, _ = setup_model(config, train_loader, logger)
+    model, _ = setup_model(config, train_dset, logger)
 
     # Log system information
     log_system_info(logger)
@@ -195,7 +218,7 @@ def main(args: argparse.Namespace) -> None:
         utils.set_seed(config.misc.random_seed)
 
     # Initialize the trainer and start training
-    trainer = utils.get_trainer(config, train_loader, val_loader, model, optimizer, scheduler)
+    trainer = utils.get_trainer(config, train_dset, val_dset, train_loader, val_loader, model, optimizer, scheduler)
     trainer.train()
 
 

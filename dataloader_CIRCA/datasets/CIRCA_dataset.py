@@ -47,9 +47,7 @@ class CircaPatchDataSet(Dataset):
         """
         self.data_optique = Path(data_optique)
         self.data_radar = Path(data_radar)
-        self.image_size = (
-            (image_size, image_size) if isinstance(image_size, int) else image_size
-        )
+        self.image_size = (image_size, image_size) if isinstance(image_size, int) else image_size
         self.overlap = overlap
         self.load_dataset = load_dataset
         self.shuffle = shuffle
@@ -82,9 +80,7 @@ class CircaPatchDataSet(Dataset):
             self.setup_patches()
 
         if self.shuffle:
-            self.patches_dataset = self.patches_dataset.sample(frac=1).reset_index(
-                drop=True
-            )
+            self.patches_dataset = self.patches_dataset.sample(frac=1).reset_index(drop=True)
 
     def load_exported_data(self, path_data: Union[str, Path]) -> None:
         """
@@ -101,9 +97,7 @@ class CircaPatchDataSet(Dataset):
             "dates_S1_ASC",
             "dates_S1_DESC",
         ]
-        self.patches_dataset[cols_to_convert] = self.patches_dataset[
-            cols_to_convert
-        ].map(ast.literal_eval)
+        self.patches_dataset[cols_to_convert] = self.patches_dataset[cols_to_convert].map(ast.literal_eval)
 
         if (
             self.patches_dataset.loc[0, "window"][2] != self.image_size[0]
@@ -120,16 +114,10 @@ class CircaPatchDataSet(Dataset):
         # Recreate the dates dictionary after loading
         self.dates_dict = {
             mgrs25: {
-                "S2": self.patches_dataset[self.patches_dataset["mgrs25"] == mgrs25][
-                    "dates_S2"
-                ].values[0],
+                "S2": self.patches_dataset[self.patches_dataset["mgrs25"] == mgrs25]["dates_S2"].values[0],
                 "S1": {
-                    "ASC": self.patches_dataset[
-                        self.patches_dataset["mgrs25"] == mgrs25
-                    ]["dates_S1_ASC"].values[0],
-                    "DESC": self.patches_dataset[
-                        self.patches_dataset["mgrs25"] == mgrs25
-                    ]["dates_S1_DESC"].values[0],
+                    "ASC": self.patches_dataset[self.patches_dataset["mgrs25"] == mgrs25]["dates_S1_ASC"].values[0],
+                    "DESC": self.patches_dataset[self.patches_dataset["mgrs25"] == mgrs25]["dates_S1_DESC"].values[0],
                 },
             }
             for mgrs25 in self.patches_dataset["mgrs25"].unique()
@@ -139,13 +127,9 @@ class CircaPatchDataSet(Dataset):
         """
         Sets up the patches by processing the data and creating a DataFrame.
         """
-        self.patches_dataset = pd.DataFrame(
-            columns=["patch", "window", "mgrs", "mgrs25", "files"]
-        ).astype(object)
+        self.patches_dataset = pd.DataFrame(columns=["patch", "window", "mgrs", "mgrs25", "files"]).astype(object)
 
-        for _, row in tqdm(
-            self.zones_dataset.iterrows(), total=len(self.zones_dataset), leave=False
-        ):
+        for _, row in tqdm(self.zones_dataset.iterrows(), total=len(self.zones_dataset), leave=False):
             for window in row.windows:
                 windows_str = "_".join(map(str, window))
                 patch_df = pd.DataFrame(
@@ -160,17 +144,13 @@ class CircaPatchDataSet(Dataset):
                         "dates_S1_DESC": [row.dates_S1_DESC],
                     }
                 )
-                self.patches_dataset = pd.concat(
-                    [self.patches_dataset, patch_df], ignore_index=True
-                )
+                self.patches_dataset = pd.concat([self.patches_dataset, patch_df], ignore_index=True)
 
     def setup_zones(self) -> None:
         """
         Sets up the zones by processing the data and creating a DataFrame.
         """
-        self.zones_dataset = pd.DataFrame(
-            columns=["mgrs", "mgrs25", "files", "windows"]
-        ).astype(object)
+        self.zones_dataset = pd.DataFrame(columns=["mgrs", "mgrs25", "files", "windows"]).astype(object)
         self.dates_dict = {}
 
         for mgrs in tqdm(list(self.data_optique.iterdir()), leave=False, desc="mgrs"):
@@ -231,9 +211,7 @@ class CircaPatchDataSet(Dataset):
         df_temp = pd.DataFrame(data).astype(object)
         self.zones_dataset = pd.concat([self.zones_dataset, df_temp], ignore_index=True)
 
-    def export_dataset(
-        self, outpath: Union[str, Path] = "datasetCIRCAUnCRtainTS.csv"
-    ) -> None:
+    def export_dataset(self, outpath: Union[str, Path] = "datasetCIRCAUnCRtainTS.csv") -> None:
         """
         Exports the dataset to a CSV file.
 
@@ -276,16 +254,12 @@ class CircaPatchDataSet(Dataset):
         Returns:
         - Optional[int]: The index of the patch in the DataFrame. Returns None if the patch is not found.
         """
-        matching_patches = self.patches_dataset[
-            self.patches_dataset["patch"] == patch_name
-        ]
+        matching_patches = self.patches_dataset[self.patches_dataset["patch"] == patch_name]
         if not matching_patches.empty:
             return matching_patches.index.values[0]
         return None  # Returns None if no matching patch is found
 
-    def get_random_patch_by_mgrs(
-        self, mgrs: str
-    ) -> Dict[str, Union[np.ndarray, str, list]]:
+    def get_random_patch_by_mgrs(self, mgrs: str) -> Dict[str, Union[np.ndarray, str, list]]:
         """
         Retrieves a random patch associated with a given MGRS code.
 
@@ -311,9 +285,7 @@ class CircaPatchDataSet(Dataset):
         patch_data = self.patches_dataset.iloc[item]
         patch_window = Window(*patch_data.window)
 
-        patch_S2_array = SentinelDataProcessor.read_MS(
-            patch_data.files[0], patch_window
-        )  # Extraction données S2
+        patch_S2_array = SentinelDataProcessor.read_MS(patch_data.files[0], patch_window)  # Extraction données S2
 
         if self.no_filter:
             patch_S2_curated = patch_S2_array[:, :, :, 0:10]
@@ -348,12 +320,8 @@ class CircaPatchDataSet(Dataset):
                 self.dates_dict[patch_data.mgrs25]["S1"]["DESC"],
             )
 
-            path_S1 = (
-                patch_data.files[1] if orbit_type == "ASC" else patch_data.files[2]
-            )
-            patch_S1_array = SentinelDataProcessor.read_SAR(
-                path_S1, patch_window
-            )  # Extraction données S1
+            path_S1 = patch_data.files[1] if orbit_type == "ASC" else patch_data.files[2]
+            patch_S1_array = SentinelDataProcessor.read_SAR(path_S1, patch_window)  # Extraction données S1
             bands_S1 = [patch_S1_array[t_index] for t_index in index_S1_curated]
             patch_S1_curated = np.stack(bands_S1, axis=0)
             sample.update(

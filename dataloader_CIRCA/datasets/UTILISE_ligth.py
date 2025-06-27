@@ -32,80 +32,99 @@ MAX_SEQ_LENGTH = 30
 MIN_SEQ_LENGTH = 5
 SEED = 42
 
-MGRS_SPLITS = {
+MGRSC_SPLITS = {
     "train": [
-        "31TGJ",
-        "31TEK",
-        "30TYP",
-        "31UDR",
-        "30UXV",
-        "31TEN",
-        "31TFN",
-        "30TXR",
-        "31TDH",
-        "31UFQ",
-        "30TXS",
-        "31UCP",
-        "31TGK",
-        "31UFP",
-        "31TCN",
-        "30TWT",
-        "31UDS",
-        "31TFK",
-        "31TFL",
-        "31UER",
-        "31TCK",
-        "30TYR",
-        "31TGL",
-        "32UMV",
-        "31UDP",
-        "31TCJ",
-        "31TFJ",
-        "30TYQ",
-        "31TCH",
-        "30UVU",
-        "31TDM",
-        "31TEL",
-        "30TYS",
-        "31TDJ",
+        "MGRS25-31TDH_row-2_col-4",
+        "MGRS25-31UFQ_row-3_col-3",
+        "MGRS25-31UFQ_row-4_col-2",
+        "MGRS25-31UDP_row-2_col-3",
+        "MGRS25-31TFJ_row-3_col-2",
+        "MGRS25-31TGL_row-3_col-3",
+        "MGRS25-31TEL_row-4_col-4",
+        "MGRS25-31TCJ_row-4_col-2",
+        "MGRS25-31UER_row-4_col-3",
+        "MGRS25-30TXS_row-4_col-2",
+        "MGRS25-31TFL_row-3_col-2",
+        "MGRS25-31TGJ_row-2_col-2",
+        "MGRS25-31TFN_row-4_col-2",
+        "MGRS25-31TGK_row-4_col-2",
+        "MGRS25-31TCK_row-2_col-3",
+        "MGRS25-30TYP_row-4_col-3",
+        "MGRS25-30UVU_row-3_col-2",
+        "MGRS25-30TWT_row-2_col-3",
+        "MGRS25-31UFP_row-4_col-2",
+        "MGRS25-31UCP_row-4_col-4",
+        "MGRS25-30TXS_row-3_col-4",
+        "MGRS25-31UFP_row-2_col-2",
+        "MGRS25-31TGK_row-3_col-3",
+        "MGRS25-30TYR_row-3_col-3",
+        "MGRS25-31TCJ_row-3_col-3",
+        "MGRS25-31TEK_row-2_col-3",
+        "MGRS25-31TDM_row-4_col-3",
+        "MGRS25-31TFN_row-2_col-2",
+        "MGRS25-31TFJ_row-2_col-3",
+        "MGRS25-31TGL_row-3_col-2",
+        "MGRS25-31TCK_row-2_col-2",
+        "MGRS25-30TXS_row-4_col-3",
+        "MGRS25-31UDS_row-3_col-2",
+        "MGRS25-30TYR_row-2_col-4",
+        "MGRS25-31TDJ_row-2_col-3",
+        "MGRS25-31TDJ_row-2_col-2",
+        "MGRS25-31TFK_row-4_col-2",
+        "MGRS25-31UDP_row-4_col-4",
+        "MGRS25-30TYQ_row-4_col-3",
+        "MGRS25-30UXV_row-3_col-2",
+        "MGRS25-31TCH_row-2_col-2",
+        "MGRS25-31TFN_row-2_col-4",
+        "MGRS25-31TCN_row-3_col-4",
+        "MGRS25-30TXS_row-3_col-3",
+        "MGRS25-30TXR_row-4_col-2",
+        "MGRS25-30UVU_row-4_col-3",
+        "MGRS25-31UDR_row-3_col-4",
+        "MGRS25-30TXS_row-3_col-2",
+        "MGRS25-30TYP_row-3_col-3",
+        "MGRS25-31UFP_row-3_col-2",
+        "MGRS25-30TYQ_row-4_col-4",
+        "MGRS25-31TEN_row-4_col-3",
     ],
     "val": [
-        "31TGJ",
-        "31TEK",
-        "30TYP",
-        "31UDR",
-        "30UXV",
-        "31TEN",
-        "31TFN",
-        "30TXR",
-        "31TDH",
-        "31UFQ",
-        "30TXS",
-        "31UCP",
-        "31TGK",
-        "31UFP",
-        "31TCN",
-        "30TWT",
-        "31UDS",
-        "31TFK",
-        "31TFL",
-        "31UER",
-        "31TCK",
-        "30TYR",
-        "31TGL",
-        "32UMV",
-        "31UDP",
-        "31TCJ",
-        "31TFJ",
-        "30TYQ",
-        "31TCH",
-        "30UVU",
-        "31TDM",
-        "31TEL",
-        "30TYS",
-        "31TDJ",
+        "MGRS25-31UDS_row-3_col-4",
+        "MGRS25-32UMV_row-4_col-2",
+        "MGRS25-31TFK_row-3_col-3",
+        "MGRS25-31TDJ_row-3_col-2",
+        "MGRS25-31UDR_row-4_col-4",
+        "MGRS25-31UFP_row-3_col-3",
+        "MGRS25-31UDP_row-3_col-2",
+        "MGRS25-31TGL_row-4_col-2",
+        "MGRS25-31TGJ_row-3_col-2",
+        "MGRS25-31TEL_row-4_col-3",
+        "MGRS25-31TEN_row-2_col-3",
+        "MGRS25-31TEK_row-2_col-4",
+        "MGRS25-30TYP_row-2_col-3",
+        "MGRS25-31UDP_row-4_col-2",
+        "MGRS25-31TEL_row-3_col-4",
+        "MGRS25-30TXR_row-3_col-3",
+        "MGRS25-31TFL_row-4_col-4",
+        "MGRS25-31TEK_row-4_col-2",
+        "MGRS25-31TFK_row-4_col-3",
+        "MGRS25-30TYS_row-4_col-4",
+        "MGRS25-31UDR_row-2_col-2",
+        "MGRS25-31TFL_row-3_col-4",
+        "MGRS25-30UXV_row-2_col-2",
+        "MGRS25-31TFJ_row-4_col-2",
+        "MGRS25-31UFP_row-4_col-4",
+        "MGRS25-31UDS_row-4_col-3",
     ],
-    "test": ["31UDR", "31UFQ", "31UDS", "31TFK", "32TLT", "31TDJ"],
+    "test": [
+        "MGRS25-31TDJ_row-3_col-4",
+        "MGRS25-31TFK_row-2_col-3",
+        "MGRS25-31TFK_row-3_col-2",
+        "MGRS25-31UDR_row-2_col-4",
+        "MGRS25-31UDS_row-3_col-3",
+        "MGRS25-31UDS_row-4_col-2",
+        "MGRS25-31UFQ_row-4_col-4",
+        "MGRS25-32TLT_row-2_col-4",
+    ],
 }
 
 
@@ -174,7 +193,6 @@ class CIRCA_HDF5_Dataset(CircaPatchDataSet):
                     ]
                 )
 
-        # TODO Potentiellement stocker dans le hdf5 les hparams sur le filtrage les channels et les masks
         self.render_occluded_above_p = render_occluded_above_p  # Fully occlude images with high cloud cover
         self.pe_strategy = pe_strategy
         self.augment = augment
@@ -206,27 +224,21 @@ class CIRCA_HDF5_Dataset(CircaPatchDataSet):
 
     def splits_samples(self, patches_dataset: pd.DataFrame, phase: str) -> pd.DataFrame:
         if phase is not None:
-            if phase in MGRS_SPLITS:
-                patches_dataset = patches_dataset[patches_dataset["mgrs"].isin(MGRS_SPLITS[self.phase])].reset_index(
+            if phase in MGRSC_SPLITS:
+                patches_dataset = patches_dataset[patches_dataset["mgrs25"].isin(MGRSC_SPLITS[self.phase])].reset_index(
                     drop=True
                 )
             elif phase == "train+val":
                 patches_dataset = patches_dataset[
-                    patches_dataset["mgrs"].isin(MGRS_SPLITS["train"] + MGRS_SPLITS["val"])
+                    patches_dataset["mgrs25"].isin(MGRSC_SPLITS["train"] + MGRSC_SPLITS["val"])
                 ].reset_index(drop=True)
             elif phase == "all":
                 pass
             else:
                 raise ValueError(f"Phase {phase} not recognized. Use 'train', 'val', 'train+val', or 'all'.")
-
-            if (phase in ["train", "val"]) and (MGRS_SPLITS["train"] == MGRS_SPLITS["val"]):
-                # If train and val are the same, we just return the dataset as is
-                if phase == "train":
-                    patches_dataset = patches_dataset.sample(frac=0.9, random_state=SEED).reset_index(drop=True)
-                elif phase == "val":
-                    patches_dataset = patches_dataset.sample(frac=0.1, random_state=SEED).reset_index(drop=True)
-
-        return patches_dataset
+            return patches_dataset
+        else:
+            raise ValueError("Phase is not defined. Use 'train', 'val', 'train+val', or 'all'.")
 
     def list_files_in_hdf5(self, hdf5_file: Union[str, Path]) -> pd.DataFrame:
         """
