@@ -1,4 +1,3 @@
-import json
 import logging
 import logging.config
 import os
@@ -68,7 +67,6 @@ class Trainer:
         optimizer,
         scheduler,
     ):
-        self.train_loss_dict, self.val_loss_dict = {}, {}
         self.args = args
         self.use_wandb = bool("wandb" in args)
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -82,10 +80,6 @@ class Trainer:
 
         self.compute_losses = TrainLoss(self.args.loss)
         self.compute_metrics = EvalMetrics(self.args.metrics)
-        self.num_train_iter = 0
-        self.num_val_iter = 0
-        self.train_loss_iter_dict = {}
-        self.val_loss_iter_dict = {}
 
         # Losses: Initialize statistics
         self.train_stats = self._stats_meter(stats_type="loss")
@@ -208,7 +202,6 @@ class Trainer:
                 wandb.log(stats, step=self.iter)
         elif phase == "train":
             for k, v in self.train_stats.items():
-                # self.train_loss_dict
                 self.writer.add_scalar("train_losses/" + k, v.avg, self.iter)
             for k, v in self.train_metrics.items():
                 self.writer.add_scalar("train_metrics/" + k, v.avg, self.iter)
@@ -422,15 +415,6 @@ class Trainer:
 
                 self.epoch += 1
 
-        with open(os.path.join(self.args.save_dir, "train_loss.json"), "w") as f:
-            json.dump(self.train_loss_dict, f, indent=4)
-        with open(os.path.join(self.args.save_dir, "val_loss.json"), "w") as f:
-            json.dump(self.val_loss_dict, f, indent=4)
-        with open(os.path.join(self.args.save_dir, "train_loss_iter.json"), "w") as f:
-            json.dump(self.train_loss_iter_dict, f, indent=4)
-        with open(os.path.join(self.args.save_dir, "val_loss_iter.json"), "w") as f:
-            json.dump(self.val_loss_iter_dict, f, indent=4)
-
         time_elapsed = int(time.time() - start_time)
         self.logger.info(
             "\n\nTraining finished!\nTraining time: %dd %dh %dm %ds" % seconds_to_dd_hh_mm_ss(time_elapsed)
@@ -466,8 +450,6 @@ class Trainer:
             for i, batch in enumerate(tnr_train):
                 self._log_iter_epoch()  # Itération à l'epoch
                 loss_dict, metrics, loss = self.inference_one_batch(batch, phase="train")
-                self.train_loss_iter_dict[self.num_train_iter] = loss_dict
-                self.num_train_iter += 1
                 # Update to stats_meter
                 # self.train_stats.update(**loss_dict)
                 # self.train_metrics.update(**metrics)
@@ -517,13 +499,7 @@ class Trainer:
                         self.train_stats[key].reset()
                     for key in self.train_metrics:
                         self.train_metrics[key].reset()
-
                 self.iter += 1
-
-            self.train_loss_dict[self.epoch] = {
-                "avg": self.train_stats.total_loss.avg,
-                "val": self.train_stats.total_loss.val,
-            }
 
     def validate_epoch(self, tnr=None) -> None:
         # Initialize stats meter
@@ -538,19 +514,11 @@ class Trainer:
             for batch_idx, batch in enumerate(tnr_val):
                 loss_dict, metrics = self.inference_one_batch(batch, phase="val")
 
-                self.val_loss_iter_dict[self.num_val_iter] = loss_dict
-                self.num_val_iter += 1
-
                 # Update to stats_meter
                 for key, value in loss_dict.items():
                     self.val_stats[key].update(value)
                 for key, value in metrics.items():
                     self.val_metrics[key].update(value)
-
-        self.val_loss_dict[self.epoch] = {
-            "avg": self.val_stats.total_loss.avg,
-            "val": self.val_stats.total_loss.val,
-        }
 
         if tnr is not None:
             tnr.set_postfix(
