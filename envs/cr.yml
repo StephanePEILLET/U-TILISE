@@ -13,7 +13,6 @@ dependencies:
   - torchmetrics ==1.2.1
   - lightning ==2.3.3
   - numpy >=1.22.4,<2
-  - rasterio>=1.2.8,<2
   - pandas>=1.4.3
   - pillow >=9.3.0,<10
   - PyYAML>=6.0
@@ -23,7 +22,6 @@ dependencies:
   - einops >=0.3,<0.5
   - fiona
   - omegaconf >=2.2.3,<3
-  - pyproj >=2.2,<4
   - rtree >=1,<2
   - shapely
   - rich>=13.4.1
@@ -54,6 +52,8 @@ dependencies:
       - dominate
       - visdom
       - fvcore
+      - pyproj
+      - rasterio
       - s2cloudless
       - nestargs
       - albumentations
