@@ -40,8 +40,8 @@ scheduler:
     gamma: 0.5
 
 training_settings:
-    batch_size: 2                          # Batch size.
-    num_epochs: 30                       # Number of training epochs.
+    batch_size: 6                          # Batch size.
+    num_epochs: 120                       # Number of training epochs.
 
 metrics:
     masked_metrics: true                   # True to compute all pixel-based metrics only for those pixels with cloud-free target reflectance, False to evaluate all pixels.

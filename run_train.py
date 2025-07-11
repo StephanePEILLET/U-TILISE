@@ -50,7 +50,10 @@ def setup_configuration(args: argparse.Namespace) -> OmegaConf:
         sys.exit(1)
 
     # Augment/overwrite the default parameter settings with the runtime arguments given by the user
-    cfg_default = config_utils.read_config("configs/default.yaml")
+    # Get the directory of the current script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    default_config_path = os.path.join(script_dir, "configs", "default.yaml")
+    cfg_default = config_utils.read_config(default_config_path)
     config = OmegaConf.merge(cfg_default, cfg_custom)
     config.output.output_directory = args.save_dir
 

@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=bgr_nir_sar       # nom du job
+#SBATCH --job-name=utilise_bgr_nir_sar       # nom du job
 #SBATCH --nodes=1                    # on demande 2 noeuds
 #SBATCH --ntasks-per-node=1          # avec 2 tache par noeud (= nombre de GPU ici)
 #SBATCH --gres=gpu:1                 # nombre de GPU (1/4 des GPU)
@@ -8,8 +8,8 @@
 #SBATCH --mem=100G       # Memory proportional to GPUs: 32000 Cedar, 64000 Graham.
 #SBATCH --partition=jean-zellou
 
-#SBATCH -e /mnt/stores/store-DAI/tmp/speillet/3str_expes/logs/preload_-%j.out
-#SBATCH -o /mnt/stores/store-DAI/tmp/speillet/3str_expes/logs/cpreload_-%j.out
+#SBATCH -e /mnt/stores/store-DAI/tmp/speillet/3str_expes/logs/utilise_bgr_nir_sar_-%j.out
+#SBATCH -o /mnt/stores/store-DAI/tmp/speillet/3str_expes/logs/utilise_bgr_nir_sar_-%j.out
 
 cat "$0"
 echo "========================================================================================"
@@ -26,5 +26,5 @@ eval "$(conda shell.bash hook)"
 conda deactivate
 conda activate cloud_reconstruction
 
-srun --cpu-bind=none python /mnt/common/hdd/home/SPeillet/U-TILISE/run_train.py /mnt/common/hdd/home/SPeillet/U-TILISE/configs/jzellou/configs/config_circa_train_jzellou_bgr_nir_sar.yaml --save_dir /mnt/common/hdd/home/SPeillet/outputs
+srun --cpu-bind=none python /mnt/common/hdd/home/SPeillet/U-TILISE/run_train.py /mnt/common/hdd/home/SPeillet/U-TILISE/configs/jzellou/configs/config_circa_train_jzellou_bgr_nir_sar.yaml --save_dir /mnt/common/hdd/home/SPeillet/outputs/U-TILISE/bgr_nir_sar
 echo "Job complete"
