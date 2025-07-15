@@ -4,16 +4,16 @@ import sys
 import time
 
 import torch
+from omegaconf import DictConfig, OmegaConf
+from prodict import Prodict
+from tqdm import tqdm
+
 from lib import config_utils
 from lib.arguments import eval_parser
 from lib.data_utils import get_dataset
 from lib.eval_tools import Imputation
 from lib.logger import AverageMeter
 from lib.metrics import EvalMetrics
-from omegaconf import DictConfig, OmegaConf
-from tqdm import tqdm
-
-from prodict import Prodict
 
 
 def print_stats(stats, evaluator, print_only_masked=False):
@@ -32,29 +32,20 @@ def print_stats(stats, evaluator, print_only_masked=False):
         print("\nMetrics computed over all masked input pixels:")
         for k, v in stats.items():
             if "occluded_input_pixels" in k:
-                metric = (
-                    k.replace(prefix, "")
-                    .replace("_occluded_input_pixels", "")
-                    .replace("_images", "")
-                )
+                metric = k.replace(prefix, "").replace("_occluded_input_pixels", "").replace("_images", "")
                 print(f"{metric.upper()}: {v}")
 
         if print_only_masked is False:
             print("\nMetrics computed over all observed input pixels:")
             for k, v in stats.items():
                 if "observed_input_pixels" in k:
-                    metric = (
-                        k.replace(prefix, "")
-                        .replace("_observed_input_pixels", "")
-                        .replace("_images", "")
-                    )
+                    metric = k.replace(prefix, "").replace("_observed_input_pixels", "").replace("_images", "")
                     print(f"{metric.upper()}: {v}")
 
 
 class Evaluator:
     def __init__(self, args: argparse.Namespace, args_test_data: DictConfig):
         self.args = args
-
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.args_metrics = {
             "masked_metrics": True,
@@ -72,22 +63,27 @@ class Evaluator:
         _ = torch.set_grad_enabled(False)
 
         if not os.path.isfile(args.config_file):
-            raise FileNotFoundError(
-                f"Cannot find the configuration file used during training: {args.config_file}\n"
-            )
+            raise FileNotFoundError(f"Cannot find the configuration file used during training: {args.config_file}\n")
 
         # Read config file used during training
         self.config = config_utils.read_config(args.config_file)
 
         # Merge generic data settings (used during training) with test-specific data settings
         self.config.data.update(args_test_data)
-        self.config.data.preprocessed = True
+
+        if self.config.data.dataset != "circa":
+            self.config.data.preprocessed = True
 
         # Evaluate the entire image sequence
         self.config.data.max_seq_length = None
 
+        if args_test_data.mode is not None:
+            phase = args_test_data.mode
+        else:
+            phase = "test"
+
         # Get the data loader
-        dset = get_dataset(self.config, phase="test")
+        dset = get_dataset(self.config, phase=phase)
         self.dataloader = torch.utils.data.DataLoader(
             dataset=dset,
             batch_size=1,
@@ -102,6 +98,7 @@ class Evaluator:
             method=self.args.method,
             mode=args.mode,
             checkpoint=self.args.checkpoint,
+            config_file_test=self.args.test_data.test_config,
         )
 
     def evaluate(self):
@@ -130,9 +127,7 @@ class Evaluator:
                 pass
             elif val:
                 metric_name = (
-                    f"masked_{metric}"
-                    if (self.args_metrics["masked_metrics"] and "ssim" not in metric)
-                    else metric
+                    f"masked_{metric}" if (self.args_metrics["masked_metrics"] and "ssim" not in metric) else metric
                 )
                 stats[metric_name] = AverageMeter()
 
@@ -141,12 +136,8 @@ class Evaluator:
                     stats[f"{metric_name}_observed_input_pixels"] = AverageMeter()
 
                 if eval_occluded_observed and "ssim" in metric:
-                    stats[f"{metric_name}_images_occluded_input_pixels"] = (
-                        AverageMeter()
-                    )
-                    stats[f"{metric_name}_images_observed_input_pixels"] = (
-                        AverageMeter()
-                    )
+                    stats[f"{metric_name}_images_occluded_input_pixels"] = AverageMeter()
+                    stats[f"{metric_name}_images_observed_input_pixels"] = AverageMeter()
 
         self.stats = stats
 
@@ -162,31 +153,24 @@ if __name__ == "__main__":
     # Extract settings w.r.t. test data
     if args.test_data.test_config is not None:
         if not os.path.isfile(args.test_data.test_config):
-            raise FileNotFoundError(
-                f"Cannot find the test configuration file: {args.test_data.test_config}\n"
-            )
-        args_test_data = config_utils.read_config(args.test_data.test_config).data
+            raise FileNotFoundError(f"Cannot find the test configuration file: {args.test_data.test_config}\n")
+        test_config = config_utils.read_config(args.test_data.test_config)
+        args_test_data = test_config.data
     else:
         args_test_data = OmegaConf.create()
 
-        if args.test_data.data_dir is not None:
-            if not os.path.exists(args.test_data.data_dir):
-                raise ValueError(
-                    f"Cannot find the data directory: {args.test_data.data_dir}\n"
-                )
-            args_test_data.root = args.test_data.data_dir
-        if args.test_data.hdf5_file is not None:
-            if not os.path.isfile(
-                os.path.join(args_test_data.root, args.test_data.hdf5_file)
-            ):
-                raise FileNotFoundError(
-                    f"Cannot find the data file: {os.path.join(args_test_data.root, args.test_data.hdf5_file)}\n"
-                )
-            args_test_data.hdf5_file = args.test_data.hdf5_file
-        if args.test_data.split is not None:
-            args_test_data.split = args.test_data.split
-        if args.test_data.mode is not None:
-            args_test_data.mode = args.test_data.mode
+    if args.test_data.hdf5_file is not None:
+        if not os.path.isfile(os.path.join(args_test_data.root, args.test_data.hdf5_file)):
+            raise FileNotFoundError(
+                f"Cannot find the data file: {os.path.join(args_test_data.root, args.test_data.hdf5_file)}\n"
+            )
+        args_test_data.hdf5_file = args.test_data.hdf5_file
+    if args.test_data.hdf5_file_read is not None:
+        args_test_data.hdf5_file_read = args.test_data.hdf5_file_read
+    if args.test_data.split is not None:
+        args_test_data.split = args.test_data.split
+    if args.test_data.mode is not None:
+        args_test_data.mode = args.test_data.mode
 
     evaluator = Evaluator(args, args_test_data)
 
@@ -194,11 +178,7 @@ if __name__ == "__main__":
     stats = evaluator.evaluate()
     time_elapsed = time.time() - since
 
-    print(
-        "Evaluation completed in {:.0f}m {:.0f}s\n".format(
-            time_elapsed // 60, time_elapsed % 60
-        )
-    )
+    print(f"Evaluation completed in {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s\n")
 
     print("Statistics:\n===========")
     print_stats(stats, evaluator)

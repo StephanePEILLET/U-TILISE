@@ -1,7 +1,8 @@
 import sys
 
-from lib.formatter import RawFormatter
 from nestargs import NestedArgumentParser
+
+from lib.formatter import RawFormatter
 
 eval_parser = NestedArgumentParser(
     description="U-TILISE: A Sequence-to-sequence Model for Cloud Removal in Optical Satellite Time Series (Evaluation)",
@@ -55,8 +56,13 @@ eval_parser.add_argument(
     help="HDF5 test dataset, path relative to <data-dir>",
 )
 eval_parser.add_argument(
-    "--test-data.split", type=str, required=False, help="Data split"
+    "--test-data.hdf5-file-read",
+    type=str,
+    required=False,
+    help="HDF5 test dataset, path relative to <data-dir>",
 )
+
+eval_parser.add_argument("--test-data.split", type=str, required=False, help="Data split")
 eval_parser.add_argument(
     "--test-data.mode",
     type=str,

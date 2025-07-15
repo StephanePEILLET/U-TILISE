@@ -1,49 +1,22 @@
 data:
     dataset: circa         # Name of the dataset, ['earthnet2021', 'sen12mscrts']
-    hdf5_file_read: /home/SPeillet/Downloads/data/cloud_removal.hdf5 #"/home/SPeillet/Downloads/data/toy_circa_ligth_0.5.hdf5"
+    hdf5_file_read: /home/SPeillet/Downloads/data/circa_cloud_removal.hdf5 #"/home/SPeillet/Downloads/data/toy_circa_ligth_0.5.hdf5"
     max_seq_length: 15
     channels: all
-    include_S1: true
+    include_S1: false
     image_size: [256, 256]
 
     filter_settings:
         type: cloud-free
         min_length: 5
         return_valid_obs_only: true
-        # max_t_sampling: 28
-    # stats:
-    #     means: [
-    #         1635.9303674449911,
-    #         1817.3378822367445,
-    #         1800.0489473907733,
-    #         2188.617312884743,
-    #         3051.3924453033464,
-    #         3362.7495125637042,
-    #         3480.2949493087926,
-    #         3543.915462131962,
-    #         2765.4144689336335,
-    #         2138.938992503291,
-    #         -7.561751717351412,
-    #         -7.899526299536092,
-    #         -7.674932568749049,
-    #         -8.45083000883243,
-    #     ]
-    #     stds: [
-    #         1667.651563678898,
-    #         1595.743495717967,
-    #         1596.9815125752564,
-    #         1675.5525563440883,
-    #         1839.5398521179336,
-    #         1963.9180158913096,
-    #         2030.015978950916,
-    #         2011.7499306131242,
-    #         1533.7292472417432,
-    #         1290.607410527949,
-    #         11.096410505612981,
-    #         11.681154089419996,
-    #         11.10346592349234,
-    #         11.822336301296847,
-    #     ]
+
+# test_data:
+#     test_config: /home/SPeillet/Downloads/data/outputs/U-TILISE/_RESULTS/ALL_BANDS_120_epochs_2025-07-11_18-05/config.yaml
+#     hdf5_file_read: /home/SPeillet/Downloads/data/circa_cloud_removal.hdf5
+#     mode: test
+#     split: mode
+
 mask:
     mask_type: random_clouds               # Mask the input time series with randomly sampled cloud masks or the actual cloud masks. ['random_clouds', 'real_clouds']
     ratio_masked_frames: 0.5               # Ratio of partially/fully masked images per image time series (upper bound).

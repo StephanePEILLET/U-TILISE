@@ -38,6 +38,7 @@ class Imputation:
         method: Literal["utilise", "trivial"] = "utilise",
         mode: Literal["last", "next", "closest", "linear_interpolation"] | None = None,
         checkpoint: str | None = None,
+        config_file_test: str | None = None,
     ):
         self.method = Method(method)
         self.mode = Mode(mode)
@@ -64,6 +65,10 @@ class Imputation:
 
             # Read the configuration file used during training
             self.config = config_utils.read_config(self.config_file_train)
+
+            if self.method == Method.UTILISE and config_file_test is not None:
+                test_config = config_utils.read_config(config_file_test)
+                self.config.utilise.update(test_config.utilise)
 
             # Extract the temporal window size and the number of channels used during training
             self.temporal_window = self.config.data.max_seq_length

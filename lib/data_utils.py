@@ -185,7 +185,7 @@ def get_dataset(config: DictConfig, phase: str, logger: Optional[logging.Logger]
     else:
         augment = False
         dset = Dataset(
-            **without_keys(config.data, ["dataset", "subset"]),
+            **without_keys(config.data, ["dataset", "subset", "mode", "root", "split"]),
             mask_kwargs=config.mask,
             augment=augment,
             phase=phase,
