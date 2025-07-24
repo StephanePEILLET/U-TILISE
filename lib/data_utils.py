@@ -2,7 +2,12 @@ import collections.abc
 import logging
 import re
 from functools import partial
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Tuple
+from typing import Union
 
 import numpy as np
 import torch
@@ -13,7 +18,9 @@ from torch import Tensor
 from torch.nn import functional as F
 from torch.utils.data import Dataset
 
-from lib.datasets import DATASETS, EarthNet2021Dataset, SEN12MSCRTSDataset
+from lib.datasets import DATASETS
+from lib.datasets import EarthNet2021Dataset
+from lib.datasets import SEN12MSCRTSDataset
 
 np_str_obj_array_pattern = re.compile(r"[SaUO]")
 
@@ -122,9 +129,11 @@ def pad_collate(batch: List[Any], pad_value: Union[int, float] = 0) -> Any:
 def get_dataloader(
     dset: torch.utils.data.Dataset,
     config: DictConfig,
-    pin_memory: bool = True,
     drop_last: bool = False,
     subset: Optional[Union[bool, int]] = False,
+    shuffle: Optional[bool] = None,
+    batch_size: Optional[int] = None,
+    pin_memory: Optional[bool] = False,
 ) -> torch.utils.data.dataloader.DataLoader:
     """Returns a torch.utils.data.DataLoader instance."""
 
@@ -141,11 +150,11 @@ def get_dataloader(
 
     loader = torch.utils.data.DataLoader(
         dataset=dset,
-        batch_size=config.training_settings.batch_size,
-        shuffle=False,
+        batch_size=(batch_size if batch_size is not None else config.training_settings.batch_size),
+        shuffle=(shuffle if shuffle is not None else False),
         num_workers=config.misc.num_workers,
         collate_fn=collate_fn,
-        pin_memory=pin_memory,
+        pin_memory=config.misc.get("pin_memory", pin_memory),
         drop_last=drop_last,
     )
     return loader

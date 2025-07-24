@@ -4,7 +4,8 @@ import sys
 import time
 
 import torch
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
+from omegaconf import OmegaConf
 from prodict import Prodict
 from tqdm import tqdm
 
@@ -84,12 +85,20 @@ class Evaluator:
 
         # Get the data loader
         dset = get_dataset(self.config, phase=phase)
-        self.dataloader = torch.utils.data.DataLoader(
-            dataset=dset,
+
+        subset = self.config.data.get("subset", False)
+        if subset and isinstance(self.config.data.subset, bool):
+            subset = 1
+
+        from lib import data_utils
+
+        self.dataloader = data_utils.get_dataloader(
+            dset,
+            self.config,
             batch_size=1,
             shuffle=False,
-            num_workers=self.config.misc.num_workers,
             drop_last=False,
+            subset=subset,
         )
 
         # Get the imputation model

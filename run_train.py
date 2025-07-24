@@ -7,7 +7,9 @@ from argparse import ArgumentParser
 import torch
 from omegaconf import OmegaConf
 
-from lib import config_utils, data_utils, utils
+from lib import config_utils
+from lib import data_utils
+from lib import utils
 from lib.formatter import RawFormatter
 from lib.logger import prepare_logger
 
@@ -99,7 +101,6 @@ def setup_data_loaders(
     train_loader = data_utils.get_dataloader(
         train_dset,
         config,
-        pin_memory=config.misc.pin_memory,
         drop_last=True,
         subset=subset,
     )
@@ -108,7 +109,6 @@ def setup_data_loaders(
     val_loader = data_utils.get_dataloader(
         val_dset,
         config,
-        pin_memory=config.misc.pin_memory,
         drop_last=False,
         subset=subset,
     )

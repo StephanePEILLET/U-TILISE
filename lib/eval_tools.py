@@ -6,14 +6,23 @@ sys.path.append(str(Path(__file__).parents[1]))
 import math
 import os
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Literal
+from typing import Optional
+from typing import Tuple
 
 import matplotlib
 import torch
 from matplotlib import pyplot as plt
-from torch import Tensor, nn
+from torch import Tensor
+from torch import nn
 
-from lib import config_utils, data_utils, utils, visutils
+from lib import config_utils
+from lib import data_utils
+from lib import utils
+from lib import visutils
 from lib.models import MODELS
 from lib.visutils import COLORMAPS
 
