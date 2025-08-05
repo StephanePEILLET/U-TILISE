@@ -22,7 +22,7 @@
             "args": [
                 "./configs/config_circa_train.yaml",
                 "--save_dir",
-                "/home/SPeillet/Downloads/data/outputs/train",
+                "/DATA_10TB/data_rpg/outputs/train",
             ]
         },
         {
@@ -35,11 +35,11 @@
                 "./configs/inference_circa.yaml",
                 "utilise",
                 "--checkpoint",
-                "/home/SPeillet/Downloads/data/outputs/U-TILISE/_RESULTS/ALL_BANDS_120_epochs_2025-07-11_18-05/checkpoints/Model_best.pth",
+                "/DATA_10TB/data_rpg/outputs/U-TILISE/results/ALL_BANDS_120_epochs_2025-07-11_18-05/checkpoints/Model_best.pth",
                 "--test-data.test-config",
-                "/home/SPeillet/Downloads/data/outputs/U-TILISE/_RESULTS/ALL_BANDS_120_epochs_2025-07-11_18-05/config.yaml",
+                "/DATA_10TB/data_rpg/outputs/U-TILISE/results/ALL_BANDS_120_epochs_2025-07-11_18-05/config.yaml",
                 "--test-data.hdf5-file-read",
-                "/home/SPeillet/Downloads/data/circa_cloud_removal.hdf5",
+                "/DATA_10TB/data_rpg/circa/hdf5/circa_cloud_removal.hdf5",
                 "--test-data.mode",
                 "test",
                 "--test-data.split",

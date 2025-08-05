@@ -30,177 +30,79 @@ MAX_SEQ_LENGTH = 30
 MIN_SEQ_LENGTH = 5
 SEED = 42
 
-MGRSC_SPLITS = {
-    "train": [
-        "MGRS25-31TDH_row-2_col-4",
-        "MGRS25-31UFQ_row-3_col-3",
-        "MGRS25-31UFQ_row-4_col-2",
-        "MGRS25-31UDP_row-2_col-3",
-        "MGRS25-31TFJ_row-3_col-2",
-        "MGRS25-31TGL_row-3_col-3",
-        "MGRS25-31TEL_row-4_col-4",
-        "MGRS25-31TCJ_row-4_col-2",
-        "MGRS25-31UER_row-4_col-3",
-        "MGRS25-30TXS_row-4_col-2",
-        "MGRS25-31TFL_row-3_col-2",
-        "MGRS25-31TGJ_row-2_col-2",
-        "MGRS25-31TFN_row-4_col-2",
-        "MGRS25-31TGK_row-4_col-2",
-        "MGRS25-31TCK_row-2_col-3",
-        "MGRS25-30TYP_row-4_col-3",
-        "MGRS25-30UVU_row-3_col-2",
-        "MGRS25-30TWT_row-2_col-3",
-        "MGRS25-31UFP_row-4_col-2",
-        "MGRS25-31UCP_row-4_col-4",
-        "MGRS25-30TXS_row-3_col-4",
-        "MGRS25-31UFP_row-2_col-2",
-        "MGRS25-31TGK_row-3_col-3",
-        "MGRS25-30TYR_row-3_col-3",
-        "MGRS25-31TCJ_row-3_col-3",
-        "MGRS25-31TEK_row-2_col-3",
-        "MGRS25-31TDM_row-4_col-3",
-        "MGRS25-31TFN_row-2_col-2",
-        "MGRS25-31TFJ_row-2_col-3",
-        "MGRS25-31TGL_row-3_col-2",
-        "MGRS25-31TCK_row-2_col-2",
-        "MGRS25-30TXS_row-4_col-3",
-        "MGRS25-31UDS_row-3_col-2",
-        "MGRS25-30TYR_row-2_col-4",
-        "MGRS25-31TDJ_row-2_col-3",
-        "MGRS25-31TDJ_row-2_col-2",
-        "MGRS25-31TFK_row-4_col-2",
-        "MGRS25-31UDP_row-4_col-4",
-        "MGRS25-30TYQ_row-4_col-3",
-        "MGRS25-30UXV_row-3_col-2",
-        "MGRS25-31TCH_row-2_col-2",
-        "MGRS25-31TFN_row-2_col-4",
-        "MGRS25-31TCN_row-3_col-4",
-        "MGRS25-30TXS_row-3_col-3",
-        "MGRS25-30TXR_row-4_col-2",
-        "MGRS25-30UVU_row-4_col-3",
-        "MGRS25-31UDR_row-3_col-4",
-        "MGRS25-30TXS_row-3_col-2",
-        "MGRS25-30TYP_row-3_col-3",
-        "MGRS25-31UFP_row-3_col-2",
-        "MGRS25-30TYQ_row-4_col-4",
-        "MGRS25-31TEN_row-4_col-3",
-    ],
-    "val": [
-        "MGRS25-31UDS_row-3_col-4",
-        "MGRS25-32UMV_row-4_col-2",
-        "MGRS25-31TFK_row-3_col-3",
-        "MGRS25-31TDJ_row-3_col-2",
-        "MGRS25-31UDR_row-4_col-4",
-        "MGRS25-31UFP_row-3_col-3",
-        "MGRS25-31UDP_row-3_col-2",
-        "MGRS25-31TGL_row-4_col-2",
-        "MGRS25-31TGJ_row-3_col-2",
-        "MGRS25-31TEL_row-4_col-3",
-        "MGRS25-31TEN_row-2_col-3",
-        "MGRS25-31TEK_row-2_col-4",
-        "MGRS25-30TYP_row-2_col-3",
-        "MGRS25-31UDP_row-4_col-2",
-        "MGRS25-31TEL_row-3_col-4",
-        "MGRS25-30TXR_row-3_col-3",
-        "MGRS25-31TFL_row-4_col-4",
-        "MGRS25-31TEK_row-4_col-2",
-        "MGRS25-31TFK_row-4_col-3",
-        "MGRS25-30TYS_row-4_col-4",
-        "MGRS25-31UDR_row-2_col-2",
-        "MGRS25-31TFL_row-3_col-4",
-        "MGRS25-30UXV_row-2_col-2",
-        "MGRS25-31TFJ_row-4_col-2",
-        "MGRS25-31UFP_row-4_col-4",
-        "MGRS25-31UDS_row-4_col-3",
-    ],
-    "test": [
-        "MGRS25-31TDJ_row-3_col-4",
-        "MGRS25-31TFK_row-2_col-3",
-        "MGRS25-31TFK_row-3_col-2",
-        "MGRS25-31UDR_row-2_col-4",
-        "MGRS25-31UDS_row-3_col-3",
-        "MGRS25-31UDS_row-4_col-2",
-        "MGRS25-31UFQ_row-4_col-4",
-        "MGRS25-32TLT_row-2_col-4",
-    ],
-}
+import datetime as dt
+from typing import Dict
+from typing import List
+from typing import Literal
+
+DateArray = np.ndarray[dt.date]
+TensorDict = Dict[str, Union[torch.Tensor, Dict[str, torch.Tensor]]]
+SampleDict = Dict[str, Union[np.ndarray, Dict[str, np.ndarray], List[str]]]
+PhaseType = Literal["train", "val", "test", "train+val", "all"]
+ChannelType = Literal["all", "bgr-nir"]
 
 
-class CIRCA_HDF5_Dataset(CIRCA_from_HDF5):
+class CIRCA_Dataset(CIRCA_from_HDF5):
     """
     Dataset qui exporte / ou importe les données CIRCA dans / depuis un fichier HDF5.
     """
 
     def __init__(
         self,
-        data_optique: Union[str, Path] = None,
-        data_radar: Union[str, Path] = None,
-        image_size: int = (256, 256),
-        phase: str = "train",
-        hdf5_file_output: Optional[Union[str, Path]] = None,
-        hdf5_file_read: Optional[Union[str, Path]] = None,
-        overlap: Optional[int] = 0,
-        load_dataset: Optional[str] = None,
+        # CIRCA_from_HDF5 parameters
+        phase: PhaseType = "all",
+        hdf5_file: Optional[Union[str, Path]] = None,
         shuffle: bool = False,
-        include_S1: bool = True,
+        use_sar: bool = True,
+        channels: ChannelType = "all",
+        # U-TILISE specific parameters
         filter_settings: dict = None,
         min_seq_length: Optional[int] = MIN_SEQ_LENGTH,
-        max_seq_length: Optional[int] = None,
+        max_seq_length: Optional[int] = MAX_SEQ_LENGTH,
         render_occluded_above_p: Optional[float] = None,
         mask_kwargs: Optional[dict | DictConfig] = None,
         pe_strategy: str = "day-within-sequence",
         augment: Optional[bool] = False,
-        crop_settings: Optional[DictConfig] = None,
-        return_cloud_mask: bool = True,
-        channels: Optional[str] = "all",
-        sampling_random: Optional[float] = None,
-        process_data: bool = True,
         stats: Optional[DictConfig] = None,
+        seed: int = SEED,
     ):
-        self.rng = np.random.default_rng(seed=SEED)
-        if hdf5_file_read is None:
-            super().__init__(
-                data_optique=data_optique,
-                data_radar=data_radar,
-                image_size=image_size,
-                overlap=overlap,
-                load_dataset=load_dataset,
-                shuffle=shuffle,
-                include_S1=include_S1,
+        # Initialize the random seed for reproducibility
+        self.seed = seed
+        self.rng = np.random.default_rng(seed=self.seed)
+
+        super().__init__(
+            phase=phase,
+            hdf5_file=hdf5_file,
+            shuffle=shuffle,
+            use_sar=use_sar,
+            channels=channels,
+        )
+
+        self.transform = None
+        if stats is not None and isinstance(stats, DictConfig):
+            self.stats = stats
+            self.transform = A.Compose(
+                [
+                    A.Normalize(
+                        mean=self.stats["means"],
+                        std=self.stats["stds"],
+                        max_pixel_value=255.0,
+                    ),
+                    A.pytorch.transforms.ToTensorV2(),
+                ]
             )
-            self.hdf5_file_output = hdf5_file_output
-            self.sampling_random = sampling_random
-            self.min_seq_length = min_seq_length
-        else:
-            self.phase = phase
-            self.hdf5_file, self.patches_dataset = self.setup_hdf5_file(hdf5_file_read)
-            self.include_S1 = include_S1
-            self.image_size = image_size
-            self.process_data = process_data
-            self.transform = None
-            if stats is not None and isinstance(stats, DictConfig):
-                self.stats = stats
-                self.transform = A.Compose(
-                    [
-                        A.Normalize(
-                            mean=self.stats["means"],
-                            std=self.stats["stds"],
-                            max_pixel_value=255.0,
-                        ),
-                        A.pytorch.transforms.ToTensorV2(),
-                    ]
-                )
 
         self.render_occluded_above_p = render_occluded_above_p  # Fully occlude images with high cloud cover
         self.pe_strategy = pe_strategy
         self.augment = augment
-        self.num_channels, self.c_index_rgb, self.c_index_nir, self.s2_channels = self.setup_channels(channels)
+
         (
             self.filter_settings,
             self.variable_seq_length,
             self.seq_length,
             self.max_seq_length,
-        ) = self.setup_filter_settings(filter_settings, max_seq_length)
+            self.min_seq_length,
+        ) = self.setup_filter_settings(filter_settings, max_seq_length, min_seq_length)
         (
             self.mask_kwargs,
             self.fill_type,
@@ -210,82 +112,10 @@ class CIRCA_HDF5_Dataset(CIRCA_from_HDF5):
             self.dilate_cloud_masks,
         ) = self.setup_mask_kwargs(mask_kwargs)
 
-    def setup_hdf5_file(self, path_file):
-        if Path(path_file).exists():
-            f = h5py.File(path_file, "r", libver="latest", swmr=True)
-            patches_dataset = self.list_files_in_hdf5(f)
-            patches_dataset = self.splits_samples(patches_dataset, self.phase)
-        else:
-            raise FileNotFoundError(f"HDF5 file {path_file} does not exist.")
-
-        return f, patches_dataset
-
-    def splits_samples(self, patches_dataset: pd.DataFrame, phase: str) -> pd.DataFrame:
-        if phase is not None:
-            if phase in MGRSC_SPLITS:
-                patches_dataset = patches_dataset[patches_dataset["mgrs25"].isin(MGRSC_SPLITS[self.phase])].reset_index(
-                    drop=True
-                )
-            elif phase == "train+val":
-                patches_dataset = patches_dataset[
-                    patches_dataset["mgrs25"].isin(MGRSC_SPLITS["train"] + MGRSC_SPLITS["val"])
-                ].reset_index(drop=True)
-            elif phase == "all":
-                pass
-            else:
-                raise ValueError(f"Phase {phase} not recognized. Use 'train', 'val', 'train+val', or 'all'.")
-            return patches_dataset
-        else:
-            raise ValueError("Phase is not defined. Use 'train', 'val', 'train+val', or 'all'.")
-
-    def list_files_in_hdf5(self, hdf5_file: Union[str, Path]) -> pd.DataFrame:
-        """
-        list all files in a given HDF5 file and return their details in a DataFrame.
-
-        This method iterates through the hierarchical structure of the HDF5 filetrue
-        extracting the MGRS levels, MGRS25 levels, and window names, and compiles
-        them into a pandas DataFrame.
-
-        Args:
-            hdf5_file (Union[str, Path]): The path to the HDF5 file or the file object itself.
-
-        Returns:
-            pd.DataFrame: A DataFrame containing the MGRS levels, MGRS25 levels, and window names.
-        """
-        patches_dataset = pd.DataFrame(columns=["mgrs", "mgrs25", "window"])
-        for mgrs_level, mgrsc_list in hdf5_file.items():
-            for mgrsc_level, mgrsc_data in mgrsc_list.items():
-                for window in mgrsc_data.keys():
-                    data = {
-                        "mgrs": [mgrs_level],
-                        "mgrs25": [mgrsc_level],
-                        "window": [window],
-                    }
-                    patches_dataset = pd.concat([patches_dataset, pd.DataFrame(data)], ignore_index=True)
-        return patches_dataset
-
-    def setup_channels(self, channels: str):
-        if channels == "all":
-            num_channels = 10
-            c_index_rgb = torch.Tensor([2, 1, 0]).long()
-            c_index_nir = torch.Tensor([6]).long()
-            s2_channels = list(np.arange(10))
-        elif channels == "bgr-nir":
-            num_channels = 4
-            c_index_rgb = torch.Tensor([2, 1, 0]).long()
-            c_index_nir = torch.Tensor([6]).long()
-            s2_channels = [0, 1, 2, 6]
-        else:
-            raise ValueError(f"Channels {channels} not recognized. Use 'all' or 'bgr-nir'.")
-
-        if self.include_S1:
-            num_channels += 4
-
-        return num_channels, c_index_rgb, c_index_nir, s2_channels
-
     def setup_filter_settings(
         self,
         filter_settings: Optional[DictConfig] = None,
+        min_seq_length: Optional[int] = None,
         max_seq_length: Optional[int] = None,
     ):
         if filter_settings is None:
@@ -310,7 +140,12 @@ class CIRCA_HDF5_Dataset(CIRCA_from_HDF5):
         filter_settings.min_length = filter_settings.get("min_length", 0)
         filter_settings.max_t_sampling = filter_settings.get("max_t_sampling", None)
         seq_length = MAX_SEQ_LENGTH if max_seq_length is None else max_seq_length
-        return filter_settings, variable_seq_length, seq_length, max_seq_length
+        if min_seq_length is not None:
+            if min_seq_length > seq_length:
+                raise ValueError(
+                    f"min_seq_length ({min_seq_length}) cannot be greater than max_seq_length ({seq_length})"
+                )
+        return filter_settings, variable_seq_length, seq_length, max_seq_length, min_seq_length
 
     def setup_mask_kwargs(self, mask_kwargs: Optional[DictConfig] = None):
         # Parameters used for creating synthetic data gaps
@@ -508,236 +343,6 @@ class CIRCA_HDF5_Dataset(CIRCA_from_HDF5):
         cloud_mask[coverage > self.render_occluded_above_p, :, :, :] = 1
         return cloud_mask
 
-    def load_items_to_hdf5(self):
-        with h5py.File(self.hdf5_file_output, "w") as hf:
-            for mgrs_id in tqdm(self.patches_dataset["mgrs"].unique(), desc="MGRS IDs"):
-                mgrs_group = hf.create_group(mgrs_id)
-                mgrs_dataset = self.patches_dataset[self.patches_dataset["mgrs"] == mgrs_id]
-                for mgrs25_id in tqdm(mgrs_dataset["mgrs25"].unique(), desc="MGRS25 IDs"):
-                    # if mgrs25_id == "MGRS25-31TGK_row-4_col-2":
-                    #     continue
-
-                    mgrs25_group = mgrs_group.create_group(mgrs25_id)
-                    mgrs25_dataset = mgrs_dataset[mgrs_dataset["mgrs25"] == mgrs25_id]
-                    # ETL des données S2 pour la zone mgrs25 concernée
-                    # 1.Chargement des masks nuages / neiges concernant la zone MGRSC
-                    mgrs25_files = mgrs25_dataset.iloc[0].files  # First sample contains all the files of the mgrsc area
-                    dates_s2 = self.dates_dict[mgrs25_id]["S2"]
-                    dates_s1_asc = self.dates_dict[mgrs25_id]["S1"]["ASC"]
-                    dates_s1_desc = self.dates_dict[mgrs25_id]["S1"]["DESC"]
-                    # 2. Récupération des masks nuage et neige
-                    cloud_probs = SentinelDataProcessor.read_mask_prob(
-                        path_raster=mgrs25_files[0], type_mask="cloud"
-                    )  # H x W X 1 X T
-                    snow_probs = SentinelDataProcessor.read_mask_prob(
-                        path_raster=mgrs25_files[0], type_mask="snow"
-                    )  # H x W X 1 X T
-                    # 3. Correction du mask nuage et binarisation
-                    cloud_probs = cloud_probs.squeeze(axis=2).transpose((2, 0, 1))
-                    # H x W X 1 X T => T, H, W
-                    snow_probs = snow_probs.squeeze(axis=2).transpose((2, 0, 1))
-                    # H x W X 1 X T => T, H, W
-                    cloud_probs_corrected = SentinelDataProcessor.cloud_mask_correction(
-                        cloud_probs
-                    )  # Attends du (T, H, W)
-
-                    index_to_drop, mgrs25_data = [], {}
-                    for row_index, row in tqdm(
-                        mgrs25_dataset.iterrows(),
-                        total=mgrs25_dataset.shape[0],
-                        desc="Windows Processing",
-                    ):
-                        # Découpage des données selon la fenêtre
-                        window = row.window
-                        x, y, width, height = window[0], window[1], window[2], window[3]
-                        # 4. Filtrage à la fenêtre des masks nuage et neige
-                        snow_probs_window = snow_probs[:, x : x + width, y : y + height]  # T * H * W
-                        cloud_probs_window = cloud_probs_corrected[:, x : x + width, y : y + height]  # T * H * W
-                        idx_good_frames = SentinelDataProcessor.filter_dates(
-                            np.stack([snow_probs_window, cloud_probs_window], axis=-1)
-                        )  # T * H * W * 2
-                        idx_cloudy_frames = np.asarray([d for d in range(len(dates_s2)) if d not in idx_good_frames])
-                        # 5. Recherche de la plus longue série de dates non-nuageuses
-                        masks_valid_obs = self._filter_consecutive_sequence(
-                            dates=dates_s2,
-                            idx_good_frames=idx_good_frames,
-                            seq_length=len(dates_s2),
-                            filter_type=self.filter_settings.get("type", None),
-                            max_t_sampling=self.filter_settings.get("max_t_sampling", None),
-                        )
-                        # dates_s2_valid = [dates_s2[t] for t in masks_valid_obs.nonzero().view(-1)]
-                        dates_s2_valid = [dates_s2[t] for t in masks_valid_obs]
-                        # 6. En fonction de la tailles des séries de dates non-nuageuses
-                        # garder ou extraire la TS / patch du dataset
-                        if self.min_seq_length is not None and len(dates_s2_valid) < self.min_seq_length:
-                            index_to_drop.append(row_index)
-                        else:
-                            mgrs25_data[row_index] = {
-                                "idx_good_frames": idx_good_frames.tolist(),
-                                "idx_cloudy_frames": idx_cloudy_frames.tolist(),
-                                "masks_valid_obs": masks_valid_obs.tolist(),
-                                "dates_s2_valid": dates_s2_valid,
-                            }
-                    # Gestion de la df du mgrs25, enrichissement feature / drop index
-                    if self.sampling_random is not None:
-                        len_mgrs25 = mgrs25_dataset.shape[
-                            0
-                        ]  # Récupération du nombre de sample par mgrs25 avantsuppression certaines observations
-                        n_sampling = np.floor(len_mgrs25 * self.sampling_random).astype(np.int16)
-
-                    mgrs25_dataset = mgrs25_dataset.drop(index=index_to_drop)
-                    for label in [
-                        "idx_cloudy_frames",
-                        "idx_good_frames",
-                        "masks_valid_obs",
-                        "dates_s2_valid",
-                    ]:
-                        mgrs25_dataset[label] = [v[label] for v in mgrs25_data.values()]
-
-                    if self.sampling_random is not None:
-                        mgrs25_dataset = mgrs25_dataset.sample(n=n_sampling)
-
-                    mgrsc_s2 = SentinelDataProcessor.read_raster_per_dates(
-                        path_raster=mgrs25_files[0], type_bands="s2"
-                    )  # T x C x H x W
-                    mgrsc_s2 = mgrsc_s2[:, self.s2_channels, :, :]  # Sélection des canaux S2
-                    # Récupération des données S1 associées aux dates s2 valides prises
-                    dates_s1, index_s1, orbit_type = SentinelDataProcessor.get_pairedS1(
-                        dates_s2, dates_s1_asc, dates_s1_desc
-                    )
-                    # Récupération des images S2 associées aux dates valides
-                    path_s1 = mgrs25_files[1] if orbit_type == "ASC" else mgrs25_files[2]
-                    mgrsc_s1 = SentinelDataProcessor.read_raster_per_dates(
-                        path_raster=path_s1,
-                        indexes_dates=index_s1,
-                        type_bands="s1",
-                    )
-                    # Vérification de la cohérence des données
-                    assert mgrsc_s2.shape[0] == mgrsc_s1.shape[0], "Number of S2 and S1 images must match."
-                    assert len(dates_s2) == mgrsc_s2.shape[0], "Number of S2 dates must match the number of S2 images."
-                    assert len(dates_s2) == len(dates_s1), "Number of S2 dates must match the number of S1 images."
-                    assert len(dates_s1) == mgrsc_s1.shape[0], "Number of S1 dates must match the number of S1 images."
-
-                    for row_index, row in tqdm(
-                        mgrs25_dataset.iterrows(),
-                        total=mgrs25_dataset.shape[0],
-                        desc="Windows loading",
-                    ):
-                        # Découpage des données selon la fenêtre
-                        window = row.window
-                        x, y, width, height = window[0], window[1], window[2], window[3]
-                        windows_str = "_".join(map(str, window))
-                        # 4. Filtrage à la fenêtre des masks nuage et neige
-                        cloud_probs_window = cloud_probs_corrected[:, x : x + width, y : y + height]
-                        snow_probs_window = snow_probs[:, x : x + width, y : y + height]
-                        cloud_masks_window = (cloud_probs_window != 0).astype(int)
-
-                        idx_selected = np.asarray(mgrs25_dataset.loc[row_index, "idx_good_frames"])
-
-                        s2 = mgrsc_s2[idx_selected, :, x : x + width, y : y + height]
-                        s1 = mgrsc_s1[idx_selected, :, x : x + width, y : y + height]
-
-                        if s2.shape[2] != self.image_size[0] or s2.shape[3] != self.image_size[1]:
-                            continue
-                        if s1.shape[2] != self.image_size[0] or s1.shape[3] != self.image_size[1]:
-                            continue
-                        if (
-                            cloud_probs_window.shape[1] != self.image_size[0]
-                            or cloud_probs_window.shape[2] != self.image_size[1]
-                        ):
-                            continue
-
-                        assert s2.shape[0] == s1.shape[0], "Number of S2 and S1 images must match."
-                        assert s2.shape[0] == len(
-                            mgrs25_dataset.loc[row_index, "dates_s2_valid"]
-                        ), "Number of S2 images must match the number of valid dates."
-                        assert s2.shape[0] == len(
-                            mgrs25_dataset.loc[row_index, "idx_good_frames"]
-                        ), "Number of S2 images must match the number of good frames."
-                        assert s2.shape[0] == len(
-                            mgrs25_dataset.loc[row_index, "masks_valid_obs"]
-                        ), "Number of S2 images must match the number of valid observations."
-
-                        sample = {
-                            "S1": {
-                                "S1": s1,
-                                "S1_dates": np.asarray(dates_s1)[
-                                    idx_selected
-                                ].tolist(),  # Dates S1 correspondantes aux dates S2 valides
-                            },
-                            "S2": {
-                                "S2": s2,  # Bandes correspondant aux dates correctes de la TS
-                                "S2_dates": mgrs25_dataset.loc[row_index, "dates_s2_valid"],  # Dates correctes de la TS
-                                "cloud_mask": cloud_masks_window,  # Mask entier de la TS
-                                "cloud_prob": cloud_probs_window.astype(np.float32),  # Probs cloud entier de la TS
-                            },
-                            "idx_cloudy_frames": np.asarray(mgrs25_dataset.loc[row_index, "idx_cloudy_frames"]),
-                            "idx_good_frames": np.asarray(mgrs25_dataset.loc[row_index, "idx_good_frames"]),
-                            "idx_impaired_frames": np.asarray(mgrs25_dataset.loc[row_index, "idx_cloudy_frames"]),
-                            "valid_obs": np.asarray(mgrs25_dataset.loc[row_index, "masks_valid_obs"]),
-                        }
-                        window_group = mgrs25_group.create_group(windows_str)
-                        for key, value in sample.items():
-                            if isinstance(value, dict):
-                                window_subgroup = window_group.create_group(key)
-                                for meta_key, meta_value in value.items():
-                                    if isinstance(meta_value, np.ndarray):
-                                        window_subgroup.create_dataset(
-                                            meta_key,
-                                            data=meta_value,
-                                            compression="gzip",
-                                            compression_opts=9,
-                                        )
-                                    else:
-                                        window_subgroup.create_dataset(meta_key, data=meta_value)
-                            else:
-                                window_group.create_dataset(key, data=value)
-
-    def decode_dates(self, dates):
-        return np.asanyarray([el.decode("utf-8") for el in dates])
-
-    def format_item(self, sample: dict):
-        """
-        Passage de T * C * H * W au bon format pour le modèle.
-        """
-        return {
-            "S1": {
-                "S1": torch.from_numpy(sample["S1"]["S1"].astype(np.float32)),  # T * C * H * W
-                "S1_dates": np.array([str2date(date) for date in sample["S1"]["S1_dates"]]),
-            },
-            "S2": {
-                "S2": torch.from_numpy(sample["S2"]["S2"].astype(np.float32)),  # T * C * H * W
-                "S2_dates": np.array([str2date(date) for date in sample["S2"]["S2_dates"]]),
-                "cloud_mask": torch.from_numpy(np.expand_dims(sample["S2"]["cloud_mask"], axis=1).astype(np.float32)),
-                "cloud_prob": torch.from_numpy(np.expand_dims(sample["S2"]["cloud_prob"], axis=1).astype(np.float32)),
-            },
-            "idx_cloudy_frames": torch.from_numpy(sample["idx_cloudy_frames"]),
-            "idx_good_frames": torch.from_numpy(sample["idx_good_frames"]),
-            "idx_impaired_frames": torch.from_numpy(sample["idx_impaired_frames"]),
-            "valid_obs": torch.from_numpy(sample["valid_obs"]),
-        }
-
-    def etl_item(self, item: int) -> dict[str, Union[np.ndarray, list[str]]]:
-        row = self.patches_dataset.iloc[item]
-        patch = self.hdf5_file[f"{row.mgrs}/{row.mgrs25}/{row.window}"]
-        sample = {
-            "S1": {
-                "S1": patch["S1/S1"][:],  # T * C * H * W
-                "S1_dates": self.decode_dates(patch["S1/S1_dates"][:]),
-            },
-            "S2": {
-                "S2": patch["S2/S2"][:],  # T * C * H * W
-                "S2_dates": self.decode_dates(patch["S2/S2_dates"][:]),
-                "cloud_mask": patch["S2/cloud_mask"][:],  # T * C * H * W
-                "cloud_prob": patch["S2/cloud_prob"][:],  # T * C * H * W
-            },
-            "idx_cloudy_frames": patch["idx_cloudy_frames"][:],
-            "idx_good_frames": patch["idx_good_frames"][:],
-            "idx_impaired_frames": patch["idx_impaired_frames"][:],
-            "valid_obs": patch["valid_obs"][:],
-        }
-        return self.format_item(sample)
-
     def __getitem__(
         self,
         item: int,
@@ -830,7 +435,7 @@ class CIRCA_HDF5_Dataset(CIRCA_from_HDF5):
             "cloud_prob": patch_data["S2"]["cloud_prob"],
             "cloud_mask": cloud_mask,
         }
-        if self.include_S1:
+        if self.use_sar:
             out["S1_dates"] = [date.strftime("%Y-%m-%d") for date in s1_dates]
         return out
 
@@ -1080,17 +685,8 @@ class CIRCA_HDF5_Dataset(CIRCA_from_HDF5):
 ######################################################################################
 
 if __name__ == "__main__":
-    # store_dai = Path("/home/SPeillet/Partage/store-dai")
-    # path_dataset_circa = store_dai / "projets/pac/3str/EXP_2"
-    # output_file =  store_dai / "tmp/speillet" / "circa_ligth_0.5.hdf5"
-
-    path_dataset_circa = Path("/home/SPeillet/Downloads/data")
-    data_optique = path_dataset_circa / "optique_dataset"
-    data_radar = path_dataset_circa / "radar_dataset_v4"
-    image_size = [256, 256]
-    overlap = 0
-    SAMPLING_SUBSET = 1.0
-    output_file = path_dataset_circa / "toy_circa_ligth.hdf5"
+    path_dataset_circa = Path("/DATA_10TB/data_rpg/circa/hdf5")
+    hdf5_file = path_dataset_circa / "circa_cloud_removal_asc_desc.hdf5"
 
     filter_settings = {
         "type": "cloud-free",  # Strategy for removing observations with data gaps.
@@ -1115,25 +711,18 @@ if __name__ == "__main__":
         "p_filter": 0.1,
     }
 
-    # Si export des données vers un fichier hdf5
-    dataset = CIRCA_HDF5_Dataset(
-        hdf5_file_output=output_file,
-        data_optique=data_optique,
-        data_radar=data_radar,
-        image_size=image_size,
-        overlap=overlap,
+    dataset = CIRCA_Dataset(
+        # CIRCA_from_HDF5 parameters
+        phase="all",
+        hdf5_file=hdf5_file,
+        shuffle=False,
+        use_sar=True,
+        channels="all",
+        # U-TILISE specific parameters
+        pe_strategy="day-within-sequence",
         filter_settings=filter_settings,
         mask_kwargs=mask_kwargs,
-        sampling_random=SAMPLING_SUBSET,
+        max_seq_length=10,
     )
-    dataset.load_items_to_hdf5()
-
-    # Import des données depuis un fichier hdf5
-    # dataset = CIRCA_HDF5_Dataset(
-    #     hdf5_file_read=output_file,
-    #     filter_settings=filter_settings,
-    #     mask_kwargs=mask_kwargs,
-    #     max_seq_length=10,
-    # )
-    # sample = next(iter(dataset))
-    # print(sample.keys())
+    sample = next(iter(dataset))
+    print(sample.keys())

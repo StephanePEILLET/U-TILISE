@@ -1,3 +1,3 @@
-from dataloader_CIRCA.datasets.CIRCA_dataset import CircaPatchDataSet  # noqa
-from dataloader_CIRCA.datasets.UnCRtainTS_dataset import UnCRtainTSDataset  # noqa
-from dataloader_CIRCA.datasets.UTILISE_dataset import UTILISEDataset  # noqa
+from dataloader_CIRCA.datasets.CIRCA_files_reader import CIRCA_from_files  # noqa
+from dataloader_CIRCA.datasets.CIRCA_hdf5_reader import CIRCA_from_HDF5  # noqa
+from dataloader_CIRCA.datasets.UTILISE_adapter import CIRCA_Dataset  # noqa

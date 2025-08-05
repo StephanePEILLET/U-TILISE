@@ -5,7 +5,11 @@ sys.path.append(str(Path(__file__).parents[2]))
 
 import ast
 import json
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Tuple
+from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -16,7 +20,7 @@ from tqdm.auto import tqdm
 from dataloader_CIRCA.tools.data_processor import SentinelDataProcessor
 
 
-class CircaPatchDataSet(Dataset):
+class CIRCA_from_files(Dataset):
     """
     A custom PyTorch Dataset designed to manage Sentinel-1 and Sentinel-2 data specifically for cloud
     reconstruction tasks.
@@ -166,7 +170,7 @@ class CircaPatchDataSet(Dataset):
         - mgrs25 (Path): Path to the MGRS25 zone.
         """
         mgrs_name = mgrs.stem
-        mgrs25_name = mgrs25.stem
+        mgrs25_name = mgrs25.stem[7:]
         self.dates_dict[mgrs25_name] = {}
 
         # Process Sentinel-2 data
@@ -176,7 +180,7 @@ class CircaPatchDataSet(Dataset):
         self.dates_dict[mgrs25_name]["S2"] = dates_S2
 
         # Process Sentinel-1 data
-        mgrs25_radar = self.data_radar / mgrs_name / mgrs25_name
+        mgrs25_radar = self.data_radar / mgrs_name / ("MGRS25-" + mgrs25_name)
         assert mgrs25_radar.exists()
 
         list_tifs_radar = sorted(mgrs25_radar.rglob("*.tif"))
@@ -201,7 +205,7 @@ class CircaPatchDataSet(Dataset):
 
         data = {
             "mgrs": mgrs_name,
-            "mgrs25": mgrs25_name,
+            "mgrs25": mgrs25_name,  # Remove the 'MGRS25-' prefix
             "files": [sorted(f.as_posix() for f in tif_files.values())],
             "windows": [list_windows],
             "dates_S2": [dates_S2],
@@ -334,22 +338,17 @@ class CircaPatchDataSet(Dataset):
 
 
 if __name__ == "__main__":
-    store_dai = Path("/home/SPeillet/Partage/store-dai")
-    path_dataset_circa = store_dai / "projets/pac/3str/EXP_2"
-    data_optique = path_dataset_circa / "Data_Raster" / "optique_dataset"
-    data_radar = path_dataset_circa / "Data_Raster" / "radar_dataset_v4"
-    image_size = (256, 256)
+    path_dataset_circa_sample = Path("/home/SPeillet/cloud_reconstruction/data/circa/CIRCA_MGRS25_SAMPLE")
+    data_optique = path_dataset_circa_sample / "optique_dataset"
+    data_radar = path_dataset_circa_sample / "radar_dataset_v4"
+    image_size = [256, 256]
     OVERLAP = 0
 
-    ds = CircaPatchDataSet(
+    ds = CIRCA_from_files(
         data_optique=data_optique,
         data_radar=data_radar,
         image_size=image_size,
         overlap=OVERLAP,
-        load_dataset="datasetCIRCAUnCRtainTS.csv",
     )
-
-    # ds.setup()
-    # ds.export_dataset()
     sample = next(iter(ds))
     print(sample.keys())

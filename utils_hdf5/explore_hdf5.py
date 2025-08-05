@@ -24,7 +24,8 @@ Compatible with: Any HDF5 file (scientific, ML, geospatial, etc.)
 
 import sys
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
+from typing import Optional
 
 import h5py
 from rich.console import Console
@@ -37,8 +38,8 @@ from rich.tree import Tree
 BYTES_TO_MB = 1024**2
 BYTES_TO_GB = 1024**3
 MAX_DISPLAYED_ITEMS = 10  # Display limit to avoid overload
-MAX_SEARCH_DEPTH = 3      # Maximum depth for group search
-MAX_SEARCH_ITEMS = 3      # Max items to examine per level
+MAX_SEARCH_DEPTH = 3  # Maximum depth for group search
+MAX_SEARCH_ITEMS = 3  # Max items to examine per level
 
 # Icon selection constants
 ONE_DIMENSION = 1
@@ -83,7 +84,7 @@ def add_dataset_to_tree(tree: Tree, name: str, obj: h5py.Dataset) -> None:
 
     dataset_text = Text()
     dataset_text.append("📊 ", style="blue")
-    dataset_text.append(name.split('/')[-1], style="bold cyan")
+    dataset_text.append(name.split("/")[-1], style="bold cyan")
     dataset_text.append(f" [{obj.dtype}]", style="dim")
 
     dataset_node = tree.add(dataset_text)
@@ -109,7 +110,7 @@ def add_group_to_tree(tree: Tree, name: str, obj: h5py.Group) -> Tree:
     """
     group_text = Text()
     group_text.append("📁 ", style="yellow")
-    group_text.append(name.split('/')[-1] or "Root", style="bold yellow")
+    group_text.append(name.split("/")[-1] or "Root", style="bold yellow")
     group_text.append(f" ({len(obj.keys())} items)", style="dim")
 
     return tree.add(group_text)
@@ -136,8 +137,7 @@ def build_file_tree(f: h5py.File, console: Console, max_depth: int = 5) -> Tree:
     """
     tree = Tree("🗂️  HDF5 File Structure", style="bold magenta")
 
-    def add_items_to_tree(group: h5py.Group, parent_tree: Tree,
-                          path: str = "", depth: int = 0) -> None:
+    def add_items_to_tree(group: h5py.Group, parent_tree: Tree, path: str = "", depth: int = 0) -> None:
         if depth >= max_depth:
             parent_tree.add(f"[dim]... ({len(group.keys())} items hidden)[/dim]")
             return
@@ -145,8 +145,8 @@ def build_file_tree(f: h5py.File, console: Console, max_depth: int = 5) -> Tree:
         items = list(group.items())
 
         # Limit number of items displayed per level
-        max_items_map = {0: 2, 1: 3, 2: 2, 3: 4, 4: 2}
-        max_items_per_level = max_items_map.get(depth, 2)
+        max_items_map = {0: 2, 1: 3, 2: 2, 3: 8, 4: 6, 5: 5}
+        max_items_per_level = max_items_map.get(depth, 5)
 
         if len(items) > max_items_per_level:
             items = items[:max_items_per_level]
@@ -220,8 +220,7 @@ def collect_statistics(f: h5py.File, console: Console) -> tuple[int, int, dict, 
     return total_datasets, total_size, dataset_types, max_shape_dims
 
 
-def create_statistics_table(total_datasets: int, total_size: int,
-                            dataset_types: dict, max_shape_dims: dict) -> Table:
+def create_statistics_table(total_datasets: int, total_size: int, dataset_types: dict, max_shape_dims: dict) -> Table:
     """Create a formatted statistics table for HDF5 file analysis.
 
     Generates a comprehensive Rich Table displaying file statistics including
@@ -241,8 +240,7 @@ def create_statistics_table(total_datasets: int, total_size: int,
         Includes sections for general stats, data types breakdown, and largest datasets.
         Uses format_size() for human-readable size representation.
     """
-    table = Table(title="📊 HDF5 File Statistics",
-                  show_header=True, header_style="bold magenta")
+    table = Table(title="📊 HDF5 File Statistics", show_header=True, header_style="bold magenta")
     table.add_column("Metric", style="cyan", no_wrap=True)
     table.add_column("Value", style="green")
 
@@ -285,6 +283,7 @@ def find_first_data_group(f: h5py.File) -> tuple[Optional[str], Optional[h5py.Gr
         Stops at first group containing datasets rather than searching entire tree.
         Uses MAX_SEARCH_DEPTH and MAX_SEARCH_ITEMS constants for performance.
     """
+
     def find_deepest_group(group, path="", max_depth=MAX_SEARCH_DEPTH):
         """Recursively find the deepest group containing datasets"""
         if max_depth <= 0:
@@ -328,12 +327,9 @@ def create_data_group_table(group_path: str, group: h5py.Group) -> Table:
         Limits display to MAX_DISPLAYED_ITEMS to prevent output overflow.
         Includes truncation indicator when group contains more items.
     """
-    group_name = group_path.split('/')[-1]
+    group_name = group_path.split("/")[-1]
     table = Table(
-        title=f"📊 Example group: {group_name}",
-        show_header=True,
-        header_style="bold magenta",
-        title_style="bold cyan"
+        title=f"📊 Example group: {group_name}", show_header=True, header_style="bold magenta", title_style="bold cyan"
     )
     table.add_column("Dataset", style="cyan", no_wrap=True)
     table.add_column("Shape", style="yellow", width=20)
@@ -355,21 +351,11 @@ def create_data_group_table(group_path: str, group: h5py.Group) -> Table:
             else:
                 icon = "📄"
 
-            table.add_row(
-                f"{icon} {key}",
-                str(obj.shape),
-                str(obj.dtype),
-                size_info
-            )
+            table.add_row(f"{icon} {key}", str(obj.shape), str(obj.dtype), size_info)
             dataset_count += 1
         elif isinstance(obj, h5py.Group) and dataset_count < MAX_DISPLAYED_ITEMS:
             # Display subgroups too
-            table.add_row(
-                f"📁 {key}",
-                f"Group ({len(obj.keys())} items)",
-                "group",
-                "-"
-            )
+            table.add_row(f"📁 {key}", f"Group ({len(obj.keys())} items)", "group", "-")
             dataset_count += 1
 
     if dataset_count == MAX_DISPLAYED_ITEMS and len(group.keys()) > MAX_DISPLAYED_ITEMS:
@@ -409,30 +395,14 @@ def get_group_statistics(group: h5py.Group) -> str:
 
 def create_summary_table() -> Table:
     """Create a generic summary table of data types"""
-    table = Table(
-        title="📋 Data Type Summary",
-        show_header=True,
-        header_style="bold magenta"
-    )
+    table = Table(title="📋 Data Type Summary", show_header=True, header_style="bold magenta")
     table.add_column("Type", style="cyan", no_wrap=True)
     table.add_column("Description", style="green")
     table.add_column("Typical Usage", style="blue")
 
-    table.add_row(
-        "📊 Multidimensional datasets",
-        "Data arrays (3D, 4D+)",
-        "Temporal data, images, matrices"
-    )
-    table.add_row(
-        "📈 1D/2D datasets",
-        "Vectors and matrices",
-        "Time series, metadata"
-    )
-    table.add_row(
-        "📁 Hierarchical groups",
-        "Data organization",
-        "Logical structure, categorization"
-    )
+    table.add_row("📊 Multidimensional datasets", "Data arrays (3D, 4D+)", "Temporal data, images, matrices")
+    table.add_row("📈 1D/2D datasets", "Vectors and matrices", "Time series, metadata")
+    table.add_row("📁 Hierarchical groups", "Data organization", "Logical structure, categorization")
 
     return table
 
@@ -453,9 +423,7 @@ def display_statistics_section(f: h5py.File, console: Console) -> None:
     """Display the statistics section"""
     stats = collect_statistics(f, console)
     total_datasets, total_size, dataset_types, max_shape_dims = stats
-    stats_table = create_statistics_table(
-        total_datasets, total_size, dataset_types, max_shape_dims
-    )
+    stats_table = create_statistics_table(total_datasets, total_size, dataset_types, max_shape_dims)
     console.print(stats_table)
     console.print()
 
@@ -487,8 +455,9 @@ def display_data_group_section(f: h5py.File, console: Console) -> None:
         console.print("❌ [red]No data group found[/red]")
 
 
-def explore_hdf5_complete(file_path: str, show_tree: bool = True,
-                          show_stats: bool = True, show_data_group: bool = True) -> None:
+def explore_hdf5_complete(
+    file_path: str, show_tree: bool = True, show_stats: bool = True, show_data_group: bool = True
+) -> None:
     """Complete exploration of HDF5 file structure with Rich interface.
 
     Main function providing comprehensive analysis of any HDF5 file including
@@ -516,16 +485,18 @@ def explore_hdf5_complete(file_path: str, show_tree: bool = True,
     console = Console()
 
     # Header with style
-    console.print(Panel.fit(
-        f"🔍 Complete HDF5 File Exploration\n[bold cyan]{file_path}[/bold cyan]",
-        style="bold blue",
-        border_style="blue"
-    ))
+    console.print(
+        Panel.fit(
+            f"🔍 Complete HDF5 File Exploration\n[bold cyan]{file_path}[/bold cyan]",
+            style="bold blue",
+            border_style="blue",
+        )
+    )
 
     try:
         display_file_info(console, file_path)
 
-        with h5py.File(file_path, 'r') as f:
+        with h5py.File(file_path, "r") as f:
             console.print("✅ [green]HDF5 file opened successfully![/green]")
 
             # Root keys
@@ -577,15 +548,10 @@ def get_file_path() -> str:
         return file_path
 
     # Search for example HDF5 files in common directories
-    example_paths = [
-        "./data/*.hdf5",
-        "./examples/*.hdf5",
-        "*.hdf5",
-        "../data/*.hdf5",
-        "./test_data/*.hdf5"
-    ]
+    example_paths = ["./data/*.hdf5", "./examples/*.hdf5", "*.hdf5", "../data/*.hdf5", "./test_data/*.hdf5"]
 
     from glob import glob
+
     for pattern in example_paths:
         files = glob(pattern)
         if files:

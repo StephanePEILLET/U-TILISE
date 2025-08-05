@@ -1,5 +1,7 @@
 import math
-from typing import Any, Dict, Literal
+from typing import Any
+from typing import Dict
+from typing import Literal
 
 import torch
 import torchgeometry as tgm
@@ -90,9 +92,11 @@ class EvalMetrics:
 
         if cloud_mask is None:
             self.masked_metrics = False
-            self.prefix = ""
-        else:
+
+        if self.masked_metrics:
             self.prefix = "masked_"
+        else:
+            self.prefix = ""
 
         # Initialize metrics
         metrics = Prodict()
@@ -137,7 +141,7 @@ class EvalMetrics:
 
             # Evaluate non-occluded target pixels only
             flag = cloud_mask.permute(0, 2, 3, 1).reshape(n_frames * H * W) == 0.0
-
+            print(flag.shape)
             # Tensor shapes: (n_frames * H * W, C)
             predicted = predicted.permute(0, 2, 3, 1).reshape(n_frames * H * W, C)[flag]
             target = target.permute(0, 2, 3, 1).reshape(n_frames * H * W, C)[flag]

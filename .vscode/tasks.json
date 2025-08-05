@@ -9,7 +9,7 @@
             "command": "rm",
             "args": [
                 "-rf",
-                "/home/SPeillet/Downloads/data/outputs/train",
+                "/DATA_10TB/data_rpg/outputs/U-TILISE/train",
             ]
         },
         {
@@ -18,7 +18,7 @@
             "command": "rm",
             "args": [
                 "-rf",
-                "/home/SPeillet/Downloads/data/outputs/inference",
+                "/DATA_10TB/data_rpg/outputs/U-TILISE/inference",
             ]
         }
     ]

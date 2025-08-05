@@ -2,7 +2,8 @@ import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parents[2]))
-from typing import Optional, Union
+from typing import Optional
+from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -15,7 +16,7 @@ import datetime as dt
 import h5py
 from torch.utils.data import Dataset
 
-from dataloader_CIRCA.datasets.constants import MGRSC_SPLITS
+from dataloader_CIRCA.datasets.CIRCA_constants import MGRSC_SPLITS
 
 MAX_SEQ_LENGTH = 30
 MIN_SEQ_LENGTH = 5
