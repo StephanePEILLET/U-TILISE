@@ -24,16 +24,15 @@ from dataloader_CIRCA.datasets.CIRCA_constants import MGRSC_SPLITS
 torch.multiprocessing.set_sharing_strategy("file_system")
 
 # Constants
-MAX_SEQ_LENGTH: int = 30
-MIN_SEQ_LENGTH: int = 5
 SEED: int = 42
+IMAGE_SIZE: Tuple[int] = (256, 256)  # Default image size for the dataset in the HDF5 files.
 
 DateArray = np.ndarray[dt.date]
 TensorDict = Dict[str, Union[torch.Tensor, Dict[str, torch.Tensor]]]
 SampleDict = Dict[str, Union[NDArray, Dict[str, NDArray], List[str]]]
 PhaseType = Literal["train", "val", "test", "train+val", "all"]
 ChannelType = Literal["all", "bgr-nir"]
-SarPairingType = Literal["asc+desc", "asc", "desc", "mix_closest", "none"]
+SarPairingType = Literal["asc+desc", "asc", "desc", "mix_closest"]
 
 
 class CIRCA_from_HDF5(Dataset):
@@ -46,7 +45,7 @@ class CIRCA_from_HDF5(Dataset):
     Attributes:
         phase (PhaseType): Data phase/split being used
         shuffle (bool): Whether to shuffle the data
-        use_sar (SarPairingType): Whether to include Sentinel-1 data
+        use_sar Union[bool| SarPairingType]: Whether to include Sentinel-1 data
         rng (np.random.Generator): Random number generator
         hdf5_file (h5py.File): HDF5 file handle
         patches_dataset (pd.DataFrame): DataFrame containing patch metadata
@@ -61,7 +60,7 @@ class CIRCA_from_HDF5(Dataset):
         phase: PhaseType = "all",
         hdf5_file: Optional[Union[str, Path]] = None,
         shuffle: bool = False,
-        use_sar: SarPairingType = "mix_closest",
+        use_sar: Union[bool | SarPairingType] = "mix_closest",
         channels: ChannelType = "all",
     ) -> None:
         """
@@ -81,8 +80,9 @@ class CIRCA_from_HDF5(Dataset):
             ValueError: If invalid channels or phase are specified
         """
         self.phase: PhaseType = phase
+        self.image_size: Tuple[int] = IMAGE_SIZE
         self.shuffle: bool = shuffle
-        self.use_sar: SarPairingType = use_sar
+        self.use_sar: Union[bool | SarPairingType] = use_sar
         self.rng: np.random.Generator = np.random.default_rng(seed=SEED)
         self.hdf5_file: h5py.File
         self.patches_dataset: pd.DataFrame
@@ -172,9 +172,8 @@ class CIRCA_from_HDF5(Dataset):
                 num_channels += 4
             else:
                 raise ValueError(
-                    f"SAR pairing {self.use_sar} not recognized. Use 'asc+desc', 'asc', 'desc', 'mix_closest', or 'none'."
+                    f"SAR pairing {self.use_sar} not recognized. Use 'asc+desc', 'asc', 'desc' or 'mix_closest'."
                 )
-
         return num_channels, c_index_rgb, c_index_nir, s2_channels
 
     def list_files_in_hdf5(self, hdf5_file: h5py.File) -> pd.DataFrame:
@@ -254,11 +253,7 @@ class CIRCA_from_HDF5(Dataset):
         Returns:
             Dictionary of tensors with properly formatted data types and shapes
         """
-        return {
-            "S1": {
-                "S1": torch.from_numpy(sample["S1"]["S1"].astype(np.float32)),
-                "S1_dates": np.array([self.str2date(date) for date in sample["S1"]["S1_dates"]]),
-            },
+        data = {
             "S2": {
                 "S2": torch.from_numpy(sample["S2"]["S2"].astype(np.float32)),
                 "S2_dates": np.array([self.str2date(date) for date in sample["S2"]["S2_dates"]]),
@@ -270,6 +265,34 @@ class CIRCA_from_HDF5(Dataset):
             "idx_impaired_frames": torch.from_numpy(sample["idx_impaired_frames"]),
             "valid_obs": torch.from_numpy(sample["valid_obs"]),
         }
+        if self.use_sar:
+            if self.use_sar == "asc+desc":
+                data.update(
+                    {
+                        "S1": {
+                            "S1_asc": torch.from_numpy(sample["S1"]["S1_asc"].astype(np.float32)),
+                            "S1_dates_asc": np.array([self.str2date(date) for date in sample["S1"]["S1_dates_asc"]]),
+                            "S1_desc": torch.from_numpy(sample["S1"]["S1_desc"].astype(np.float32)),
+                            "S1_dates_desc": np.array([self.str2date(date) for date in sample["S1"]["S1_dates_desc"]]),
+                        }
+                    }
+                )
+            else:
+                data.update(
+                    {
+                        "S1": {
+                            "S1": torch.from_numpy(sample["S1"]["S1"].astype(np.float32)),
+                            "S1_dates": np.array([self.str2date(date) for date in sample["S1"]["S1_dates"]]),
+                        }
+                    }
+                )
+        if sample.get("idx_syn_aleatoire", False):
+            data["idx_syn_aleatoire"] = torch.from_numpy(sample["idx_syn_aleatoire"])
+
+        if sample.get("idx_syn_consecutif", False):
+            data["idx_syn_consecutif"] = torch.from_numpy(sample["idx_syn_consecutif"])
+
+        return data
 
     def etl_item(self, item: int) -> TensorDict:
         """
@@ -296,8 +319,12 @@ class CIRCA_from_HDF5(Dataset):
             "idx_impaired_frames": patch["idx_impaired_frames"][:],
             "valid_obs": patch["valid_obs"][:],
         }
-        if self.use_sar is not None and self.use_sar != "none":
-            sample.update(self.pairing_sar(patch))
+        if self.use_sar:
+            sample.update(
+                self.pairing_and_reconstruct_s1_to_s2_shape(
+                    method=self.use_sar, patch=patch, s2_dates=sample["S2"]["S2_dates"]
+                )
+            )
 
         if patch.get("idx_syn_aleatoire", False):
             sample["idx_syn_aleatoire"] = patch["idx_syn_aleatoire"][:]
@@ -310,36 +337,92 @@ class CIRCA_from_HDF5(Dataset):
 
         return self.format_item(sample)
 
-    def pairing_sar(self, patch: dict) -> TensorDict:
-        sar_data = {}
+    def pairing_and_reconstruct_s1_to_s2_shape(self, method: SarPairingType, patch: dict, s2_dates) -> torch.Tensor:
         dict_pairing = json.loads(patch["S1/S2_S1_pairing"][()].decode("utf-8"))
-        if self.use_sar == "asc+desc":
-            sar_data["S1"] = {
-                "S1_asc": patch["S1/S1_asc"][:],  # T * C * H * W
-                "S1_desc": patch["S1/S1_desc"][:],  # T * C * H * W
-                "S1_dates_asc": self.decode_dates(patch["S1/S1_dates_asc"][:]),
-                "S1_dates_desc": self.decode_dates(patch["S1/S1_dates_desc"][:]),
+        if method == "asc":
+            s1_asc_collected = patch["S1/S1_asc"][:]
+            s1_dates_asc_collected = self.decode_dates(patch["S1/S1_dates_asc"][:])
+            s1_asc_reshape, s1_asc_dates = [], []
+            true_index, old_index = [], []
+            for s2_date in s2_dates:
+                s1_date, _, x = dict_pairing["asc"][s2_date]
+                assert s1_date in s1_dates_asc_collected
+                s1_asc_reshape.append(s1_asc_collected[s1_dates_asc_collected.index(s1_date)])
+                true_index.append(s1_dates_asc_collected.index(s1_date))
+                old_index.append(x)
+                s1_asc_dates.append(s1_date)
+            return {
+                "S1": {
+                    "S1": np.stack(s1_asc_reshape, axis=0),
+                    "S1_dates": s1_asc_dates,
+                }
             }
-        elif self.use_sar == "asc":
-            sar_data["S1"] = {
-                "S1": patch["S1/S1_asc"][:],  # T * C * H * W
-                "S1_dates": self.decode_dates(patch["S1/S1_dates_asc"][:]),
+        elif method == "desc":
+            s1_desc_collected = patch["S1/S1_desc"][:]
+            s1_dates_desc_collected = self.decode_dates(patch["S1/S1_dates_desc"][:])
+            s1_desc_reshape, s1_desc_dates = [], []
+            for s2_date in s2_dates:
+                s1_date, _, _ = dict_pairing["desc"][s2_date]
+                assert s1_date in s1_dates_desc_collected
+                s1_desc_reshape.append(s1_desc_collected[s1_dates_desc_collected.index(s1_date)])
+                s1_desc_dates.append(s1_date)
+            s1_desc_reshape = np.stack(s1_desc_reshape, axis=0)
+            return {
+                "S1": {
+                    "S1": s1_desc_reshape,
+                    "S1_dates": s1_desc_dates,
+                }
             }
-        elif self.use_sar == "desc":
-            sar_data["S1"] = {
-                "S1": patch["S1/S1_desc"][:],  # T * C * H * W
-                "S1_dates": self.decode_dates(patch["S1/S1_dates_desc"][:]),
+        elif method == "asc+desc":
+            s1_asc_collected = patch["S1/S1_asc"][:]
+            s1_dates_asc_collected = self.decode_dates(patch["S1/S1_dates_asc"][:])
+            s1_desc_collected = patch["S1/S1_desc"][:]
+            s1_dates_desc_collected = self.decode_dates(patch["S1/S1_dates_desc"][:])
+            s1_asc_reshape, s1_desc_reshape = [], []
+            s1_asc_dates, s1_desc_dates = [], []
+            for s2_date in s2_dates:
+                # ASC pairing
+                s1_date_asc, _, _ = dict_pairing["asc"][s2_date]
+                assert s1_date_asc in s1_dates_asc_collected
+                s1_asc_reshape.append(s1_asc_collected[s1_dates_asc_collected.index(s1_date_asc)])
+                s1_asc_dates.append(s1_date_asc)
+                # DESC pairing
+                s1_date_desc, _, _ = dict_pairing["desc"][s2_date]
+                assert s1_date_desc in s1_dates_desc_collected
+                s1_desc_reshape.append(s1_desc_collected[s1_dates_desc_collected.index(s1_date_desc)])
+                s1_desc_dates.append(s1_date_desc)
+            return {
+                "S1": {
+                    "S1_asc": np.stack(s1_asc_reshape, axis=0),
+                    "S1_desc": np.stack(s1_desc_reshape, axis=0),
+                    "S1_dates_asc": s1_asc_dates,
+                    "S1_dates_desc": s1_desc_dates,
+                }
             }
-        elif self.use_sar == "mix_closest":
-            sar_data["S1"] = {
-                "S1": patch["S1/mix_closest/S1"][:],  # T * C * H * W
-                "S1_dates": self.decode_dates(patch["S1/mix_closest/S1_dates"][:]),
+        elif method == "mix_closest":
+            s1_asc_collected = patch["S1/S1_asc"][:]
+            s1_dates_asc_collected = self.decode_dates(patch["S1/S1_dates_asc"][:])
+            s1_desc_collected = patch["S1/S1_desc"][:]
+            s1_dates_desc_collected = self.decode_dates(patch["S1/S1_dates_desc"][:])
+            s1_reshape, s1_dates = [], []
+            for s2_date in s2_dates:
+                s1_date, orbit_type, _ = dict_pairing["mix_closest"][s2_date]
+                if orbit_type == "ASC":
+                    assert s1_date in s1_dates_asc_collected
+                    s1_reshape.append(s1_asc_collected[s1_dates_asc_collected.index(s1_date)])
+                    s1_dates.append(s1_date)
+                elif orbit_type == "DESC":
+                    assert s1_date in s1_dates_desc_collected
+                    s1_reshape.append(s1_desc_collected[s1_dates_desc_collected.index(s1_date)])
+                    s1_dates.append(s1_date)
+            return {
+                "S1": {
+                    "S1": np.stack(s1_reshape, axis=0),
+                    "S1_dates": s1_dates,
+                }
             }
         else:
-            raise ValueError(
-                f"SAR pairing {self.use_sar} not recognized. Use 'asc+desc', 'asc', 'desc', 'mix_closest', or 'none'."
-            )
-        return sar_data
+            raise ValueError(f"SAR pairing {method} not recognized. Use 'asc+desc', 'asc', 'desc' or 'mix_closest'.")
 
     def __getitem__(self, item: int) -> TensorDict:
         """
@@ -360,14 +443,15 @@ class CIRCA_from_HDF5(Dataset):
 if __name__ == "__main__":
     # Example usage
     path_dataset_circa = Path("/DATA_10TB/data_rpg/circa/hdf5")
-    hdf5_file = path_dataset_circa / "new_circa_ligth.hdf5"
-
+    # hdf5_file = path_dataset_circa / "new_circa_ligth.hdf5"
+    hdf5_file = path_dataset_circa / "merged_archives.hdf5"
     # Import data from HDF5 file
     dataset = CIRCA_from_HDF5(
         hdf5_file=hdf5_file,
         phase="all",
         shuffle=False,
         channels="all",
+        use_sar="asc+desc",
     )
 
     sample = next(iter(dataset))

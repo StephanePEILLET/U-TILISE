@@ -8,12 +8,16 @@ from copy import deepcopy
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Tuple
 
 import numpy as np
 import torch
 import torchinfo
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
+from omegaconf import OmegaConf
 
 from lib.models import MODELS
 from lib.models.weight_init import weight_init
@@ -143,8 +147,11 @@ def get_model(config: DictConfig, input_dim: int, logger: Optional[logging.Logge
         args_model.pad_value = config.method.pad_value
         if "-mask" in config.data.channels:
             args_model.output_dim -= 1
-        if config.data.get("include_S1", False):
-            args_model.output_dim -= 4
+        if config.data.get("use_sar", False):
+            if config.data.use_sar == "asc+desc":
+                args_model.output_dim -= 8
+            else:
+                args_model.output_dim -= 4
 
         model = MODELS[model_type](**args_model)
         model.apply(weight_init)

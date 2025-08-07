@@ -1,14 +1,16 @@
 import datetime as dt
 from itertools import compress
-from typing import Dict, List, Optional, Tuple
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Tuple
 
+import numpy as np
 import torch
 from torch import Tensor
 
 # Launch date of Sentinel-2A
-REFERENCE_DATE: dt.date = dt.datetime(
-    *map(int, "2015-06-23".split("-")), tzinfo=None
-).date()
+REFERENCE_DATE: dt.date = dt.datetime(*map(int, "2015-06-23".split("-")), tzinfo=None).date()
 # Strategies for positional encoding
 PE_STRATEGIES = ["day-of-year", "day-within-sequence", "absolute", "enumeration"]
 
@@ -57,3 +59,33 @@ def get_position_for_positional_encoding(dates: List[dt.date], strategy: str) ->
         raise NotImplementedError(f"Unknown positional encoding strategy {strategy}.\n")
 
     return position
+
+
+def get_pairwise_representative_dates(asc_dates: np.ndarray, desc_dates: np.ndarray) -> np.ndarray | None:
+    """
+    Calcule la date représentative (point milieu) pour chaque paire de dates.
+
+    Args:
+        asc_dates: Numpy array d'objets datetime (dates ascendantes).
+        desc_dates: Numpy array d'objets datetime (dates descendantes).
+
+    Returns:
+        Un numpy array de datetimes, où chaque date est le point milieu de la paire
+        correspondante, ou None si les arrays n'ont pas la même taille.
+    """
+    # Étape 1: Vérifier que les arrays sont de même longueur
+    if asc_dates.shape != desc_dates.shape:
+        print("Erreur : Les arrays de dates doivent avoir la même taille.")
+        return None
+
+    # Étape 2: Convertir les arrays de datetime en arrays de timestamps (vectorisé)
+    asc_timestamps = np.array([d.timestamp() for d in asc_dates])
+    desc_timestamps = np.array([d.timestamp() for d in desc_dates])
+
+    # Étape 3: Calculer le point milieu pour toutes les paires en une seule opération
+    midpoint_timestamps = (asc_timestamps + desc_timestamps) / 2
+
+    # Étape 4: Reconvertir l'array de timestamps en un array de datetimes
+    representative_dates = np.array([dt.datetime.fromtimestamp(ts) for ts in midpoint_timestamps], dtype=object)
+
+    return representative_dates

@@ -1,7 +1,10 @@
 import datetime
 import itertools
 from pathlib import Path
-from typing import List, Literal, Tuple, Union
+from typing import List
+from typing import Literal
+from typing import Tuple
+from typing import Union
 
 import numpy as np
 import rasterio
@@ -38,9 +41,7 @@ class SentinelDataProcessor:
         """
         with rasterio.open(path_raster) as src_S2:
             patch_S2_array = src_S2.read(window=window)
-            patch_S2_array = SentinelDataProcessor.reshape_sentinel(
-                patch_S2_array, chunk_size=S2_N_CHANNELS
-            )
+            patch_S2_array = SentinelDataProcessor.reshape_sentinel(patch_S2_array, chunk_size=S2_N_CHANNELS)
             return patch_S2_array
 
     @staticmethod
@@ -100,10 +101,7 @@ class SentinelDataProcessor:
 
         with rasterio.open(path_raster) as src_S2:
             len_ts_stacked = src_S2.count // S2_N_CHANNELS
-            cloud_bands = [
-                (x * S2_N_CHANNELS + mask_band_index) + 1
-                for x in np.arange(len_ts_stacked)
-            ]
+            cloud_bands = [(x * S2_N_CHANNELS + mask_band_index) + 1 for x in np.arange(len_ts_stacked)]
             if window is None:
                 cloud_prob = src_S2.read(cloud_bands).transpose(1, 2, 0)
             else:
@@ -111,9 +109,7 @@ class SentinelDataProcessor:
             return np.expand_dims(cloud_prob, axis=2)  # H x W X 1 X T
 
     @staticmethod
-    def read_cloud_mask(
-        path_raster: str, window: Window, cloud_band_index: int = 10
-    ) -> np.ndarray:
+    def read_cloud_mask(path_raster: str, window: Window, cloud_band_index: int = 10) -> np.ndarray:
         cloud_prob = SentinelDataProcessor.read_mask_prob(
             path_raster=path_raster,
             window=window,
@@ -167,10 +163,7 @@ class SentinelDataProcessor:
             row_steps.append(height - tile_size[1])
 
         # Generate all combinations of row and column steps
-        windows_list = [
-            (col, row, tile_size[0], tile_size[1])
-            for col, row in itertools.product(col_steps, row_steps)
-        ]
+        windows_list = [(col, row, tile_size[0], tile_size[1]) for col, row in itertools.product(col_steps, row_steps)]
 
         return windows_list
 
@@ -212,9 +205,7 @@ class SentinelDataProcessor:
         return datetime.datetime.strptime(date, "%Y%m%d")
 
     @staticmethod
-    def cloud_mask_correction(
-        input_mask: np.ndarray, threshold: int = 50
-    ) -> np.ndarray:
+    def cloud_mask_correction(input_mask: np.ndarray, threshold: int = 50) -> np.ndarray:
         """
         Corrects cloud masks by identifying and removing inconsistent pixels based on temporal statistics.
 
@@ -243,9 +234,7 @@ class SentinelDataProcessor:
             return binary_array.sum(axis=0)
 
         cloud_masks = input_mask.copy()
-        persistence_mask = compute_persistence_mask(
-            cloud_masks
-        )  # Stationnarité temporelle
+        persistence_mask = compute_persistence_mask(cloud_masks)  # Stationnarité temporelle
         pixel_threshold = np.percentile(persistence_mask, threshold)
         error_indexes = np.where(persistence_mask > pixel_threshold)
         cloud_masks[:, error_indexes[0], error_indexes[1]] = 0
@@ -270,9 +259,7 @@ class SentinelDataProcessor:
         """
         MAX_CLOUD_VALUE = MAX_SNOW_VALUE = 1
         T, H, W, _ = masks.shape
-        select = (masks[:, :, :, 0] <= MAX_SNOW_VALUE) & (
-            masks[:, :, :, 1] <= MAX_CLOUD_VALUE
-        )
+        select = (masks[:, :, :, 0] <= MAX_SNOW_VALUE) & (masks[:, :, :, 1] <= MAX_CLOUD_VALUE)
         num_pix = H * W
         threshold = (1 - max_fraction_covered) * num_pix
         selected_days = np.sum(select, axis=(1, 2)) >= threshold
@@ -316,9 +303,7 @@ class SentinelDataProcessor:
             patch_S2_data = S2_array[:, :, :, S2_channels_selected]
 
         cloud_masks_corrected = SentinelDataProcessor.cloud_mask_correction(cloud_masks)
-        index_S2_curated = SentinelDataProcessor.filter_dates(
-            np.stack([snow_masks, cloud_masks_corrected], axis=-1)
-        )
+        index_S2_curated = SentinelDataProcessor.filter_dates(np.stack([snow_masks, cloud_masks_corrected], axis=-1))
         return (
             patch_S2_data[index_S2_curated],
             np.asarray(dates)[index_S2_curated],
@@ -348,17 +333,11 @@ class SentinelDataProcessor:
 
         for date_S2 in dates_S2:
             deltas_asc = [
-                (
-                    SentinelDataProcessor.get_datetime(date_S2)
-                    - SentinelDataProcessor.get_datetime(date_S1)
-                ).days
+                (SentinelDataProcessor.get_datetime(date_S2) - SentinelDataProcessor.get_datetime(date_S1)).days
                 for date_S1 in dates_S1_asc
             ]
             deltas_desc = [
-                (
-                    SentinelDataProcessor.get_datetime(date_S2)
-                    - SentinelDataProcessor.get_datetime(date_S1)
-                ).days
+                (SentinelDataProcessor.get_datetime(date_S2) - SentinelDataProcessor.get_datetime(date_S1)).days
                 for date_S1 in dates_S1_desc
             ]
             deltas_S1_ASC.append(np.min(np.abs(deltas_asc)))

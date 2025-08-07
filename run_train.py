@@ -2,6 +2,7 @@ import argparse
 import logging
 import os
 import sys
+import warnings
 from argparse import ArgumentParser
 
 import torch
@@ -12,6 +13,9 @@ from lib import data_utils
 from lib import utils
 from lib.formatter import RawFormatter
 from lib.logger import prepare_logger
+
+# Ignore spécifiquement ce warning de PyTorch
+warnings.filterwarnings("ignore", message="TypedStorage is deprecated", category=UserWarning)
 
 # Constants
 MIN_ARGS_COUNT = 2

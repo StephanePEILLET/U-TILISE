@@ -22,12 +22,12 @@ from dataloader_CIRCA.datasets import CIRCA_from_HDF5
 from dataloader_CIRCA.tools.data_processor import SentinelDataProcessor
 from dataloader_CIRCA.tools.mask_generation import masks_init_filling
 from dataloader_CIRCA.tools.mask_generation import overlay_seq_with_clouds
+from dataloader_CIRCA.tools.positional_encoding import get_pairwise_representative_dates
 from dataloader_CIRCA.tools.positional_encoding import get_position_for_positional_encoding  # NOQA
 from dataloader_CIRCA.tools.positional_encoding import str2date
 from dataloader_CIRCA.tools.sampling import sample_indices_masked_frames
 
 MAX_SEQ_LENGTH = 30
-MIN_SEQ_LENGTH = 5
 SEED = 42
 
 import datetime as dt
@@ -42,7 +42,7 @@ PhaseType = Literal["train", "val", "test", "train+val", "all"]
 ChannelType = Literal["all", "bgr-nir"]
 
 
-class CIRCA_Dataset(CIRCA_from_HDF5):
+class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
     """
     Dataset qui exporte / ou importe les données CIRCA dans / depuis un fichier HDF5.
     """
@@ -57,14 +57,17 @@ class CIRCA_Dataset(CIRCA_from_HDF5):
         channels: ChannelType = "all",
         # U-TILISE specific parameters
         filter_settings: dict = None,
-        min_seq_length: Optional[int] = MIN_SEQ_LENGTH,
         max_seq_length: Optional[int] = MAX_SEQ_LENGTH,
         render_occluded_above_p: Optional[float] = None,
         mask_kwargs: Optional[dict | DictConfig] = None,
         pe_strategy: str = "day-within-sequence",
         augment: Optional[bool] = False,
+        process_data: Optional[bool] = True,
         stats: Optional[DictConfig] = None,
         seed: int = SEED,
+        # Récupération de vieux arguments du repo
+        crop_settings: Optional[DictConfig] = None,
+        return_cloud_mask: bool = True,
     ):
         # Initialize the random seed for reproducibility
         self.seed = seed
@@ -77,8 +80,11 @@ class CIRCA_Dataset(CIRCA_from_HDF5):
             use_sar=use_sar,
             channels=channels,
         )
-
+        self.crop_settings = crop_settings
+        self.return_cloud_mask = return_cloud_mask
         self.transform = None
+        self.process_data = process_data
+
         if stats is not None and isinstance(stats, DictConfig):
             self.stats = stats
             self.transform = A.Compose(
@@ -101,8 +107,10 @@ class CIRCA_Dataset(CIRCA_from_HDF5):
             self.variable_seq_length,
             self.seq_length,
             self.max_seq_length,
-            self.min_seq_length,
-        ) = self.setup_filter_settings(filter_settings, max_seq_length, min_seq_length)
+        ) = self.setup_filter_settings(
+            filter_settings=filter_settings,
+            max_seq_length=max_seq_length,
+        )
         (
             self.mask_kwargs,
             self.fill_type,
@@ -115,7 +123,6 @@ class CIRCA_Dataset(CIRCA_from_HDF5):
     def setup_filter_settings(
         self,
         filter_settings: Optional[DictConfig] = None,
-        min_seq_length: Optional[int] = None,
         max_seq_length: Optional[int] = None,
     ):
         if filter_settings is None:
@@ -140,12 +147,7 @@ class CIRCA_Dataset(CIRCA_from_HDF5):
         filter_settings.min_length = filter_settings.get("min_length", 0)
         filter_settings.max_t_sampling = filter_settings.get("max_t_sampling", None)
         seq_length = MAX_SEQ_LENGTH if max_seq_length is None else max_seq_length
-        if min_seq_length is not None:
-            if min_seq_length > seq_length:
-                raise ValueError(
-                    f"min_seq_length ({min_seq_length}) cannot be greater than max_seq_length ({seq_length})"
-                )
-        return filter_settings, variable_seq_length, seq_length, max_seq_length, min_seq_length
+        return filter_settings, variable_seq_length, seq_length, max_seq_length
 
     def setup_mask_kwargs(self, mask_kwargs: Optional[DictConfig] = None):
         # Parameters used for creating synthetic data gaps
@@ -267,53 +269,6 @@ class CIRCA_Dataset(CIRCA_from_HDF5):
                 count = 1
         return subseq
 
-    def _filter_consecutive_sequence(
-        self,
-        dates,
-        idx_good_frames: list,
-        seq_length: int,
-        filter_type: Optional[str] = None,
-        max_t_sampling: Optional[int] = None,
-    ) -> torch.Tensor:
-        """
-        Filters/Subsamples the image time series stored in `sample` as follows (cf. `self.filter_settings` and
-        `self.max_seq_length`):
-        1) Extracts cloud-free images or extracts the longest consecutive cloud-free subsequence,
-        2) selects a subsequence of cloud-free images such that the temporal difference between consecutive cloud-free
-           images is at most `self.filter_settings.max_t_sampling` days,
-        3) trims the sequence to a maximum temporal length.
-
-        Args:
-            idx_good_frames:           list.
-            seq_length:       int, temporal length of the sample.
-
-        Returns:
-            t_sampled:        torch.Tensor, length T.
-            masks_valid_obs:  torch.Tensor, (T, ).
-        """
-        # Indices of available and cloud-free images
-        if isinstance(idx_good_frames, torch.Tensor):
-            masks_valid_obs = idx_good_frames.clone()
-        else:
-            masks_valid_obs = torch.from_numpy(idx_good_frames.copy())
-
-        # a value of 1 indicates a valid frame, whereas a value of 0 marks an invalid frame
-        if filter_type == "cloud-free":
-            # Generate a mask to exclude invalid frames:
-            if max_t_sampling is not None:
-                subseq = self._longest_consecutive_seq_within_sampling_frequency(dates, masks_valid_obs, max_t_sampling)
-                masks_valid_obs[: subseq["start"]] = 0
-                masks_valid_obs[subseq["end"] + 1 :] = 0
-        elif filter_type == "cloud-free_consecutive":
-            subseq = self._longest_consecutive_seq(masks_valid_obs)
-            masks_valid_obs[: subseq["start"]] = 0
-            masks_valid_obs[subseq["end"] + 1 :] = 0
-        else:
-            masks_valid_obs = torch.ones(
-                seq_length,
-            )
-        return masks_valid_obs
-
     def subsample_sequence(self, masks_valid_obs: torch.Tensor) -> torch.Tensor:
         """
         Trims the sequence to a maximum temporal length.
@@ -392,11 +347,22 @@ class CIRCA_Dataset(CIRCA_from_HDF5):
 
         s2_dates = np.asarray(patch_data["S2"]["S2_dates"])[t_sampled]
 
-        if self.include_S1:
-            s1 = patch_data["S1"]["S1"][t_sampled]
+        if self.use_sar:
+            if self.use_sar == "asc+desc":
+                s1_asc = patch_data["S1"]["S1_asc"][t_sampled]
+                s1_asc_dates = patch_data["S1"]["S1_dates_asc"][t_sampled]
+                s1_desc = patch_data["S1"]["S1_desc"][t_sampled]
+                s1_desc_dates = patch_data["S1"]["S1_dates_desc"][t_sampled]
+
+                s1 = torch.cat((s1_asc, s1_desc), dim=1)
+                s1_dates = get_pairwise_representative_dates(asc_dates=s1_asc_dates, desc_dates=s1_desc_dates)
+            else:
+                s1 = patch_data["S1"]["S1"][t_sampled]
+                s1_dates = patch_data["S1"]["S1_dates"][t_sampled]
+
             if self.process_data:
                 s1 = SentinelDataProcessor.process_SAR(s1)
-            s1_dates = patch_data["S1"]["S1_dates"][t_sampled]
+
             # Concatenate the (masked) S2 bands and the unmasked S1 bands
             frames_input = torch.cat((frames_input, s1), dim=1)
         cloud_mask = patch_data["S2"]["cloud_mask"][t_sampled]  # T x C x H x W
@@ -415,6 +381,12 @@ class CIRCA_Dataset(CIRCA_from_HDF5):
             )
         else:
             masks = torch.zeros((frames_input.shape[0], 1, *frames_input.shape[-2:]))  # T x C x H x W
+
+        # Cast des dates en datetime.datetime à datetime.date si besoin
+        if isinstance(s2_dates[0], dt.datetime):
+            s2_dates = [date.date() for date in s2_dates]
+        if self.use_sar and isinstance(s1_dates[0], dt.datetime):
+            s1_dates = [date.date() for date in s1_dates]
 
         # Extract the number of days since the first observation in the sequence (= temporal sampling)
         days = get_position_for_positional_encoding(s2_dates, "day-within-sequence")
@@ -600,84 +572,131 @@ class CIRCA_Dataset(CIRCA_from_HDF5):
 
         return cloud_mask
 
-    def _subsample_sequence(self, idx_good_frames: np.ndarray, seq_length: int) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Filters/Subsamples the image time series stored in `sample` as follows (cf. `self.filter_settings` and
-        `self.max_seq_length`):
-        1) Extracts cloud-free images or extracts the longest consecutive cloud-free subsequence,
-        2) removes invalid time steps (i.e., no observation, black image),
-        3) trims the sequence to a maximum temporal length.
+    # def _subsample_sequence(self, idx_good_frames: np.ndarray, seq_length: int) -> tuple[torch.Tensor, torch.Tensor]:
+    #     """
+    #     Filters/Subsamples the image time series stored in `sample` as follows (cf. `self.filter_settings` and
+    #     `self.max_seq_length`):
+    #     1) Extracts cloud-free images or extracts the longest consecutive cloud-free subsequence,
+    #     2) removes invalid time steps (i.e., no observation, black image),
+    #     3) trims the sequence to a maximum temporal length.
 
-        Args:
-            sample:           h5py group.
-            seq_length:       int, temporal length of the sample.
+    #     Args:
+    #         sample:           h5py group.
+    #         seq_length:       int, temporal length of the sample.
 
-        Returns:
-            t_sampled:        torch.Tensor, length T.
-            masks_valid_obs:  torch.Tensor, (T, ).
-        """
-        # Generate a mask to exclude invalid frames:
-        # a value of 1 indicates a valid frame, whereas a value of 0 marks an invalid frame
-        if self.filter_settings.type == "cloud-free":
-            # Indices of available and cloud-free images
-            masks_valid_obs = torch.from_numpy(idx_good_frames)
+    #     Returns:
+    #         t_sampled:        torch.Tensor, length T.
+    #         masks_valid_obs:  torch.Tensor, (T, ).
+    #     """
+    #     # Generate a mask to exclude invalid frames:
+    #     # a value of 1 indicates a valid frame, whereas a value of 0 marks an invalid frame
+    #     if self.filter_settings.type == "cloud-free":
+    #         # Indices of available and cloud-free images
+    #         masks_valid_obs = torch.from_numpy(idx_good_frames)
 
-        elif self.filter_settings.type == "cloud-free_consecutive":
-            subseq = self._longest_consecutive_seq(idx_good_frames)
-            masks_valid_obs = torch.from_numpy(idx_good_frames)
-            masks_valid_obs[: subseq["start"]] = 0
-            masks_valid_obs[subseq["end"] + 1 :] = 0
-        else:
-            masks_valid_obs = torch.ones(
-                seq_length,
-            )
+    #     elif self.filter_settings.type == "cloud-free_consecutive":
+    #         subseq = self._longest_consecutive_seq(idx_good_frames)
+    #         masks_valid_obs = torch.from_numpy(idx_good_frames)
+    #         masks_valid_obs[: subseq["start"]] = 0
+    #         masks_valid_obs[subseq["end"] + 1 :] = 0
+    #     else:
+    #         masks_valid_obs = torch.ones(
+    #             seq_length,
+    #         )
 
-        if self.filter_settings.get("return_valid_obs_only", True):
-            t_sampled = masks_valid_obs.nonzero().view(-1)
-        else:
-            t_sampled = torch.arange(0, len(masks_valid_obs))
+    #     if self.filter_settings.get("return_valid_obs_only", True):
+    #         t_sampled = masks_valid_obs.nonzero().view(-1)
+    #     else:
+    #         t_sampled = torch.arange(0, len(masks_valid_obs))
 
-        if self.max_seq_length is not None and len(t_sampled) > self.max_seq_length:
-            # Randomly select `self.max_seq_length` consecutive frames
-            t_start = self.rng.choice(np.arange(0, len(t_sampled) - self.max_seq_length + 1))
-            t_end = t_start + self.max_seq_length
-            t_sampled = t_sampled[t_start:t_end]
+    #     if self.max_seq_length is not None and len(t_sampled) > self.max_seq_length:
+    #         # Randomly select `self.max_seq_length` consecutive frames
+    #         t_start = self.rng.choice(np.arange(0, len(t_sampled) - self.max_seq_length + 1))
+    #         t_end = t_start + self.max_seq_length
+    #         t_sampled = t_sampled[t_start:t_end]
 
-        return t_sampled, masks_valid_obs[t_sampled]
+    #     return t_sampled, masks_valid_obs[t_sampled]
 
-    @staticmethod
-    def _longest_consecutive_seq(idx_frames: torch.Tensor) -> dict[str, int]:
-        """
-        Determines the longest subsequence of consecutive cloud-free images.
+    # @staticmethod
+    # def _longest_consecutive_seq(idx_frames: torch.Tensor) -> dict[str, int]:
+    #     """
+    #     Determines the longest subsequence of consecutive cloud-free images.
 
-        Args:
-            idx_frames:      torch.Tensor.
+    #     Args:
+    #         idx_frames:      torch.Tensor.
 
-        Returns:
-            subseq:      dict, the longest subsequence of valid images. The dictionary has the following key-value
-                         pairs:
-                            'start':  int, index of the first image of the subsequence.
-                            'end':    int, index of the last image of the subsequence.
-                            'len':    int, temporal length of the subsequence.
-        """
+    #     Returns:
+    #         subseq:      dict, the longest subsequence of valid images. The dictionary has the following key-value
+    #                      pairs:
+    #                         'start':  int, index of the first image of the subsequence.
+    #                         'end':    int, index of the last image of the subsequence.
+    #                         'len':    int, temporal length of the subsequence.
+    #     """
 
-        # Count number of consecutive cloud-free images
-        subseq = {"start": 0, "end": 0, "len": 0}
-        count = 1
-        start = 0
+    #     # Count number of consecutive cloud-free images
+    #     subseq = {"start": 0, "end": 0, "len": 0}
+    #     count = 1
+    #     start = 0
 
-        for i in range(len(idx_frames) - 1):
-            if idx_frames[i] + 1 == idx_frames[i + 1]:
-                end = i + 1
-                count += 1
-                if count > subseq["len"]:
-                    subseq["start"] = idx_frames[start]
-                    subseq["end"] = idx_frames[end]
-                    subseq["len"] = count
-            else:
-                start = i + 1
-                count = 1
-        return subseq
+    #     for i in range(len(idx_frames) - 1):
+    #         if idx_frames[i] + 1 == idx_frames[i + 1]:
+    #             end = i + 1
+    #             count += 1
+    #             if count > subseq["len"]:
+    #                 subseq["start"] = idx_frames[start]
+    #                 subseq["end"] = idx_frames[end]
+    #                 subseq["len"] = count
+    #         else:
+    #             start = i + 1
+    #             count = 1
+    #     return subseq
+
+    # def _filter_consecutive_sequence(
+    #     self,
+    #     dates,
+    #     idx_good_frames: list,
+    #     seq_length: int,
+    #     filter_type: Optional[str] = None,
+    #     max_t_sampling: Optional[int] = None,
+    # ) -> torch.Tensor:
+    #     """
+    #     Filters/Subsamples the image time series stored in `sample` as follows (cf. `self.filter_settings` and
+    #     `self.max_seq_length`):
+    #     1) Extracts cloud-free images or extracts the longest consecutive cloud-free subsequence,
+    #     2) selects a subsequence of cloud-free images such that the temporal difference between consecutive cloud-free
+    #        images is at most `self.filter_settings.max_t_sampling` days,
+    #     3) trims the sequence to a maximum temporal length.
+
+    #     Args:
+    #         idx_good_frames:           list.
+    #         seq_length:       int, temporal length of the sample.
+
+    #     Returns:
+    #         t_sampled:        torch.Tensor, length T.
+    #         masks_valid_obs:  torch.Tensor, (T, ).
+    #     """
+    #     # Indices of available and cloud-free images
+    #     if isinstance(idx_good_frames, torch.Tensor):
+    #         masks_valid_obs = idx_good_frames.clone()
+    #     else:
+    #         masks_valid_obs = torch.from_numpy(idx_good_frames.copy())
+
+    #     # a value of 1 indicates a valid frame, whereas a value of 0 marks an invalid frame
+    #     if filter_type == "cloud-free":
+    #         # Generate a mask to exclude invalid frames:
+    #         if max_t_sampling is not None:
+    #             subseq = self._longest_consecutive_seq_within_sampling_frequency(dates, masks_valid_obs, max_t_sampling)
+    #             masks_valid_obs[: subseq["start"]] = 0
+    #             masks_valid_obs[subseq["end"] + 1 :] = 0
+    #     elif filter_type == "cloud-free_consecutive":
+    #         subseq = self._longest_consecutive_seq(masks_valid_obs)
+    #         masks_valid_obs[: subseq["start"]] = 0
+    #         masks_valid_obs[subseq["end"] + 1 :] = 0
+    #     else:
+    #         masks_valid_obs = torch.ones(
+    #             seq_length,
+    #         )
+    #     return masks_valid_obs
 
 
 ######################################################################################
@@ -685,13 +704,18 @@ class CIRCA_Dataset(CIRCA_from_HDF5):
 ######################################################################################
 
 if __name__ == "__main__":
+    # path_dataset_circa = Path("/DATA_10TB/data_rpg/circa/hdf5")
+    # hdf5_file = path_dataset_circa / "circa_cloud_removal_asc_desc.hdf5"
+
+    # Example usage
     path_dataset_circa = Path("/DATA_10TB/data_rpg/circa/hdf5")
-    hdf5_file = path_dataset_circa / "circa_cloud_removal_asc_desc.hdf5"
+    # hdf5_file = path_dataset_circa / "new_circa_ligth.hdf5"
+    hdf5_file = path_dataset_circa / "merged_archives.hdf5"
 
     filter_settings = {
         "type": "cloud-free",  # Strategy for removing observations with data gaps.
         # ['cloud-free', 'cloud-free_consecutive']
-        "min_length": 10,  # Minimum sequence length.
+        "min_length": 5,  # Minimum sequence length.
         "return_valid_obs_only": True,  # True to return the cloud-filtered sequences, False otherwise.
         # "max_t_sampling": 10,            # Maximum temporal sampling frequency in days.
     }
@@ -711,18 +735,20 @@ if __name__ == "__main__":
         "p_filter": 0.1,
     }
 
-    dataset = CIRCA_Dataset(
+    dataset = CIRCA_ADAPTED2UTILISE_Dataset(
         # CIRCA_from_HDF5 parameters
         phase="all",
         hdf5_file=hdf5_file,
         shuffle=False,
-        use_sar=True,
+        use_sar="asc+desc",
         channels="all",
         # U-TILISE specific parameters
         pe_strategy="day-within-sequence",
         filter_settings=filter_settings,
         mask_kwargs=mask_kwargs,
         max_seq_length=10,
+        process_data=True,
+        render_occluded_above_p=None,
     )
     sample = next(iter(dataset))
     print(sample.keys())

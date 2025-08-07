@@ -34,7 +34,7 @@ class CIRCA_from_files(Dataset):
         overlap: Optional[int] = 0,
         load_dataset: Optional[str] = None,
         shuffle: bool = False,
-        include_S1: bool = True,
+        use_sar: bool = True,
         no_filter: bool = False,
     ):
         """
@@ -47,7 +47,7 @@ class CIRCA_from_files(Dataset):
         - overlap (int, optional): Number of pixels to overlap between patches on all sides. Defaults to 0.
         - load_dataset (Optional[str], optional): Path to a pre-saved dataset CSV file. Defaults to None.
         - shuffle (bool, optional): Whether to shuffle the dataset. Defaults to False.
-        - include_S1 (bool, optional): Whether to include SAR data in the dataset. Defaults to True.
+        - use_sar (bool, optional): Whether to include SAR data in the dataset. Defaults to True.
         """
         self.data_optique = Path(data_optique)
         self.data_radar = Path(data_radar)
@@ -57,7 +57,7 @@ class CIRCA_from_files(Dataset):
         self.shuffle = shuffle
         self.zones_dataset, self.dates_dict = None, None
         self.patches_dataset = None
-        self.include_S1 = include_S1
+        self.use_sar = use_sar
         self.no_filter = no_filter
         self.setup()
 
@@ -312,7 +312,7 @@ class CIRCA_from_files(Dataset):
             "masks": cloud_masks,
         }
 
-        if self.include_S1:
+        if self.use_sar:
             # Appariement des dates S1 ASC ou DESC les plus proches
             (
                 dates_S1_curated,

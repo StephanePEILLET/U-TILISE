@@ -42,6 +42,7 @@ def appariement_S1_to_S2(
     list_index_prelevement_asc = []
     distance_S2_S1_asc = np.abs(np.expand_dims(S2_dates_int, 1) - np.expand_dims(S1_dates_asc_int, 0))
     id_min_S2_S1_asc = np.argmin(distance_S2_S1_asc, axis=1)
+
     for i in range(len(S2_dates)):
         date_min = S1_dates_asc[id_min_S2_S1_asc[i]]
         orbit_type = "ASC"
