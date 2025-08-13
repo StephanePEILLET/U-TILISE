@@ -79,10 +79,10 @@ def merge_hdf5_files(source_dir, output_file):
 if __name__ == "__main__":
     # --- Paramètres à configurer ---
     # Répertoire contenant les fichiers HDF5 à fusionner
-    # SOURCE_DIRECTORY = "/DATA_10TB/data_rpg/circa/hdf5/archives_MGRSC"
-    SOURCE_DIRECTORY = "/DATA_10TB/data_rpg/circa/hdf5/test_merge"
+    SOURCE_DIRECTORY = "/DATA_10TB/data_rpg/circa/hdf5/archives_MGRSC"
+    # SOURCE_DIRECTORY = "/DATA_10TB/data_rpg/circa/hdf5/test_merge"
     # Chemin complet du fichier HDF5 fusionné en sortie
-    OUTPUT_HDF5_FILE = "/DATA_10TB/data_rpg/circa/hdf5/merged_archives.hdf5"
+    OUTPUT_HDF5_FILE = "/DATA_10TB/data_rpg/circa/hdf5/CIRCA_CR_merged.hdf5"
 
     # Lancer la fonction de fusion
     merge_hdf5_files(SOURCE_DIRECTORY, OUTPUT_HDF5_FILE)

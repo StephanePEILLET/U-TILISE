@@ -18,6 +18,7 @@ from lib.logger import prepare_logger
 warnings.filterwarnings("ignore", message="TypedStorage is deprecated", category=UserWarning)
 
 # Constants
+SEED = 42
 MIN_ARGS_COUNT = 2
 PROGRAM_TITLE = "U-TILISE: A Sequence-to-sequence Model for Cloud Removal in Optical Satellite Time Series (Training)"
 
@@ -102,10 +103,15 @@ def setup_data_loaders(
     if subset and isinstance(config.data.subset, bool):
         subset = 10
 
+    generator = torch.Generator()
+    generator.manual_seed(config.misc.get("random_seed", SEED))
+
     train_loader = data_utils.get_dataloader(
         train_dset,
         config,
         drop_last=True,
+        shuffle=True,
+        generator=generator,
         subset=subset,
     )
 
@@ -114,6 +120,8 @@ def setup_data_loaders(
         val_dset,
         config,
         drop_last=False,
+        shuffle=True,
+        generator=generator,
         subset=subset,
     )
 

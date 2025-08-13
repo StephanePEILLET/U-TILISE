@@ -1,5 +1,9 @@
 # TODO LIST
 ---
+Comprendre bien l'utilisation des cloud_masks
+Faire les métriques R2 sur
+
+
 
 ### 🎯 Data
 - [ ] **Créer le fichier hdf5 contenant le dataset avec toutes les données S2 / S1 ASC / DESC**
@@ -7,6 +11,10 @@
     - [X] Tester le script de merge des fichiers hdf5 pour voir si tout fonctionne correctement.
     - [X] Observer les fichiers obtenues et voir s'ils sont bien exploitables.
     - [X] Refaire la zone MGRS 31TDJ
+    - [X] Copie en entre la machine LNV87 et le store-dai 
+    - [V] Copie entre le store et les noeuds jzellou..
+    - [X] Transférer les données vers jzay
+    
 ---
 
 ### 📚 Datasets
@@ -19,23 +27,22 @@
     - [X] Faire que le cas `mix_closest date ASC/DESC` fonctionne car (dim=4). Lancer un training pour voir si cela fonctionne correctement.
     - [X] Faire que le cas `mix_closest` avec juste des données ASC ou DESC fonctionne car dim=4 dans un cas où dans l'autre. Penser à bien regarder les dict d'appariement pour voir s'il n'y a pas d'erreur.
     - [X] Faire que le cas d'utilisation `full S1 ASC + DESC` fonctionne ici dim=8. Lancer un training avec ce nouveau cas.
-    - [ ] Nettoyage des codes ne servant plus (pousser avec les backups olds puis delete)
+    - [X] Nettoyage des codes ne servant plus (pousser avec les backups olds puis delete)
 ---
 
 ### 🚚 Dataloaders
 - [ ] **Vérifications de la variétés des dates sélectionnées d'une epoch à une autre.** 
 !!!URGENT!!!
 Regarder potentiellement aussi si les images paraissent bonnes et permettent d'être observé.
-- [ ] Vérification des t_sampled pour la même TS, (correspondance avec les dates marquées comme valides)4
-- [ ] Est-ce que la feature permettant de faire l'utilisation des dates consécutives est vraiment intéressante dans notre cas. Si oui, la remettre en place dans le code du Dataset.
-- [ ] Regarder si le paramètre render_occluded_above_p change qch dans la création de masks 
-- [ ] refaire une passe sur la génération de masks dans le getitem du dataloader. (est-ce que la génération de mask n'est-elle pas trop faible..)
+- [X] Vérification des t_sampled pour la même TS, (correspondance avec les dates marquées comme valides)
+- [X] Regarder si le paramètre render_occluded_above_p change qch dans la création de masks 
+- [ ] Refaire une passe sur la génération de masks dans le getitem du dataloader. (est-ce que la génération de mask n'est-elle pas trop faible..)
 
 ---
 
 ### 📊 Metrics
 - [ ] **Avancer sur le code pour les inférences: aussi bien métriques que visuels**
-    - [ ] Dev code de test sur les zones MGRS test => prise en compte full data et faire en sorte de sortir des métriques occluded / non_occluded !!!URGENT!!!
+    - [ ] Dev code de test sur les zones MGRS test => prise en compte full data et faire en sorte de sortir des métriques occluded / observed !!!URGENT!!!
 
     - [ ] Côté visuel : regarder la gestion des données de Célestin avec le + 150. 
     - [ ] Reconstruction `full MS` avec une observation / une TS complète (metrics + objectif de visu)
@@ -53,6 +60,7 @@ Regarder potentiellement aussi si les images paraissent bonnes et permettent d'�
 
 ### 🚀 Trainings
 - [ ] **Lancer des trainings avec les différents cas à expérimenter:**
+    - [X] Implémentation de la méthode avec masquage complet d'une date de la TS 
     - [ ] `MS full`
     - [ ] `MS full + SAR mix`
     - [ ] `MS full + SAR ASC + DESC`
@@ -69,6 +77,7 @@ Regarder potentiellement aussi si les images paraissent bonnes et permettent d'�
 ### 🛠️ MISC: amélioration du pipeline de training / modèle
 - [X] La gestion des sequences de longueurs différentes est-elle bien faite ? !!!URGENT!!! Non pour les min_seq_lengths ... (tri fait lors de la création du hdf5 avec une longueur min de 10.)
 - [X] Regarder si la gestion des min_seq_length et max_seq_length est bien faite
+- [X] Est-ce que la feature permettant de faire l'utilisation des dates consécutives est vraiment intéressante dans notre cas. Si oui, la remettre en place dans le code du Dataset. => None Pas le temps
 
 ### Annexe si temps
 - [ ] Mettre l'affichage de config avec rich comme dans le repo UnCRtainTS

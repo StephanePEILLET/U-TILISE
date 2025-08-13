@@ -53,7 +53,7 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
         phase: PhaseType = "all",
         hdf5_file: Optional[Union[str, Path]] = None,
         shuffle: bool = False,
-        use_sar: bool = True,
+        use_sar: bool = "asc",
         channels: ChannelType = "all",
         # U-TILISE specific parameters
         filter_settings: dict = None,
@@ -280,7 +280,7 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
 
         if self.max_seq_length is not None and len(t_sampled) > self.max_seq_length:
             # Randomly select `self.max_seq_length` consecutive frames
-            t_start = self.rng.choice(np.arange(0, len(t_sampled) - self.max_seq_length + 1))
+            t_start = np.random.choice(np.arange(0, len(t_sampled) - self.max_seq_length + 1))
             t_end = t_start + self.max_seq_length
             t_sampled = t_sampled[t_start:t_end]
 
@@ -335,6 +335,7 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
         if t_sampled is None:
             t_sampled, masks_valid_obs = self.subsample_sequence(patch_data["valid_obs"])
         masks_valid_obs = patch_data["valid_obs"][t_sampled]
+        # print(f"{self.phase.upper()} sample {item} has {t_sampled} observations.")
 
         frames_input, frames_target = (
             patch_data["S2"]["S2"][t_sampled].clone(),
@@ -463,7 +464,6 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
             # Generate a sequence of masks
             masks = torch.zeros((frames_input.shape[0], 1, *frames_input.shape[-2:]))
             masks[t_masked["indices_masked"], :, :, :] = sampled_clouds
-
             # Intersect the randomly generated sequence of cloud masks with the actual cloud masks of the sequence
             if self.intersect_real_cloud_masks:
                 masks = self._intersect_masks(masks, cloud_mask_input)
@@ -487,6 +487,30 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
                 fill_value=self.fill_value,
                 dilate_cloud_masks=self.dilate_cloud_masks,
             )
+
+        elif self.mask_kwargs.mask_type == "fully_masked":
+            # Fully mask the input time series by adding 150 to the pixel values of the sampled frames
+            if t_masked is None:
+                # Indices of the frames to be masked w.r.t. the temporally trimmed sequence
+                t_masked = sample_indices_masked_frames(
+                    idx_valid_input_frames=np.arange(0, frames_input.shape[0]),
+                    ratio_masked_frames=self.mask_kwargs.ratio_masked_frames,
+                    ratio_fully_masked_frames=self.mask_kwargs.ratio_fully_masked_frames,
+                    non_masked_frames=self.mask_kwargs.non_masked_frames,
+                    fixed_masking_ratio=self.fixed_masking_ratio,
+                )
+            masks = torch.zeros((frames_input.shape[0], 1, *frames_input.shape[-2:]))
+            masks[t_masked["indices_masked"], :, :, :] = masks[t_masked["indices_masked"], :, :, :] + 150
+
+            # Apply masking
+            frames_input, masks = overlay_seq_with_clouds(
+                frames_input,
+                masks,
+                t_masked=None,
+                fill_value=self.fill_value,
+                dilate_cloud_masks=self.dilate_cloud_masks,
+            )
+
         else:
             raise NotImplementedError
 
@@ -704,13 +728,8 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
 ######################################################################################
 
 if __name__ == "__main__":
-    # path_dataset_circa = Path("/DATA_10TB/data_rpg/circa/hdf5")
-    # hdf5_file = path_dataset_circa / "circa_cloud_removal_asc_desc.hdf5"
-
-    # Example usage
-    path_dataset_circa = Path("/DATA_10TB/data_rpg/circa/hdf5")
-    # hdf5_file = path_dataset_circa / "new_circa_ligth.hdf5"
-    hdf5_file = path_dataset_circa / "merged_archives.hdf5"
+    SUBSET_LENGTH = 20
+    batch_size_inference = 1
 
     filter_settings = {
         "type": "cloud-free",  # Strategy for removing observations with data gaps.
@@ -735,20 +754,25 @@ if __name__ == "__main__":
         "p_filter": 0.1,
     }
 
-    dataset = CIRCA_ADAPTED2UTILISE_Dataset(
-        # CIRCA_from_HDF5 parameters
-        phase="all",
-        hdf5_file=hdf5_file,
-        shuffle=False,
-        use_sar="asc+desc",
-        channels="all",
+    params_dataset = {
+        "phase": "test",
+        "hdf5_file": "/DATA_10TB/data_rpg/circa/hdf5/CIRCA_CR_merged.hdf5",
+        "shuffle": False,
+        "use_sar": False,
+        "channels": "all",
         # U-TILISE specific parameters
-        pe_strategy="day-within-sequence",
-        filter_settings=filter_settings,
-        mask_kwargs=mask_kwargs,
-        max_seq_length=10,
-        process_data=True,
-        render_occluded_above_p=None,
-    )
-    sample = next(iter(dataset))
-    print(sample.keys())
+        "filter_settings": filter_settings,
+        "max_seq_length": 30,
+        "render_occluded_above_p": None,  # Set to None to keep original cloud masks. Minimum cloud cover to fully mask an input image (0.9 demo config)
+        "mask_kwargs": mask_kwargs,
+        "pe_strategy": "day-within-sequence",
+        "augment": False,
+        "process_data": True,
+        "seed": 42,
+        # Récupération de vieux arguments du repo
+        "crop_settings": None,
+        "return_cloud_mask": True,
+    }
+
+    dset = CIRCA_ADAPTED2UTILISE_Dataset(**params_dataset)
+    r = next(iter(dset))

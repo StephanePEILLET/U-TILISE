@@ -1,5 +1,6 @@
 import collections.abc
 import logging
+import random
 import re
 from functools import partial
 from typing import Any
@@ -126,6 +127,17 @@ def pad_collate(batch: List[Any], pad_value: Union[int, float] = 0) -> Any:
     raise TypeError(f"Format not managed : {elem_type}")
 
 
+def seed_worker(worker_id):
+    """
+    Initialise la graine aléatoire pour un worker du DataLoader.
+    Assure que chaque worker a une séquence de nombres aléatoires différente.
+    """
+    # On récupère la graine de base (si définie avec torch.manual_seed) et on la rend unique
+    worker_seed = torch.initial_seed() % 2**32
+    np.random.seed(worker_seed + worker_id)
+    random.seed(worker_seed + worker_id)
+
+
 def get_dataloader(
     dset: torch.utils.data.Dataset,
     config: DictConfig,
@@ -134,6 +146,7 @@ def get_dataloader(
     shuffle: Optional[bool] = None,
     batch_size: Optional[int] = None,
     pin_memory: Optional[bool] = False,
+    generator: Optional[torch.Generator] = None,
 ) -> torch.utils.data.dataloader.DataLoader:
     """Returns a torch.utils.data.DataLoader instance."""
 
@@ -156,6 +169,8 @@ def get_dataloader(
         collate_fn=collate_fn,
         pin_memory=config.misc.get("pin_memory", pin_memory),
         drop_last=drop_last,
+        generator=generator,
+        worker_init_fn=seed_worker,
     )
     return loader
 

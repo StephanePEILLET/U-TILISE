@@ -165,7 +165,7 @@ class CIRCA_from_HDF5(Dataset):
         else:
             raise ValueError(f"Channels {channels} not recognized. Use 'all' or 'bgr-nir'.")
 
-        if self.use_sar is not None and self.use_sar != "none":
+        if self.use_sar:
             if self.use_sar == "asc+desc":
                 num_channels += 8
             elif self.use_sar == "asc" or self.use_sar == "desc" or self.use_sar == "mix_closest":
@@ -286,10 +286,10 @@ class CIRCA_from_HDF5(Dataset):
                         }
                     }
                 )
-        if sample.get("idx_syn_aleatoire", False):
+        if "idx_syn_aleatoire" in sample:
             data["idx_syn_aleatoire"] = torch.from_numpy(sample["idx_syn_aleatoire"])
 
-        if sample.get("idx_syn_consecutif", False):
+        if "idx_syn_consecutif" in sample:
             data["idx_syn_consecutif"] = torch.from_numpy(sample["idx_syn_consecutif"])
 
         return data
