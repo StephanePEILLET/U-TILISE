@@ -1,37 +1,16 @@
-import sys
-from pathlib import Path
-
-sys.path.append(str(Path(__file__).parents[2]))
 import math
-import warnings
 from enum import Enum
 from functools import partial
-from pathlib import Path
 from typing import Dict
 from typing import List
 from typing import Literal
+from typing import Optional
 
 import numpy as np
 import sklearn
 import torch
-import torch.utils
-import torch.utils.data
 import torchgeometry as tgm
 from torch import Tensor
-
-from dataloader_CIRCA.datasets import CIRCA_ADAPTED2UTILISE_Dataset
-
-warnings.filterwarnings("ignore", category=FutureWarning)
-
-
-class MetricType(Enum):
-    MAE = "mae"
-    MSE = "mse"
-    RMSE = "rmse"
-    PSNR = "psnr"
-    SSIM = "ssim"
-    R2 = "r2"
-    SAM = "sam"
 
 
 class CloudRemovalMetrics:
@@ -39,9 +18,18 @@ class CloudRemovalMetrics:
     Computes the metrics used to monitor the training progress or for evaluation.
     """
 
+    class MetricType(Enum):
+        MAE = "mae"
+        MSE = "mse"
+        RMSE = "rmse"
+        PSNR = "psnr"
+        SSIM = "ssim"
+        R2 = "r2"
+        SAM = "sam"
+
     def __init__(
         self,
-        metrics: List[MetricType] = list(MetricType),
+        metrics: Optional[List[str]] = None,
         eval_occluded_observed: bool = True,
         clean_gt_cloudy_pixels: bool = True,
         sam_units: str = "rad",
@@ -51,11 +39,12 @@ class CloudRemovalMetrics:
         Initializes the CloudRemovalMetrics class.
 
         Args:
-            metrics (List[MetricType]): A list of metrics to compute.
-            eval_occluded_observed (bool): If True, evaluates metrics separately for occluded and observed pixels.
-            clean_gt_cloudy_pixels (bool): If True, excludes ground truth cloudy pixels from the evaluation.
-            sam_units (str): The units for the SAM metric, either "rad" or "deg".
-            window_size (int): The window size for the SSIM metric calculation.
+            metrics (List[str] | None): List of metric names to compute (mae, mse, rmse, psnr, ssim, r2, sam).
+                                        If None, all available metrics are used.
+            eval_occluded_observed (bool): If True, also computes metrics separately for occluded/observed pixels.
+            clean_gt_cloudy_pixels (bool): If True, excludes cloudy pixels from the ground truth during evaluation.
+            sam_units (str): Units for the SAM metric ("rad" or "deg").
+            window_size (int): Window size for SSIM computation.
         """
         # True to evaluate the metrics over all pixels and separately for occluded and observed input pixels;
         # False to evaluate the metrics over all pixels only
@@ -64,10 +53,46 @@ class CloudRemovalMetrics:
         self.sam_units = sam_units
         self.window_size = window_size
         # Initialize metric functions
-        self.metric_fns: Dict[MetricType, callable] = {}
-        self._init_metric_functions(metrics)
+        self.metric_fns: Dict[CloudRemovalMetrics.MetricType, callable] = {}
+        metrics_enum = self._parse_metrics(metrics)
+        self._init_metric_functions(metrics_enum)
 
-    def _init_metric_functions(self, metrics: List[MetricType]) -> None:
+    @staticmethod
+    def _parse_metrics(metrics: Optional[List[str]]) -> List["CloudRemovalMetrics.MetricType"]:
+        """Parse and validate the list of metric names into MetricType objects.
+
+        Args:
+            metrics: List of metric names (case-insensitive) or None.
+
+        Returns:
+            Ordered list (without duplicates) of MetricType values.
+
+        Raises:
+            ValueError: If one or more metric names are invalid.
+        """
+        if metrics is None:
+            return list(CloudRemovalMetrics.MetricType)
+        allowed = {m.value: m for m in CloudRemovalMetrics.MetricType}
+        seen = set()
+        ordered: List[CloudRemovalMetrics.MetricType] = []
+        invalid: List[str] = []
+        for m in metrics:
+            key = m.lower()
+            if key not in allowed:
+                if key not in invalid:  # collect each invalid only once
+                    invalid.append(key)
+                continue
+            enum_val = allowed[key]
+            if enum_val not in seen:
+                seen.add(enum_val)
+                ordered.append(enum_val)
+        if invalid:
+            raise ValueError(
+                f"Unknown metric name(s): {invalid}. Valid metrics are: {sorted(allowed.keys())}"  # noqa: E501
+            )
+        return ordered
+
+    def _init_metric_functions(self, metrics: List["CloudRemovalMetrics.MetricType"]) -> None:
         """
         Initializes the metric functions based on the provided list of metric types.
 
@@ -75,6 +100,7 @@ class CloudRemovalMetrics:
             metrics (List[MetricType]): The list of metrics to initialize.
         """
         metric_set = set(metrics)
+        MetricType = CloudRemovalMetrics.MetricType  # local alias for brevity
 
         if MetricType.MAE in metric_set:
             self.metric_fns[MetricType.MAE] = lambda p, t: torch.mean(torch.abs(p - t))
@@ -186,24 +212,24 @@ class CloudRemovalMetrics:
             Dict[str, float]: A dictionary containing the computed image-wise metrics.
         """
         metrics = {}
-        if MetricType.SSIM in self.metric_fns:
-            dssim = self.metric_fns[MetricType.SSIM](predicted, target)
+        if CloudRemovalMetrics.MetricType.SSIM in self.metric_fns:
+            dssim = self.metric_fns[CloudRemovalMetrics.MetricType.SSIM](predicted, target)
             metrics["ssim"] = 1 - 2 * dssim
 
             if self.eval_occluded_observed:
                 occ_images = (masks == 1.0).any(dim=-1).any(dim=-1).any(dim=-1)
                 if occ_images.any():
-                    metrics["ssim_images_occluded_input_pixels"] = 1 - 2 * self.metric_fns[MetricType.SSIM](
-                        predicted[occ_images], target[occ_images]
-                    )
+                    metrics["ssim_images_occluded_input_pixels"] = 1 - 2 * self.metric_fns[
+                        CloudRemovalMetrics.MetricType.SSIM
+                    ](predicted[occ_images], target[occ_images])
                 else:
                     metrics["ssim_images_occluded_input_pixels"] = np.nan
 
                 obs_images = ~occ_images
                 if obs_images.any():
-                    metrics["ssim_images_observed_input_pixels"] = 1 - 2 * self.metric_fns[MetricType.SSIM](
-                        predicted[obs_images], target[obs_images]
-                    )
+                    metrics["ssim_images_observed_input_pixels"] = 1 - 2 * self.metric_fns[
+                        CloudRemovalMetrics.MetricType.SSIM
+                    ](predicted[obs_images], target[obs_images])
                 else:
                     metrics["ssim_images_observed_input_pixels"] = np.nan
         return metrics
@@ -221,15 +247,17 @@ class CloudRemovalMetrics:
             Dict[str, float]: A dictionary containing the computed channel-wise metrics.
         """
         metrics = {}
-        if MetricType.SAM in self.metric_fns:
-            sam_score = self.metric_fns[MetricType.SAM](predicted, target)
+        if CloudRemovalMetrics.MetricType.SAM in self.metric_fns:
+            sam_score = self.metric_fns[CloudRemovalMetrics.MetricType.SAM](predicted, target)
             if sam_score is not None:
                 metrics["sam"] = sam_score
 
             if self.eval_occluded_observed:
                 occluded_mask = (masks == 1.0).any(dim=1)
                 if occluded_mask.any():
-                    sam_occ = self.metric_fns[MetricType.SAM](predicted[occluded_mask], target[occluded_mask])
+                    sam_occ = self.metric_fns[CloudRemovalMetrics.MetricType.SAM](
+                        predicted[occluded_mask], target[occluded_mask]
+                    )
                     if sam_occ is not None:
                         metrics["sam_occluded_input_pixels"] = sam_occ
                 else:
@@ -237,7 +265,9 @@ class CloudRemovalMetrics:
 
                 observed_mask = (masks == 0.0).all(dim=1)
                 if observed_mask.any():
-                    sam_obs = self.metric_fns[MetricType.SAM](predicted[observed_mask], target[observed_mask])
+                    sam_obs = self.metric_fns[CloudRemovalMetrics.MetricType.SAM](
+                        predicted[observed_mask], target[observed_mask]
+                    )
                     if sam_obs is not None:
                         metrics["sam_observed_input_pixels"] = sam_obs
                 else:
@@ -258,11 +288,11 @@ class CloudRemovalMetrics:
         """
         metrics = {}
         pixel_metrics_to_compute = {
-            MetricType.MAE,
-            MetricType.MSE,
-            MetricType.RMSE,
-            MetricType.PSNR,
-            MetricType.R2,
+            CloudRemovalMetrics.MetricType.MAE,
+            CloudRemovalMetrics.MetricType.MSE,
+            CloudRemovalMetrics.MetricType.RMSE,
+            CloudRemovalMetrics.MetricType.PSNR,
+            CloudRemovalMetrics.MetricType.R2,
         }
         for metric_type in pixel_metrics_to_compute:
             if metric_type in self.metric_fns:
@@ -323,20 +353,32 @@ class CloudRemovalMetrics:
         self, target: Tensor, masks: Tensor, predicted: Tensor, cloud_masks: Tensor = None
     ) -> Dict[str, float]:
         """
-        Computes all configured metrics for the given prediction and target.
+        Computes the specified cloud removal metrics.
 
         Args:
             target (Tensor): The ground truth tensor (B x T x C x H x W).
-            masks (Tensor): The input mask tensor (B x T x 1 x H x W), where 1 indicates a masked (occluded)
-                          input pixel and 0 indicates an observed one.
+            masks (Tensor): The input mask tensor (B x T x 1 x H x W).
             predicted (Tensor): The model's prediction tensor (B x T x C x H x W).
-            cloud_masks (Tensor, optional): The ground truth cloud mask (B x T x 1 x H x W), where 1 indicates
-                                           a cloudy pixel in the target. Defaults to None.
+            cloud_masks (Tensor, optional): The ground truth cloud mask (B x T x 1 x H x W).
 
         Returns:
-            Dict[str, float]: A dictionary of computed metrics, with metric names as keys and their float values.
-                              Returns `np.nan` for metrics that could not be computed.
+            Dict[str, float]: A dictionary containing the computed metrics.
         """
+        # Ensure that the tensors are float32 for metric calculations
+        predicted = predicted.to(torch.float32)
+        target = target.to(torch.float32)
+        masks = masks.to(torch.float32)
+
+        if self.clean_gt_cloudy_pixels and cloud_masks is not None:
+            # Exclude ground truth cloudy pixels from the evaluation
+            # Invert cloud mask to get a mask of clear pixels
+            clear_pixels_mask = 1 - cloud_masks
+            # Apply the mask to the target and predicted tensors
+            predicted = predicted * clear_pixels_mask
+            target = target * clear_pixels_mask
+            # Also update the input masks to reflect the excluded pixels
+            masks = masks * clear_pixels_mask
+
         metrics = {}
 
         # 1. Prepare tensors for image-wise metrics (shape: B*T, C, H, W)
@@ -368,133 +410,3 @@ class CloudRemovalMetrics:
                 metrics[key] = value
 
         return metrics
-
-
-if __name__ == "__main__":
-    from lib import config_utils
-    from lib import data_utils
-    from lib.data_utils import pad_collate
-    from lib.data_utils import seed_worker
-    from lib.eval_tools import impute_sequence
-    from lib.models.utilise import UTILISE
-
-    # Définition du dataset
-    SUBSET_LENGTH = 20
-    batch_size_inference = 1
-
-    filter_settings = {
-        "type": "cloud-free",  # Strategy for removing observations with data gaps.
-        # ['cloud-free', 'cloud-free_consecutive']
-        "min_length": 5,  # Minimum sequence length.
-        "return_valid_obs_only": True,  # True to return the cloud-filtered sequences, False otherwise.
-        # "max_t_sampling": 10,            # Maximum temporal sampling frequency in days.
-    }
-
-    mask_kwargs = {
-        "mask_type": "random_clouds",  # Mask the input time series with randomly sampled cloud masks or the actual cloud masks. ['random_clouds', 'real_clouds']
-        "ratio_masked_frames": 0.5,  # Ratio of partially/fully masked images per image time series (upper bound).
-        "ratio_fully_masked_frames": 0.0,  # Ratio of fully masked images per image time series (upper bound).
-        "fixed_masking_ratio": False,  # True to vary the masking ratio across different image time series, False otherwise.
-        "non_masked_frames": [
-            0
-        ],  # list of int, time steps to be excluded from masking. E.g., [0] never masks the first frame in a sequence.
-        "intersect_real_cloud_masks": False,  # True to intersect randomly sampled cloud masks with the actual cloud masks, False otherwise.
-        "dilate_cloud_masks": False,  # True to dilate the cloud masks before masking, False otherwise.
-        "fill_type": "fill_value",  # Strategy for initializing masked pixels. ['fill_value', 'white_noise', 'mean']
-        "fill_value": 1,  # Pixel value of masked pixels. Used if fill_type == 'fill_value'.
-        "p_filter": 0.1,
-    }
-
-    params_dataset = {
-        "phase": "test",
-        "hdf5_file": "/DATA_10TB/data_rpg/circa/hdf5/CIRCA_CR_merged.hdf5",
-        "shuffle": False,
-        "use_sar": "mix_closest",
-        "channels": "all",
-        # U-TILISE specific parameters
-        "filter_settings": filter_settings,
-        "max_seq_length": 30,
-        "render_occluded_above_p": None,  # Set to None to keep original cloud masks. Minimum cloud cover to fully mask an input image (0.9 demo config)
-        "mask_kwargs": mask_kwargs,
-        "pe_strategy": "day-within-sequence",
-        "augment": False,
-        "process_data": True,
-        "seed": 42,
-        # Récupération de vieux arguments du repo
-        "crop_settings": None,
-        "return_cloud_mask": True,
-    }
-
-    dset = CIRCA_ADAPTED2UTILISE_Dataset(**params_dataset)
-
-    # dset = torch.utils.data.Subset(dset, range(SUBSET_LENGTH))
-    dataloader = torch.utils.data.DataLoader(
-        dataset=dset,
-        batch_size=batch_size_inference,
-        shuffle=False,
-        num_workers=0,
-        collate_fn=None,
-        pin_memory=False,
-        drop_last=False,
-    )
-
-    temporal_window = dset.max_seq_length
-    num_channels = dset.num_channels
-    device = torch.device("cuda:0")
-    path_trainings_results = Path("/DATA_10TB/data_rpg/outputs/U-TILISE/results/ALL_SAR_120_epochs_2025-07-11_16-56")
-    path_ckpt = path_trainings_results / "checkpoints" / "Model_best.pth"
-    path_config_training = path_trainings_results / "config.yaml"
-    assert path_ckpt.exists()
-    assert path_config_training.exists()
-    config_training = config_utils.read_config(path_config_training)
-    config_training.utilise.input_dim = num_channels
-    config_training.utilise.output_dim = 10  # num_channels - 4 if use_sar
-    model = UTILISE(**config_training.utilise)
-    checkpoint = torch.load(path_ckpt)
-    model.load_state_dict(checkpoint["model_state_dict"])
-    model.to(device).eval()
-    del checkpoint
-
-    def infer_one_batch(batch, model, temporal_window, device, t_start=None, t_end=None):
-        if t_start is not None and t_end is not None:
-            # Choose a subsequence
-            batch["x"] = batch["x"][:, t_start:t_end, ...]
-
-            for key in ["y", "masks", "cloud_mask", "masks_valid_obs"]:
-                if key in batch:
-                    batch[key] = batch[key][:, t_start:t_end, ...]
-
-            for key in ["days", "position_days"]:
-                if key in batch:
-                    batch[key] = batch[key][:, t_start:t_end]
-
-        batch = data_utils.to_device(batch, device)
-        y_pred = impute_sequence(model, batch, temporal_window, return_att=False)
-        batch = data_utils.to_device(batch, "cpu")
-        y_pred = y_pred.cpu()
-        return batch, y_pred
-
-    batch = next(iter(dataloader))
-
-    batch_processed, y_pred = infer_one_batch(
-        batch=batch,
-        model=model,
-        temporal_window=temporal_window,
-        device=device,
-        t_start=0,
-        t_end=10,
-    )
-
-    compute_metrics = CloudRemovalMetrics()
-    metrics_on_sample = compute_metrics(
-        target=batch["y"],
-        masks=batch["masks"],
-        predicted=y_pred,
-        cloud_masks=batch["cloud_mask"],
-    )
-    print("**Metrics on the sample:**")
-    for k, v in metrics_on_sample.items():
-        if v is None or np.isnan(v):
-            print(f"{k}: {v}")
-        else:
-            print(f"{k}: {v:.4f}")
