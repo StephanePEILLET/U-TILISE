@@ -62,6 +62,7 @@ class CIRCA_from_HDF5(Dataset):
         shuffle: bool = False,
         use_sar: Union[bool | SarPairingType] = "mix_closest",
         channels: ChannelType = "all",
+        image_size: Tuple[int] = IMAGE_SIZE,
     ) -> None:
         """
         Initialize the CIRCA dataset from HDF5 file.
@@ -80,7 +81,7 @@ class CIRCA_from_HDF5(Dataset):
             ValueError: If invalid channels or phase are specified
         """
         self.phase: PhaseType = phase
-        self.image_size: Tuple[int] = IMAGE_SIZE
+        self.image_size: Tuple[int] = image_size
         self.shuffle: bool = shuffle
         self.use_sar: Union[bool | SarPairingType] = use_sar
         self.rng: np.random.Generator = np.random.default_rng(seed=SEED)

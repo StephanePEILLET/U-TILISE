@@ -28,6 +28,7 @@ from dataloader_CIRCA.tools.positional_encoding import str2date
 from dataloader_CIRCA.tools.sampling import sample_indices_masked_frames
 
 MAX_SEQ_LENGTH = 30
+IMAGE_SIZE = (256, 256)
 SEED = 42
 
 import datetime as dt
@@ -68,6 +69,7 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
         # Récupération de vieux arguments du repo
         crop_settings: Optional[DictConfig] = None,
         return_cloud_mask: bool = True,
+        image_size: tuple[int, int] = IMAGE_SIZE,
     ):
         # Initialize the random seed for reproducibility
         self.seed = seed
@@ -79,6 +81,7 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
             shuffle=shuffle,
             use_sar=use_sar,
             channels=channels,
+            image_size=image_size,
         )
         self.crop_settings = crop_settings
         self.return_cloud_mask = return_cloud_mask

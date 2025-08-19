@@ -2,21 +2,30 @@ import logging
 import logging.config
 import os
 import time
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
+from typing import Dict
+from typing import Optional
+from typing import Tuple
 
 import numpy as np
 import prodict
 import torch
 import torchvision.utils
 import wandb
-from omegaconf import DictConfig, ListConfig, OmegaConf
+from omegaconf import DictConfig
+from omegaconf import ListConfig
+from omegaconf import OmegaConf
 from prodict import Prodict
 from torch import Tensor
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
-from lib import logger, visutils
-from lib.data_utils import compute_false_color, extract_sample, to_device
+from dataloader_CIRCA.datasets.cr_metrics import CloudRemovalMetrics
+from lib import logger
+from lib import visutils
+from lib.data_utils import compute_false_color
+from lib.data_utils import extract_sample
+from lib.data_utils import to_device
 from lib.logger import AverageMeter
 from lib.loss import TrainLoss
 from lib.metrics import EvalMetrics
@@ -79,7 +88,12 @@ class Trainer:
         self.args.accum_iter = self.args.get("accum_iter", 1)  # accumulate gradients for `accum_iter` iterations
 
         self.compute_losses = TrainLoss(self.args.loss)
-        self.compute_metrics = EvalMetrics(self.args.metrics)
+        # Transform metrics
+        list_available_metrics = [l.value for l in CloudRemovalMetrics.MetricType]
+        self.compute_metrics = CloudRemovalMetrics(
+            metrics=[k for k in self.args.metrics if k in list_available_metrics],
+            eval_occluded_observed=False,
+        )
 
         # Losses: Initialize statistics
         self.train_stats = self._stats_meter(stats_type="loss")
@@ -244,7 +258,7 @@ class Trainer:
                     pass
                 elif value:
                     if masked_metrics and key != "ssim":
-                        stats[f"masked_{key}"] = np.inf
+                        stats[f"{key}"] = np.inf
                     else:
                         stats[key] = np.inf
 
@@ -565,7 +579,12 @@ class Trainer:
 
             # Compute losses and evaluation metrics
             loss_dict, loss = self.compute_losses(batch, y_pred)
-            metrics = self.compute_metrics(batch, y_pred)
+            metrics = self.compute_metrics(
+                target=batch["y"],
+                masks=batch["masks"],
+                predicted=y_pred,
+                cloud_masks=batch.get("cloud_mask", None),
+            )
             # Diff en loss_dict
             return loss_dict, metrics, loss
 
@@ -576,6 +595,11 @@ class Trainer:
 
             # Compute  losses and evaluation metrics
             loss_dict, _ = self.compute_losses(batch, y_pred)
-            metrics = self.compute_metrics(batch, y_pred)
+            metrics = self.compute_metrics(
+                target=batch["y"],
+                masks=batch["masks"],
+                predicted=y_pred,
+                cloud_masks=batch.get("cloud_mask", None),
+            )
 
             return loss_dict, metrics

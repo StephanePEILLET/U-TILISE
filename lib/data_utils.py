@@ -2,6 +2,7 @@ import collections.abc
 import logging
 import random
 import re
+import warnings
 from functools import partial
 from typing import Any
 from typing import Dict
@@ -22,6 +23,8 @@ from torch.utils.data import Dataset
 from lib.datasets import DATASETS
 from lib.datasets import EarthNet2021Dataset
 from lib.datasets import SEN12MSCRTSDataset
+
+warnings.filterwarnings("ignore", category=UserWarning)
 
 np_str_obj_array_pattern = re.compile(r"[SaUO]")
 

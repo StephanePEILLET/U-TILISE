@@ -1,9 +1,9 @@
 # TODO LIST
 ---
-Comprendre bien l'utilisation des cloud_masks
-Faire les métriques R2 sur
-
-
+Débugger le problème avec le code sur les métriques
+Faire l'adaptation des métriques avec les masques de Célestin
+Unifier le problème de fuite mémoire avec le détach seulement dans le cr_torchmetrics.py 
+Comparer rapidement les sorties entre r2_score_pytorch et sklearn.r2
 
 ### 🎯 Data
 - [ ] **Créer le fichier hdf5 contenant le dataset avec toutes les données S2 / S1 ASC / DESC**
@@ -12,7 +12,7 @@ Faire les métriques R2 sur
     - [X] Observer les fichiers obtenues et voir s'ils sont bien exploitables.
     - [X] Refaire la zone MGRS 31TDJ
     - [X] Copie en entre la machine LNV87 et le store-dai 
-    - [V] Copie entre le store et les noeuds jzellou..
+    - [X] Copie entre le store et les noeuds jzellou..
     - [X] Transférer les données vers jzay
     
 ---

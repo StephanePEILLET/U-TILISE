@@ -1,10 +1,10 @@
 data:
     dataset: circa         # Name of the dataset, ['earthnet2021', 'sen12mscrts']
-    hdf5_file_read: /DATA_10TB/data_rpg/circa/hdf5/merged_archives.hdf5 #/DATA_10TB/data_rpg/circa/hdf5/circa_cloud_removal.hdf5
+    hdf5_file: /DATA_10TB/data_rpg/circa/hdf5/CIRCA_CR_merged.hdf5 #/DATA_10TB/data_rpg/circa/hdf5/circa_cloud_removal.hdf5
     max_seq_length: 15
     channels: all
-    use_sar: mix_closest # asc /desc/ mix_closest / asc+desc
-    subset: true
+    use_sar: False # asc /desc/ mix_closest / asc+desc
+    subset: false
     filter_settings:
         type: cloud-free
         min_length: 5
@@ -95,7 +95,7 @@ metrics:
     sam: true                              # Spectral angle mapper (SAM).
 
 misc:
-    num_workers: 8                         # Number of dataloader worker processes.
+    num_workers: 0                        # Number of dataloader worker processes.
     pin_memory: true                      # Pin memory (dataloader settings).
     run_mode: test                        # Run mode. ['train', 'val', 'test']
 

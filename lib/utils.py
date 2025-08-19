@@ -340,10 +340,10 @@ def set_seed(seed: int) -> None:
     np.random.seed(seed)
     random.seed(seed)
 
-    if torch.cuda.device_count() > 1:
-        torch.cuda.manual_seed_all(seed)
-    else:
-        torch.cuda.manual_seed(seed)
+    # if torch.cuda.device_count() > 1:
+    #     torch.cuda.manual_seed_all(seed)
+    # else:
+    #     torch.cuda.manual_seed(seed)
 
 
 def write_model_structure_to_file(

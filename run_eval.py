@@ -13,35 +13,6 @@ from lib import config_utils
 from lib.arguments import eval_parser
 from lib.data_utils import get_dataset
 from lib.eval_tools import Imputation
-from lib.logger import AverageMeter
-from lib.metrics import EvalMetrics
-
-
-def print_stats(stats, evaluator, print_only_masked=False):
-    prefix = evaluator.compute_metrics.prefix
-
-    if print_only_masked is False:
-        print("Metrics computed over all pixels:")
-        for k, v in stats.items():
-            if "occluded_input_pixels" in k or "observed_input_pixels" in k:
-                pass
-            else:
-                metric = k.replace(prefix, "")
-                print(f"{metric.upper()}: {v}")
-
-    if evaluator.compute_metrics.eval_occluded_observed:
-        print("\nMetrics computed over all masked input pixels:")
-        for k, v in stats.items():
-            if "occluded_input_pixels" in k:
-                metric = k.replace(prefix, "").replace("_occluded_input_pixels", "").replace("_images", "")
-                print(f"{metric.upper()}: {v}")
-
-        if print_only_masked is False:
-            print("\nMetrics computed over all observed input pixels:")
-            for k, v in stats.items():
-                if "observed_input_pixels" in k:
-                    metric = k.replace(prefix, "").replace("_observed_input_pixels", "").replace("_images", "")
-                    print(f"{metric.upper()}: {v}")
 
 
 class Evaluator:
@@ -59,8 +30,24 @@ class Evaluator:
             "psnr": True,
             "sam": True,
         }
+        from dataloader_CIRCA.datasets.cr_metrics import CloudRemovalMetrics
+        from dataloader_CIRCA.datasets.cr_torchmetrics import CloudRemovalDatasetMetrics
 
-        self.compute_metrics = EvalMetrics(self.args_metrics)
+        list_available_metrics = [l.value for l in CloudRemovalMetrics.MetricType]
+        metrics = (
+            [k for k in self.args.metrics if k in list_available_metrics]
+            if ("metrics" in self.args and self.args.metrics is not None)
+            else list_available_metrics
+        )
+
+        self.compute_metrics = CloudRemovalDatasetMetrics(
+            metrics=metrics,
+            eval_occluded_observed=True,
+            # device=self.device,
+        )
+
+        # self.compute_metrics = EvalMetrics(self.args_metrics)
+
         _ = torch.set_grad_enabled(False)
 
         if not os.path.isfile(args.config_file):
@@ -70,6 +57,18 @@ class Evaluator:
         self.config = config_utils.read_config(args.config_file)
 
         # Merge generic data settings (used during training) with test-specific data settings
+        if self.config.data.get("hdf5_file", False):
+            for key in ["hdf5_file", "hdf5_file_read"]:
+                if key in args_test_data:
+                    args_test_data.pop(key)
+            args_test_data.hdf5_file = self.config.data.hdf5_file
+        # Manage old config settings
+        if "include_S1" in args_test_data:
+            if args_test_data.include_S1 is True:
+                self.config.data.use_sar = "mix_closest"
+            else:
+                self.config.data.use_sar = False
+            args_test_data.pop("include_S1")
         self.config.data.update(args_test_data)
 
         if self.config.data.dataset != "circa":
@@ -85,10 +84,14 @@ class Evaluator:
 
         # Get the data loader
         dset = get_dataset(self.config, phase=phase)
-
+        print(f"Dataset length: {len(dset)}")
         subset = self.config.data.get("subset", False)
         if subset and isinstance(self.config.data.subset, bool):
             subset = 1
+
+        # FORCER UN SUBSET POUR LE TEST
+        subset = 200
+        print(f"INFO: Forcing evaluation on a subset of {subset} samples for testing.")
 
         from lib import data_utils
 
@@ -111,44 +114,21 @@ class Evaluator:
         )
 
     def evaluate(self):
-        self._initialize_stats()
-
-        for i, batch in enumerate(tqdm(self.dataloader, leave=False)):
-            _, y_pred = self.imputation.impute_sample(batch)
-
-            # Evaluation
-            metrics = self.compute_metrics(batch, y_pred)
-            for key, value in metrics.items():
-                self.stats[key].update(value)
-
-        # Average metrics over all samples
-        for metric in self.stats.keys():
-            self.stats[metric] = self.stats[metric].avg
-
-        return self.stats
-
-    def _initialize_stats(self):
-        stats = Prodict()
-        eval_occluded_observed = self.args_metrics.get("eval_occluded_observed", True)
-
-        for metric, val in self.args_metrics.items():
-            if metric in ["masked_metrics", "sam_units", "eval_occluded_observed"]:
-                pass
-            elif val:
-                metric_name = (
-                    f"masked_{metric}" if (self.args_metrics["masked_metrics"] and "ssim" not in metric) else metric
+        with torch.no_grad():  # Envelopper la boucle
+            for i, batch in enumerate(tqdm(self.dataloader, leave=False)):
+                _, y_pred = self.imputation.impute_sample(
+                    batch,
+                    t_start=0,
+                    t_end=5,
                 )
-                stats[metric_name] = AverageMeter()
-
-                if eval_occluded_observed and "ssim" not in metric:
-                    stats[f"{metric_name}_occluded_input_pixels"] = AverageMeter()
-                    stats[f"{metric_name}_observed_input_pixels"] = AverageMeter()
-
-                if eval_occluded_observed and "ssim" in metric:
-                    stats[f"{metric_name}_images_occluded_input_pixels"] = AverageMeter()
-                    stats[f"{metric_name}_images_observed_input_pixels"] = AverageMeter()
-
-        self.stats = stats
+                # Evaluation
+                self.compute_metrics.update(
+                    target=batch["y"],
+                    masks=batch["masks"],
+                    predicted=y_pred,
+                    cloud_masks=batch.get("cloud_mask", None),
+                )
+            return self.compute_metrics.compute()
 
 
 if __name__ == "__main__":
@@ -175,7 +155,7 @@ if __name__ == "__main__":
             )
         args_test_data.hdf5_file = args.test_data.hdf5_file
     if args.test_data.hdf5_file_read is not None:
-        args_test_data.hdf5_file_read = args.test_data.hdf5_file_read
+        args_test_data.hdf5_file = args.test_data.hdf5_file_read
     if args.test_data.split is not None:
         args_test_data.split = args.test_data.split
     if args.test_data.mode is not None:
@@ -190,4 +170,4 @@ if __name__ == "__main__":
     print(f"Evaluation completed in {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s\n")
 
     print("Statistics:\n===========")
-    print_stats(stats, evaluator)
+    print(stats)
