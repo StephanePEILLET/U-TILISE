@@ -7,7 +7,8 @@ from typing import Literal
 from typing import Optional
 
 import numpy as np
-import sklearn
+
+# import sklearn
 import torch
 import torchgeometry as tgm
 from torch import Tensor
@@ -403,43 +404,35 @@ class CloudRemovalMetrics:
         if cloud_masks is not None:
             cloud_masks = cloud_masks.detach()
 
-        # Ensure that the tensors are float32 for metric calculations
         predicted = predicted.to(torch.float32)
         target = target.to(torch.float32)
         masks = masks.to(torch.float32)
-
-        if self.clean_gt_cloudy_pixels and cloud_masks is not None:
-            # Exclude ground truth cloudy pixels from the evaluation
-            # Invert cloud mask to get a mask of clear pixels
-            clear_pixels_mask = 1 - cloud_masks
-            # Apply the mask to the target and predicted tensors
-            predicted = predicted * clear_pixels_mask
-            target = target * clear_pixels_mask
-            # Also update the input masks to reflect the excluded pixels
-            masks = masks * clear_pixels_mask
-
         metrics = {}
-
-        # 1. Prepare tensors for image-wise metrics (shape: B*T, C, H, W)
         B, T, C, H, W = predicted.shape
         n_frames = B * T
+
+        # always compute SSIM (image-wise) before any cloud filtering
+        predicted_img_orig = predicted.view(n_frames, C, H, W)
+        target_img_orig = target.view(n_frames, C, H, W)
+        masks_img_orig = masks.view(n_frames, 1, H, W).expand(target_img_orig.shape)
+        metrics.update(self._compute_imagewise_metrics(predicted_img_orig, target_img_orig, masks_img_orig))
+
+        # Step 2: apply cloud filtering for pixel-wise metrics
+        if self.clean_gt_cloudy_pixels and cloud_masks is not None:
+            clear_pixels_mask = 1 - cloud_masks
+            predicted = predicted * clear_pixels_mask
+            target = target * clear_pixels_mask
+            masks = masks * clear_pixels_mask
+
+        # Step 3: prepare tensors and compute remaining metrics
         predicted_img = predicted.view(n_frames, C, H, W)
         target_img = target.view(n_frames, C, H, W)
         masks_img = masks.view(n_frames, 1, H, W).expand(target_img.shape)
-
-        # 2. Compute image-wise metrics (e.g., SSIM)
-        metrics.update(self._compute_imagewise_metrics(predicted_img, target_img, masks_img))
-
-        # 3. Prepare tensors for pixel-wise metrics
         predicted_pix, target_pix, masks_pix = self._prepare_pixelwise_tensors(
             predicted_img, target_img, masks_img, cloud_masks
         )
-
-        # 4. Compute all pixel-wise metrics
         metrics.update(self._compute_pixelwise_metrics(predicted_pix, target_pix, masks_pix))
         metrics.update(self._compute_channelwise_metrics(predicted_pix, target_pix, masks_pix))
-
-        # 5. Finalize metrics: convert tensors to float and handle None values
         for key, value in metrics.items():
             if isinstance(value, torch.Tensor):
                 metrics[key] = value.item()
@@ -447,5 +440,4 @@ class CloudRemovalMetrics:
                 metrics[key] = np.nan
             else:
                 metrics[key] = value
-
         return metrics
