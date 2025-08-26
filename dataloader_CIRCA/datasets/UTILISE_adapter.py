@@ -378,7 +378,6 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
 
         elif self.mask_kwargs is not None and self.mask_kwargs.mask_type == "random_fully_masked":
             for i in patch_data["idx_syn_aleatoire"]:
-                print("Using random fully masked")
                 cloud_mask[i] = torch.ones_like(cloud_mask[i])
 
         # Sampling temporel

@@ -232,8 +232,16 @@ def main(args: argparse.Namespace) -> None:
     if config.misc.random_seed is not None:
         utils.set_seed(config.misc.random_seed)
 
+    if config.misc.get("device", False):
+        device = torch.device(config.misc.device)
+    else:
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    logger.info(f"Evaluation will be performed on device: {device}\n")
+
     # Initialize the trainer and start training
-    trainer = utils.get_trainer(config, train_dset, val_dset, train_loader, val_loader, model, optimizer, scheduler)
+    trainer = utils.get_trainer(
+        config, train_dset, val_dset, train_loader, val_loader, model, optimizer, scheduler, device
+    )
     trainer.train()
 
     # Ajout de la partie évaluation sur la partie test set
@@ -247,7 +255,7 @@ def main(args: argparse.Namespace) -> None:
     from lib.eval_tools import Imputation
 
     _ = torch.set_grad_enabled(False)
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
     compute_metrics = CloudRemovalDatasetMetrics(eval_occluded_observed=True)
     # Get test dataset and dataloader
     test_dset = data_utils.get_dataset(config, phase="test", logger=logger)

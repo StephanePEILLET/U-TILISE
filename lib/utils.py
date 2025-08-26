@@ -251,6 +251,7 @@ def get_trainer(
     model,
     optimizer,
     scheduler,
+    device: Optional[torch.device] = None,
 ) -> Trainer:
     """
     Returns a Trainer instance.
@@ -263,6 +264,7 @@ def get_trainer(
         optimizer:       torch.optim.optimizer instance, optimizer to be used for training.
         scheduler:       torch.optim.lr_scheduler instance, learning rate scheduler to be used for training
                          (None, if the learning rate scheduler is disabled).
+        device:          torch.device, device to be used for training (if None, cpu is used).
 
     Returns:
         instance of the Trainer class.
@@ -331,6 +333,7 @@ def get_trainer(
         model,
         optimizer,
         scheduler,
+        device=device,
     )
 
 

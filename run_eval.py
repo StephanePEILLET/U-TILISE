@@ -118,7 +118,13 @@ class Evaluator:
             subset=subset,
         )
 
-        MAX_SAMPLES_ON_GPU = 14
+        if self.config.misc.get("device", False):
+            device = torch.device(self.config.misc.device)
+        else:
+            device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        print(f"Evaluation will be performed on device: {device}\n")
+
+        # MAX_SAMPLES_ON_GPU = 14
         # Get the imputation model
         self.imputation = Imputation(
             config_file_train=self.args.config_file,
@@ -126,7 +132,8 @@ class Evaluator:
             mode=args.mode,
             checkpoint=self.args.checkpoint,
             config_file_test=self.args.test_data.test_config,
-            temporal_window=MAX_SAMPLES_ON_GPU,
+            # temporal_window=MAX_SAMPLES_ON_GPU,
+            device=device,
         )
 
     def evaluate(self):

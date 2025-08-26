@@ -75,10 +75,15 @@ class Trainer:
         model,
         optimizer,
         scheduler,
+        device: torch.device = None,
     ):
         self.args = args
         self.use_wandb = bool("wandb" in args)
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        if device is not None:
+            self.device = device
+        else:
+            self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
         self.dataset = {"train": train_dset, "val": val_dset}
         self.dataloader = {"train": train_loader, "val": val_loader}
         self.model = model
