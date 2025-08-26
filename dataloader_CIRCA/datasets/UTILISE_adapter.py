@@ -369,8 +369,22 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
 
             # Concatenate the (masked) S2 bands and the unmasked S1 bands
             frames_input = torch.cat((frames_input, s1), dim=1)
-        cloud_mask = patch_data["S2"]["cloud_mask"][t_sampled]  # T x C x H x W
 
+        cloud_mask = patch_data["S2"]["cloud_mask"]
+        # Avant le sampling temporel on va modifier le masque en fonction du paramètre dans mask_kwargs
+        if self.mask_kwargs is not None and self.mask_kwargs.mask_type == "consecutive_fully_masked":
+            for i in patch_data["idx_syn_consecutif"]:
+                cloud_mask[i] = torch.ones_like(cloud_mask[i])
+
+        elif self.mask_kwargs is not None and self.mask_kwargs.mask_type == "random_fully_masked":
+            for i in patch_data["idx_syn_aleatoire"]:
+                print("Using random fully masked")
+                cloud_mask[i] = torch.ones_like(cloud_mask[i])
+
+        # Sampling temporel
+        cloud_mask = cloud_mask[t_sampled]  # T x C x H x W
+
+        # On pars du principe que l'argument render_occluded_above_p est jamais utilisé afin d'utiliser les masques d'origines
         if self.render_occluded_above_p and self.render_occluded_above_p > 0.0:
             cloud_mask = self._mask_images_with_cloud_coverage_above_p(cloud_mask)
 
@@ -443,9 +457,7 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
             frames_input:       torch.Tensor, (T x C x H x W), randomly masked image time series `frames_input`.
             masks:              torch.Tensor, (T x C x H x W), corresponding sequence of masks.
         """
-
         if self.mask_kwargs.mask_type == "random_clouds":
-
             if t_masked is None:
                 # Indices of the frames to be masked w.r.t. the temporally trimmed sequence
                 t_masked = sample_indices_masked_frames(
@@ -455,7 +467,6 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
                     non_masked_frames=self.mask_kwargs.non_masked_frames,
                     fixed_masking_ratio=self.fixed_masking_ratio,
                 )
-
             # Randomly sample cloud masks
             sampled_clouds = self._sample_cloud_masks_from_tiles(
                 id_sample=id_obs,
@@ -463,7 +474,6 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
                 n=len(t_masked["indices_masked"]),
                 p=self.mask_kwargs.p_filter,
             )
-
             # Generate a sequence of masks
             masks = torch.zeros((frames_input.shape[0], 1, *frames_input.shape[-2:]))
             masks[t_masked["indices_masked"], :, :, :] = sampled_clouds
@@ -480,7 +490,7 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
                 dilate_cloud_masks=self.dilate_cloud_masks,
             )
 
-        elif self.mask_kwargs.mask_type == "real_clouds":
+        elif self.mask_kwargs.mask_type in ["real_clouds", "consecutive_fully_masked", "random_fully_masked"]:
             # Use the real cloud masks for masking
             frames_input, masks = masks_init_filling(
                 frames_input,
@@ -490,8 +500,9 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
                 fill_value=self.fill_value,
                 dilate_cloud_masks=self.dilate_cloud_masks,
             )
-
         elif self.mask_kwargs.mask_type == "fully_masked":
+            # TODO: repenser cette partie et travailler avec directement les mask_probs et pas les cloud_masks
+            # TODO: sinon juste penser à passer tout le mask à 1 ? (mais pas ajout 150)
             # Fully mask the input time series by adding 150 to the pixel values of the sampled frames
             if t_masked is None:
                 # Indices of the frames to be masked w.r.t. the temporally trimmed sequence

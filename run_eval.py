@@ -74,7 +74,7 @@ class Evaluator:
         if self.config.data.dataset != "circa":
             self.config.data.preprocessed = True
 
-        # Evaluate the entire image sequence
+        # Evaluate the entire image sequence (dans le cas de l'evaluation)
         self.config.data.max_seq_length = None
 
         if args_test_data.mode is not None:
@@ -83,15 +83,29 @@ class Evaluator:
             phase = "test"
 
         # Get the data loader
+        if phase == "test" and self.config.mask.mask_type not in [
+            "real_clouds",
+            "consecutive_fully_masked",
+            "random_fully_masked",
+        ]:
+            print(
+                "During an evaluation, the argument mask_type must be set to “real_clouds“ \
+                in order to be able to make an inference on the cloud masks passed as input \
+                without adding additional synthetic cloud masks. \
+                3STR => In order to use synthetic mask already included in the orignal cloud masks with \
+                random or consecutive occlusions set the argument mask_type to “consecutive_fully_masked“\
+                or “consecutive_fully_masked“."
+            )
+
         dset = get_dataset(self.config, phase=phase)
         print(f"Dataset length: {len(dset)}")
         subset = self.config.data.get("subset", False)
         if subset and isinstance(self.config.data.subset, bool):
             subset = 1
 
-        # FORCER UN SUBSET POUR LE TEST
-        subset = 200
-        print(f"INFO: Forcing evaluation on a subset of {subset} samples for testing.")
+        # # FORCER UN SUBSET POUR LE TEST
+        # subset = 200
+        # print(f"INFO: Forcing evaluation on a subset of {subset} samples for testing.")
 
         from lib import data_utils
 
@@ -104,6 +118,7 @@ class Evaluator:
             subset=subset,
         )
 
+        MAX_SAMPLES_ON_GPU = 14
         # Get the imputation model
         self.imputation = Imputation(
             config_file_train=self.args.config_file,
@@ -111,6 +126,7 @@ class Evaluator:
             mode=args.mode,
             checkpoint=self.args.checkpoint,
             config_file_test=self.args.test_data.test_config,
+            temporal_window=MAX_SAMPLES_ON_GPU,
         )
 
     def evaluate(self):
@@ -118,8 +134,9 @@ class Evaluator:
             for i, batch in enumerate(tqdm(self.dataloader, leave=False)):
                 _, y_pred = self.imputation.impute_sample(
                     batch,
-                    t_start=0,
-                    t_end=5,
+                    # t_start=None,
+                    # t_end=None,
+                    # return_all=False,
                 )
                 # Evaluation
                 self.compute_metrics.update(
@@ -132,7 +149,6 @@ class Evaluator:
 
 
 if __name__ == "__main__":
-
     if len(sys.argv) < 2:
         eval_parser.print_help()
         sys.exit(1)
@@ -168,6 +184,14 @@ if __name__ == "__main__":
     time_elapsed = time.time() - since
 
     print(f"Evaluation completed in {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s\n")
-
     print("Statistics:\n===========")
     print(stats)
+
+    import json
+    from pathlib import Path
+
+    main_config = config_utils.read_config(args.config_file)
+    if main_config.get("output", False) and main_config.output.get("save_dir", False):
+        if stats is not None:
+            with open((Path(main_config.output.save_dir) / "test_stats.json"), "w") as f:
+                json.dump(stats, f)

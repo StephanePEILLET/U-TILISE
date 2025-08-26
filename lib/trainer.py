@@ -93,6 +93,7 @@ class Trainer:
         self.compute_metrics = CloudRemovalMetrics(
             metrics=[k for k in self.args.metrics if k in list_available_metrics],
             eval_occluded_observed=False,
+            # device=self.device,
         )
 
         # Losses: Initialize statistics

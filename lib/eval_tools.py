@@ -48,6 +48,8 @@ class Imputation:
         mode: Literal["last", "next", "closest", "linear_interpolation"] | None = None,
         checkpoint: str | None = None,
         config_file_test: str | None = None,
+        temporal_window: Optional[int] = None,
+        device: Optional[torch.device] = None,
     ):
         self.method = Method(method)
         self.mode = Mode(mode)
@@ -80,10 +82,17 @@ class Imputation:
                 self.config.utilise.update(test_config.utilise)
 
             # Extract the temporal window size and the number of channels used during training
-            self.temporal_window = self.config.data.max_seq_length
+            if temporal_window is not None:
+                self.temporal_window = temporal_window
+            else:
+                self.temporal_window = self.config.data.max_seq_length
             self.num_channels = data_utils.get_dataset(self.config, phase=self.config.misc.run_mode).num_channels
 
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        if device is not None:
+            self.device = device
+        else:
+            self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
         _ = torch.set_grad_enabled(False)
 
         # Get the model

@@ -236,6 +236,68 @@ def main(args: argparse.Namespace) -> None:
     trainer = utils.get_trainer(config, train_dset, val_dset, train_loader, val_loader, model, optimizer, scheduler)
     trainer.train()
 
+    # Ajout de la partie évaluation sur la partie test set
+    import json
+    from pathlib import Path
+
+    from tqdm.auto import tqdm
+
+    from dataloader_CIRCA.datasets.cr_metrics import CloudRemovalMetrics
+    from dataloader_CIRCA.datasets.cr_torchmetrics import CloudRemovalDatasetMetrics
+    from lib.eval_tools import Imputation
+
+    _ = torch.set_grad_enabled(False)
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    compute_metrics = CloudRemovalDatasetMetrics(eval_occluded_observed=True)
+    # Get test dataset and dataloader
+    test_dset = data_utils.get_dataset(config, phase="test", logger=logger)
+    subset = config.data.get("subset", False)
+    if subset and isinstance(config.data.subset, bool):
+        subset = 10
+
+    for mask_type in ["random_clouds", "random_fully_masked", "consecutive_fully_masked"]:
+        config_modified = OmegaConf.create(config)
+        config_modified.mask.mask_type = mask_type
+        test_dataloader = data_utils.get_dataloader(
+            test_dset,
+            config_modified,
+            drop_last=False,
+            shuffle=False,
+            generator=None,
+            subset=subset,
+        )
+
+        MAX_SAMPLES_ON_GPU = 14
+        test_imputation = Imputation(
+            config_file_train=(Path(config.output.experiment_folder) / "config.yaml"),
+            method="utilise",
+            mode=None,
+            checkpoint=(Path(config.output.checkpoint_dir) / "Model_best.pth"),
+            temporal_window=MAX_SAMPLES_ON_GPU,
+            device=device,
+        )
+
+        with torch.no_grad():  # Envelopper la boucle
+            for i, batch in enumerate(tqdm(test_dataloader, leave=False)):
+                _, y_pred = test_imputation.impute_sample(
+                    batch,
+                    # t_start=None,
+                    # t_end=None,
+                    # return_all=False,
+                )
+                # Evaluation
+                compute_metrics.update(
+                    target=batch["y"],
+                    masks=batch["masks"],
+                    predicted=y_pred,
+                    cloud_masks=batch.get("cloud_mask", None),
+                )
+            results_test_metrics = compute_metrics.compute()
+            with open((Path(config.output.experiment_folder) / f"test_metrics_{mask_type}.json"), "w") as outfile:
+                json.dump(results_test_metrics, outfile, indent=4)
+            print("Test set metrics:")
+            print(results_test_metrics)
+
 
 if __name__ == "__main__":
     if len(sys.argv) < MIN_ARGS_COUNT:

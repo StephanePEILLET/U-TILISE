@@ -5,14 +5,23 @@ Garnot, V. S. F., Landrieu, L., 2021. Panoptic segmentation of satellite image t
 attention networks. In Proceedings of the IEEE/CVF International Conference on Computer Vision (pp. 4872-4881).
 """
 
-from typing import List, Literal, Optional, Tuple
+from typing import List
+from typing import Literal
+from typing import Optional
+from typing import Tuple
 
 import torch
-from torch import Tensor, nn
+from torch import Tensor
+from torch import nn
 
 from .ltae_transformer import LTAEtransformer
-from .make_layers import get_activation, get_group_gn, str2ActivationType
-from .parameters import ActivationType, NormType, TemporalAggregationMode, UpConvType
+from .make_layers import get_activation
+from .make_layers import get_group_gn
+from .make_layers import str2ActivationType
+from .parameters import ActivationType
+from .parameters import NormType
+from .parameters import TemporalAggregationMode
+from .parameters import UpConvType
 
 
 class UTILISE(nn.Module):
@@ -178,20 +187,15 @@ class UTILISE(nn.Module):
         self.group_norm_eps = group_norm_eps
         self.ltae_norm = ltae_norm
         self.ltae_activation = ltae_activation
-        self.str_conv_k_up = (
-            str_conv_k_up if str_conv_k_up is not None else self.str_conv_k
-        )
-        self.str_conv_p_up = (
-            str_conv_p_up if str_conv_p_up is not None else self.str_conv_p
-        )
+        self.str_conv_k_up = str_conv_k_up if str_conv_k_up is not None else self.str_conv_k
+        self.str_conv_p_up = str_conv_p_up if str_conv_p_up is not None else self.str_conv_p
         self.norm_first = norm_first
 
         if self.skip_attention:
             self.agg_mode = TemporalAggregationMode.NONE
 
         self.in_conv = ConvBlock(
-            n_kernels=[self.input_dim]
-            + [self.encoder_widths[0], self.encoder_widths[0]],
+            n_kernels=[self.input_dim] + [self.encoder_widths[0], self.encoder_widths[0]],
             pad_value=self.pad_value,
             norm=self.encoder_norm,
             num_groups=self.n_groups,
@@ -286,9 +290,7 @@ class UTILISE(nn.Module):
         | Tuple[Tensor, Optional[List[Tensor]]]
         | Tuple[Tensor, Optional[Tensor], Optional[List[Tensor]]]
     ):
-        pad_mask = (
-            (x == self.pad_value).all(dim=-1).all(dim=-1).all(dim=-1)
-        )  # BxT pad mask
+        pad_mask = (x == self.pad_value).all(dim=-1).all(dim=-1).all(dim=-1)  # BxT pad mask
 
         # Fully masked frames should not be treated as padded frames
         if batch_positions is not None:
@@ -306,17 +308,13 @@ class UTILISE(nn.Module):
         else:
             for layer in self.temporal_encoder:
                 # att.shape: n_head x B x T x T x h x w
-                out, att = layer(
-                    out, batch_positions=batch_positions, pad_mask=pad_mask
-                )
+                out, att = layer(out, batch_positions=batch_positions, pad_mask=pad_mask)
 
         # SPATIAL DECODER
         maps = [out] if self.return_maps else None
 
         for i in range(self.n_stages - 1):
-            skip = self.temporal_aggregator(
-                feature_maps[-(i + 2)], pad_mask=pad_mask, attn_mask=att
-            )
+            skip = self.temporal_aggregator(feature_maps[-(i + 2)], pad_mask=pad_mask, attn_mask=att)
             out = self.up_blocks[i](out, skip)
             if self.return_maps:
                 # pyre-ignore[16]: `Optional` has no attribute `append`.
@@ -364,10 +362,7 @@ class TemporallySharedBlock(nn.Module):
                 pad_mask = pad_mask.view(b * t)
 
             if pad_mask.any():
-                temp = (
-                    torch.ones(self.out_shape, device=x.device, requires_grad=False)
-                    * self.pad_value
-                )
+                temp = torch.ones(self.out_shape, device=x.device, requires_grad=False) * self.pad_value
                 temp[~pad_mask] = self.forward(out[~pad_mask])
                 out = temp
             else:
@@ -392,9 +387,7 @@ class ConvLayer(nn.Module):
         dim_per_group: int = -1,
         group_norm_eps: float = 1e-05,
         padding_mode: str = "reflect",
-        activation_last_layer: (
-            ActivationType | Tuple[ActivationType, float] | bool | None
-        ) = True,
+        activation_last_layer: ActivationType | Tuple[ActivationType, float] | bool | None = True,
     ):
         super().__init__()
         layers = []
@@ -488,9 +481,7 @@ class UpConvLayer(TemporallySharedBlock):
             )
         elif upconv_type == UpConvType.BILINEAR:
             layers.append(nn.Upsample(mode="bilinear", scale_factor=2))
-            layers.append(
-                nn.Conv2d(n_kernels[0], n_kernels[1], kernel_size=1, stride=1)
-            )
+            layers.append(nn.Conv2d(n_kernels[0], n_kernels[1], kernel_size=1, stride=1))
 
         if nl is not None:
             layers.append(nl(n_kernels[-1]))
@@ -512,9 +503,7 @@ class ConvBlock(TemporallySharedBlock):
         pad_value: Optional[float] = None,
         norm: NormType = NormType.BATCH,
         activation: ActivationType | Tuple[ActivationType, float] = ActivationType.RELU,
-        activation_last_layer: (
-            ActivationType | Tuple[ActivationType, float] | bool | None
-        ) = True,
+        activation_last_layer: ActivationType | Tuple[ActivationType, float] | bool | None = True,
         padding_mode: str = "reflect",
         num_groups: int = 4,
         dim_per_group: int = -1,
@@ -663,22 +652,16 @@ class UpConvBlock(TemporallySharedBlock):
             padding_mode=padding_mode,
         )
 
-    def forward(
-        self, x: Tensor, skip: Tensor, pad_mask: Optional[Tensor] = None
-    ) -> Tensor:
+    def forward(self, x: Tensor, skip: Tensor, pad_mask: Optional[Tensor] = None) -> Tensor:
         out = self.up.smart_forward(x, pad_mask=pad_mask)
-        out = torch.cat(
-            [out, self.skip_conv.smart_forward(skip, pad_mask=pad_mask)], dim=2
-        )
+        out = torch.cat([out, self.skip_conv.smart_forward(skip, pad_mask=pad_mask)], dim=2)
         out = self.conv1.smart_forward(out, pad_mask=pad_mask)
         out = out + self.conv2.smart_forward(out, pad_mask=pad_mask)
         return out
 
 
 class TemporalAggregator(nn.Module):
-    def __init__(
-        self, mode: TemporalAggregationMode = TemporalAggregationMode.ATT_GROUP
-    ):
+    def __init__(self, mode: TemporalAggregationMode = TemporalAggregationMode.ATT_GROUP):
         super().__init__()
         self.mode = mode
 
@@ -698,17 +681,13 @@ class TemporalAggregator(nn.Module):
                 attn = attn_mask.view(n_heads * b * t, t, h, w)
 
                 if x.shape[-1] > w or x.shape[-2] > h:
-                    attn = nn.Upsample(
-                        size=tuple(x.shape[-2:]), mode="bilinear", align_corners=False
-                    )(attn)
+                    attn = nn.Upsample(size=tuple(x.shape[-2:]), mode="bilinear", align_corners=False)(attn)
                 else:
                     attn = nn.AdaptiveAvgPool2d(x.shape[-2:])(attn)
 
                 attn = attn.view(n_heads, b, t, t, *x.shape[-2:])
                 attn = attn * (~pad_mask).float()[None, :, None, :, None, None]
-                out = torch.stack(
-                    x.chunk(n_heads, dim=2)
-                )  # n_heads x B x T x (C/n_heads) x H x W
+                out = torch.stack(x.chunk(n_heads, dim=2))  # n_heads x B x T x (C/n_heads) x H x W
                 out = attn[:, :, :, :, None, :, :] * out[:, :, None, :, :, :, :]
                 out = out.sum(dim=3)  # n_heads x B x T x (C/n_heads) x H x W
                 out = torch.cat([group for group in out], dim=2)  # B x T x C x H x W
@@ -719,9 +698,7 @@ class TemporalAggregator(nn.Module):
                 attn = attn_mask.mean(dim=0)  # average over heads, B x T x T x H x W
                 attn = attn.view(b * t, t, h, w)
 
-                attn = nn.Upsample(
-                    size=tuple(x.shape[-2:]), mode="bilinear", align_corners=False
-                )(attn)
+                attn = nn.Upsample(size=tuple(x.shape[-2:]), mode="bilinear", align_corners=False)(attn)
 
                 attn = attn.view(b, t, t, *x.shape[-2:])
                 attn = attn * (~pad_mask).float()[:, None, :, None, None]
@@ -743,34 +720,22 @@ class TemporalAggregator(nn.Module):
                     else:
                         attn = nn.AdaptiveAvgPool2d(x.shape[-2:])(attn)
 
-                    attn = attn.view(
-                        n_heads, b, t, t, *x.shape[-2:]
-                    )  # n_heads x B x T x T x H x W
-                    out = torch.stack(
-                        x.chunk(n_heads, dim=2)
-                    )  # n_heads x B x T x (C/n_heads) x H x W
+                    attn = attn.view(n_heads, b, t, t, *x.shape[-2:])  # n_heads x B x T x T x H x W
+                    out = torch.stack(x.chunk(n_heads, dim=2))  # n_heads x B x T x (C/n_heads) x H x W
                     out = attn[:, :, :, :, None, :, :] * out[:, :, None, :, :, :, :]
                     out = out.sum(dim=3)  # n_heads x B x T x (C/n_heads) x H x W
-                    out = torch.cat(
-                        [group for group in out], dim=2
-                    )  # B x T x C x H x W
+                    out = torch.cat([group for group in out], dim=2)  # B x T x C x H x W
                     return out
 
                 elif self.mode == TemporalAggregationMode.ATT_MEAN:
                     n_heads, b, t, _, h, w = attn_mask.shape
-                    attn = attn_mask.mean(
-                        dim=0
-                    )  # average over heads, B x T x T x H x W
+                    attn = attn_mask.mean(dim=0)  # average over heads, B x T x T x H x W
                     attn = attn.view(b * t, t, h, w)
 
-                    attn = nn.Upsample(
-                        size=tuple(x.shape[-2:]), mode="bilinear", align_corners=False
-                    )(attn)
+                    attn = nn.Upsample(size=tuple(x.shape[-2:]), mode="bilinear", align_corners=False)(attn)
 
                     attn = attn.view(b, t, t, *x.shape[-2:])
-                    out = (x[:, None, :, :, :, :] * attn[:, :, :, None, :, :]).sum(
-                        dim=2
-                    )
+                    out = (x[:, None, :, :, :, :] * attn[:, :, :, None, :, :]).sum(dim=2)
                     return out
 
         return x

@@ -1,17 +1,17 @@
 data:
     dataset: circa         # Name of the dataset, ['earthnet2021', 'sen12mscrts']
     hdf5_file: /DATA_10TB/data_rpg/circa/hdf5/merged_archives.hdf5 #/DATA_10TB/data_rpg/circa/hdf5/circa_cloud_removal.hdf5
-    max_seq_length: 15
+    max_seq_length: 5
     channels: all
-    use_sar: mix_closest # asc /desc/ mix_closest / asc+desc
-    subset: true
+    use_sar: mix_closest # asc / desc / mix_closest / asc+desc
+    subset: false
     filter_settings:
         type: cloud-free
         min_length: 3
         return_valid_obs_only: true
         # max_t_sampling: 28
 mask:
-    mask_type: fully_masked # random_clouds               # Mask the input time series with randomly sampled cloud masks or the actual cloud masks. ['random_clouds', 'real_clouds', fully_masked]
+    mask_type: random_clouds # random_clouds               # Mask the input time series with randomly sampled cloud masks or the actual cloud masks. ['random_clouds', 'real_clouds', fully_masked, random_fully_masked", "consecutive_fully_masked]
     ratio_masked_frames: 0.5               # Ratio of partially/fully masked images per image time series (upper bound).
     ratio_fully_masked_frames: 0.0         # Ratio of fully masked images per image time series (upper bound).
     fixed_masking_ratio: false             # True to vary the masking ratio across different image time series, False otherwise.
@@ -21,6 +21,10 @@ mask:
     fill_type: fill_value                  # Strategy for initializing masked pixels. ['fill_value', 'white_noise', 'mean']
     fill_value: 1                          # Pixel value of masked pixels. Used if fill_type == 'fill_value'.
     p_filter: 0.1
+
+method:
+    model_type: utilise
+    pad_value: 0
 
 utilise:                                   
     encoder_widths: [64,64,64,64,128]
@@ -39,7 +43,7 @@ scheduler:
 
 training_settings:
     batch_size: 2                          # Batch size.
-    num_epochs: 10                       # Number of training epochs.
+    num_epochs: 1                       # Number of training epochs.
     accum_iter: 1                          # Accumulate gradients for 'accum_iter` iterations.
     gradient_clip_norm: 0                  # If > 0, clips gradient norm to that value.
     gradient_clip_value: 0                 # If > 0, clips gradient at specified value.
