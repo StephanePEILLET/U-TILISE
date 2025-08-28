@@ -3,7 +3,7 @@ data:
     hdf5_file: /DATA_10TB/data_rpg/circa/hdf5/CIRCA_CR_merged.hdf5 #/DATA_10TB/data_rpg/circa/hdf5/circa_cloud_removal.hdf5
     channels: all
     use_sar: False # asc /desc/ mix_closest / asc+desc
-    subset: true
+    subset: False   
     max_seq_length: 14                     # Maximum temporal sequence length. Set to None to skip temporal trimming.
     filter_settings:
         type: cloud-free
@@ -17,8 +17,8 @@ data:
 #     split: mode
 
 mask:
-    mask_type: random_fully_masked    # Mask the input time series with randomly sampled cloud masks or the actual cloud masks. ['random_clouds', 'real_clouds', "random_fully_masked", "consecutive_fully_masked"]
-    ratio_m asked_frames: 0.5               # Ratio of partially/fully masked images per image time series (upper bound).
+    mask_type: consecutive_fully_masked    # Mask the input time series with randomly sampled cloud masks or the actual cloud masks. ['random_clouds', 'real_clouds', "random_fully_masked", "consecutive_fully_masked"]
+    ratio_masked_frames: 0.5               # Ratio of partially/fully masked images per image time series (upper bound).
     ratio_fully_masked_frames: 0.0         # Ratio of fully masked images per image time series (upper bound).
     fixed_masking_ratio: false             # True to vary the masking ratio across different image time series, False otherwise.
     non_masked_frames: [0]                 # list of int, time steps to be excluded from masking. E.g., [0] never masks the first frame in a sequence.

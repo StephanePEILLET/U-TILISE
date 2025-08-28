@@ -275,13 +275,13 @@ def main(args: argparse.Namespace) -> None:
             subset=subset,
         )
 
-        MAX_SAMPLES_ON_GPU = 14
+        # MAX_SAMPLES_ON_GPU = 14
         test_imputation = Imputation(
             config_file_train=(Path(config.output.experiment_folder) / "config.yaml"),
             method="utilise",
             mode=None,
             checkpoint=(Path(config.output.checkpoint_dir) / "Model_best.pth"),
-            temporal_window=MAX_SAMPLES_ON_GPU,
+            # temporal_window=MAX_SAMPLES_ON_GPU,
             device=device,
         )
 

@@ -3,15 +3,65 @@ import math
 import os
 import random
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Tuple
 
 import h5py
 import numpy as np
 import torch
 import torch.utils.data
-from omegaconf import DictConfig, ListConfig, OmegaConf
+from omegaconf import DictConfig
+from omegaconf import ListConfig
+from omegaconf import OmegaConf
 from torch import Tensor
 from torchvision import transforms
+
+
+def sampling_consecutive_frames(
+    idx_valid_input_frames: np.ndarray,
+    ratio_masked_frames: float = None,
+    fixed_masking_ratio: bool = False,
+) -> np.ndarray:
+    """
+    Samples a sequence of `num_input_frames` consecutive frames from a total of `num_total_frames` frames.
+    Args:
+        num_total_frames:    int, total number of frames available for sampling.
+        ratio_masked_frames: float or None, ratio of frames to be masked.
+        fixed_masking_ratio: bool, True to enforce the same ratio of masked frames across image time sequences,
+
+    Returns:
+        np.ndarray, indices of the sampled frames.
+    """
+    num_total_frames = len(idx_valid_input_frames)
+    if not fixed_masking_ratio:
+        # Vary the sampling ratio by adjusting the number of frames available for masking
+        # (at least one frame has to be masked)
+        num_total_frames = random.randint(1, num_total_frames)
+    if ratio_masked_frames is None:
+        num_input_frames = (num_total_frames // 4) + 1
+    else:
+        num_input_frames = np.ceil(ratio_masked_frames * num_total_frames)
+
+    if num_input_frames > num_total_frames:
+        raise ValueError(f"Cannot sample {num_input_frames} frames from a total of {num_total_frames} frames.")
+
+    start_frame = random.randint(0, num_total_frames - num_input_frames)
+    if start_frame + num_input_frames > num_total_frames:
+        indices_masked = np.arange(num_total_frames - num_input_frames, num_total_frames)
+    elif start_frame + num_input_frames <= num_total_frames:
+        indices_masked = np.arange(start_frame, start_frame + num_input_frames)
+    elif start_frame + num_input_frames == num_total_frames:
+        indices_masked = np.arange(start_frame, num_total_frames)
+    else:
+        raise ValueError("Something went wrong when sampling consecutive frames.")
+
+    return {
+        "indices_masked": indices_masked,
+        "indices_fully_masked": indices_masked,
+    }
 
 
 def sample_indices_masked_frames(
@@ -44,8 +94,7 @@ def sample_indices_masked_frames(
     """
 
     assert ratio_fully_masked_frames <= ratio_masked_frames, (
-        "Masking parameter `ratio_fully_masked_frames` needs to "
-        "be smaller or equal to `ratio_masked_frames.`"
+        "Masking parameter `ratio_fully_masked_frames` needs to " "be smaller or equal to `ratio_masked_frames.`"
     )
 
     # Upper bound: Maximum number of masked input frames (partially or fully masked)
@@ -68,25 +117,17 @@ def sample_indices_masked_frames(
         if np.any(non_masked_frames < 0):
             # Account for negative indices
             indices_pos = non_masked_frames[non_masked_frames >= 0]
-            indices_neg = idx_valid_input_frames[
-                non_masked_frames[non_masked_frames < 0]
-            ]
+            indices_neg = idx_valid_input_frames[non_masked_frames[non_masked_frames < 0]]
             non_masked_frames = np.concatenate((indices_pos, indices_neg), axis=0)
         else:
             non_masked_frames = idx_valid_input_frames[non_masked_frames]
         list_frames = np.setdiff1d(idx_valid_input_frames, non_masked_frames)
-        indices_masked = np.random.choice(
-            list_frames, min(num_masked, list_frames.size), replace=False
-        )
+        indices_masked = np.random.choice(list_frames, min(num_masked, list_frames.size), replace=False)
     else:
-        indices_masked = np.random.choice(
-            idx_valid_input_frames, num_masked, replace=False
-        )
+        indices_masked = np.random.choice(idx_valid_input_frames, num_masked, replace=False)
 
     # Randomly selected the frame indices of the fully masked frames
-    indices_fully_masked = np.random.choice(
-        indices_masked, num_fully_masked, replace=False
-    )
+    indices_fully_masked = np.random.choice(indices_masked, num_fully_masked, replace=False)
 
     return {
         "indices_masked": indices_masked,

@@ -1,11 +1,19 @@
 # TODO LIST
-- [X] Revoir rapidement la gestion des outputs de sorties
-- [X] Test code train pour voir si les tests sont bien réalisés à la fin du training
-- [ ] Finir de faire bien marcher le train avec le mode fully masked random
-- [ ] Finir de faire bien marcher le train avec le mode fully masked aléatoire
-- [ ] Vérifier visuellement ce que renvoie le dataset dans les différents cas consecutive/aleatoire
-- [ ] Finir de faire fonctionner le mode fully_masked
-- [ ] Adapter le code pour faire varier la génération de mask d'un split à l'autre (cas du train avec une différence entre la validation et le training): par exemple random cloud pour le train et fully masked pour la validation.
+- [ ] VISU: Tester les cas d'intersection des nuages
+- [ ] Travailler sur les args de masquage dilation / fully_masked dans random clouds / p_filter
+- [X] Corriger dans le generate_masks cas du génération real_clouds
+    - [X] dans le cas du train
+    - [X] dans le cas du test
+
+- [ ] Corriger le problème d'indices dans le cas de test
+    - [X] pb correspondance entre les idx consecutif/aléatoire avec idx_valid_obvs
+    - [X] faire un filtre sur les idx valid_obs + image masked syn pour avoir la TS valide à passer à l'inférence
+
+- [ ] Faire une vérification que les données ne peuvent pas être à 0 dans le y (image originelle) en partie ou full noir
+
+- [X] Adapter le code pour faire varier la génération de mask d'un split à l'autre (cas du train avec une différence entre la validation et le training): par exemple random cloud pour le train et fully masked pour la validation.
+
+- [ ] Mettre en place le système d'imputation pour le training afin d'avoir une validation sur une TS complète
 
 ---
 
@@ -20,6 +28,18 @@
 - [ ] *si temps mettre la possiblité de faire une évaluation complète lors des entrainements
 
 ---
+### Test visuels via notebooks 
+Qu'est ce que je veux dans ce notebook de visu:
+1. Vérification des sorties => avoir un dataloader => avoir d'un dataset et regarder les sorties du getitem
+- [ ] Voir ce que renvoie la dataloader en temps normal:
+    - [X] random_clouds: Le masquage est-il suffisant?. est-il bien réparti ? Utilisation redondante de masks? 
+    - [ ] voir dans le cas classique ce que renvoie les données pour le test set => est-ce que 
+- [ ] Vérifier visuellement ce que renvoie le dataset dans les différents cas consecutive/aleatoire
+    - [X] Vérification dans le cas du train / valid avec maskage synthétique à la volée
+    - [ ] Vérification dans le cas du test => sortir ausi des métriques si tout se passe bien .
+    - [ ] Vérification au niveau des idx tirée au sort ?
+2. Sortir des visusu d'inférences pour pouvoir constater les résultats
+3. Appliquer des métriques sur une observation afin de voir la correspondance / lien entre les métriques et les images d'inférences.
 
 ### 🚚 Dataloaders
 - [ ] **Vérifications de la variétés des dates sélectionnées d'une epoch à une autre.** 

@@ -26,6 +26,7 @@ from dataloader_CIRCA.tools.positional_encoding import get_pairwise_representati
 from dataloader_CIRCA.tools.positional_encoding import get_position_for_positional_encoding  # NOQA
 from dataloader_CIRCA.tools.positional_encoding import str2date
 from dataloader_CIRCA.tools.sampling import sample_indices_masked_frames
+from dataloader_CIRCA.tools.sampling import sampling_consecutive_frames
 
 MAX_SEQ_LENGTH = 30
 IMAGE_SIZE = (256, 256)
@@ -276,8 +277,11 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
         """
         Trims the sequence to a maximum temporal length.
         """
-        if self.filter_settings.get("return_valid_obs_only", True):
-            t_sampled = masks_valid_obs.nonzero().view(-1)
+        if self.phase != "test":
+            if self.filter_settings.get("return_valid_obs_only", True):
+                t_sampled = masks_valid_obs.nonzero().view(-1)
+            else:
+                t_sampled = torch.arange(0, len(masks_valid_obs))
         else:
             t_sampled = torch.arange(0, len(masks_valid_obs))
 
@@ -331,6 +335,14 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
         """
         patch_data = self.etl_item(item=item)
 
+        if "idx_syn_aleatoire" in patch_data and self.mask_kwargs.mask_type == "random_fully_masked":
+            patch_data["valid_obs"] = np.union1d(patch_data["valid_obs"], patch_data["idx_syn_aleatoire"])
+        elif "idx_syn_consecutif" in patch_data and self.mask_kwargs.mask_type == "consecutive_fully_masked":
+            patch_data["valid_obs"] = np.union1d(patch_data["valid_obs"], patch_data["idx_syn_consecutif"])
+
+        if self.phase == "test":
+            patch_data["S2"]["S2"] = patch_data["S2"]["S2"][patch_data["valid_obs"]]
+
         # Select the correct channels
         if self.num_channels != patch_data["S2"]["S2"].shape[1]:
             patch_data["S2"]["S2"] = patch_data["S2"]["S2"][:, self.s2_channels, :, :]
@@ -338,7 +350,6 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
         if t_sampled is None:
             t_sampled, masks_valid_obs = self.subsample_sequence(patch_data["valid_obs"])
         masks_valid_obs = patch_data["valid_obs"][t_sampled]
-        # print(f"{self.phase.upper()} sample {item} has {t_sampled} observations.")
 
         frames_input, frames_target = (
             patch_data["S2"]["S2"][t_sampled].clone(),
@@ -371,14 +382,30 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
             frames_input = torch.cat((frames_input, s1), dim=1)
 
         cloud_mask = patch_data["S2"]["cloud_mask"]
-        # Avant le sampling temporel on va modifier le masque en fonction du paramètre dans mask_kwargs
-        if self.mask_kwargs is not None and self.mask_kwargs.mask_type == "consecutive_fully_masked":
-            for i in patch_data["idx_syn_consecutif"]:
-                cloud_mask[i] = torch.ones_like(cloud_mask[i])
+        if self.phase != "test":
+            cloud_mask = cloud_mask[patch_data["valid_obs"]]
+        else:
+            # La présence des arrays consecutive_fully_masked et random_fully_masked n'a lieu que
+            # pour les observations de test.
+            # Avant le sampling temporel on va modifier le masque en fonction du paramètre dans mask_kwargs
+            if (
+                self.mask_kwargs is not None
+                and self.mask_kwargs.mask_type == "consecutive_fully_masked"
+                and "idx_syn_consecutif" in patch_data
+            ):
+                for i in patch_data["idx_syn_consecutif"]:
+                    cloud_mask[i] = torch.ones_like(cloud_mask[i])
 
-        elif self.mask_kwargs is not None and self.mask_kwargs.mask_type == "random_fully_masked":
-            for i in patch_data["idx_syn_aleatoire"]:
-                cloud_mask[i] = torch.ones_like(cloud_mask[i])
+            elif (
+                self.mask_kwargs is not None
+                and self.mask_kwargs.mask_type == "random_fully_masked"
+                and "idx_syn_aleatoire" in patch_data
+            ):
+                for i in patch_data["idx_syn_aleatoire"]:
+                    cloud_mask[i] = torch.ones_like(cloud_mask[i])
+            cloud_mask = cloud_mask[
+                patch_data["valid_obs"]
+            ]  # l'intersection entre valid_obs et idx_syn_aleatoire / idx_syn_consecutif est faite dans etl_item
 
         # Sampling temporel
         cloud_mask = cloud_mask[t_sampled]  # T x C x H x W
@@ -426,6 +453,10 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
         }
         if self.use_sar:
             out["S1_dates"] = [date.strftime("%Y-%m-%d") for date in s1_dates]
+        if "idx_syn_consecutif" in patch_data:
+            out["idx_syn_consecutif"] = patch_data["idx_syn_consecutif"]
+        if "idx_syn_aleatoire" in patch_data:
+            out["idx_syn_aleatoire"] = patch_data["idx_syn_aleatoire"]
         return out
 
     # FONCTION POUR LA GENERATION DE MASKS
@@ -490,40 +521,49 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
             )
 
         elif self.mask_kwargs.mask_type in ["real_clouds", "consecutive_fully_masked", "random_fully_masked"]:
-            # Use the real cloud masks for masking
-            frames_input, masks = masks_init_filling(
-                frames_input,
-                cloud_mask_input,
-                None,
-                fill_type="fill_value",
-                fill_value=self.fill_value,
-                dilate_cloud_masks=self.dilate_cloud_masks,
-            )
-        elif self.mask_kwargs.mask_type == "fully_masked":
-            # TODO: repenser cette partie et travailler avec directement les mask_probs et pas les cloud_masks
-            # TODO: sinon juste penser à passer tout le mask à 1 ? (mais pas ajout 150)
-            # Fully mask the input time series by adding 150 to the pixel values of the sampled frames
-            if t_masked is None:
-                # Indices of the frames to be masked w.r.t. the temporally trimmed sequence
-                t_masked = sample_indices_masked_frames(
-                    idx_valid_input_frames=np.arange(0, frames_input.shape[0]),
-                    ratio_masked_frames=self.mask_kwargs.ratio_masked_frames,
-                    ratio_fully_masked_frames=self.mask_kwargs.ratio_fully_masked_frames,
-                    non_masked_frames=self.mask_kwargs.non_masked_frames,
-                    fixed_masking_ratio=self.fixed_masking_ratio,
+            if self.phase in ["train", "val"] and self.mask_kwargs.mask_type in [
+                "consecutive_fully_masked",
+                "random_fully_masked",
+            ]:
+                masks = torch.zeros((frames_input.shape[0], 1, *frames_input.shape[-2:]))
+                if t_masked is None:
+                    if self.mask_kwargs.mask_type == "random_fully_masked":
+                        # Indices of the frames to be masked w.r.t. the temporally trimmed sequence
+                        t_masked = sample_indices_masked_frames(
+                            idx_valid_input_frames=np.arange(0, frames_input.shape[0]),
+                            ratio_masked_frames=self.mask_kwargs.ratio_masked_frames,
+                            ratio_fully_masked_frames=self.mask_kwargs.ratio_fully_masked_frames,
+                            non_masked_frames=self.mask_kwargs.non_masked_frames,
+                            fixed_masking_ratio=self.fixed_masking_ratio,
+                        )
+                    elif self.mask_kwargs.mask_type == "consecutive_fully_masked":
+                        t_masked = sampling_consecutive_frames(
+                            idx_valid_input_frames=np.arange(0, frames_input.shape[0]),
+                            ratio_masked_frames=self.mask_kwargs.ratio_masked_frames,
+                            fixed_masking_ratio=self.mask_kwargs.fixed_masking_ratio,
+                        )
+
+                # Set the masks of the fully masked frames to 1
+                masks[t_masked["indices_masked"], :, :, :] = 1.0
+
+                # Apply masking
+                frames_input, masks = overlay_seq_with_clouds(
+                    frames_input,
+                    masks,
+                    t_masked=None,
+                    fill_value=self.fill_value,
+                    dilate_cloud_masks=self.dilate_cloud_masks,
                 )
-            masks = torch.zeros((frames_input.shape[0], 1, *frames_input.shape[-2:]))
-            masks[t_masked["indices_masked"], :, :, :] = masks[t_masked["indices_masked"], :, :, :] + 150
-
-            # Apply masking
-            frames_input, masks = overlay_seq_with_clouds(
-                frames_input,
-                masks,
-                t_masked=None,
-                fill_value=self.fill_value,
-                dilate_cloud_masks=self.dilate_cloud_masks,
-            )
-
+            else:
+                # Use the real cloud masks for masking
+                frames_input, masks = masks_init_filling(
+                    frames_input,
+                    cloud_mask_input,
+                    None,
+                    fill_type="fill_value",
+                    fill_value=self.fill_value,
+                    dilate_cloud_masks=self.dilate_cloud_masks,
+                )
         else:
             raise NotImplementedError
 
