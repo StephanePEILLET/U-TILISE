@@ -781,9 +781,6 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
 ######################################################################################
 
 if __name__ == "__main__":
-    SUBSET_LENGTH = 20
-    batch_size_inference = 1
-
     filter_settings = {
         "type": "cloud-free",  # Strategy for removing observations with data gaps.
         # ['cloud-free', 'cloud-free_consecutive']
@@ -828,4 +825,5 @@ if __name__ == "__main__":
     }
 
     dset = CIRCA_ADAPTED2UTILISE_Dataset(**params_dataset)
-    r = next(iter(dset))
+    sample = next(iter(dset))
+    print(sample.keys())

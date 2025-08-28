@@ -20,7 +20,7 @@
             "program": "run_train.py",
             "console": "integratedTerminal",
             "args": [
-                "./configs/config_circa_train.yaml",
+                "./configs/config_run_train.yaml",
                 "--save_dir",
                 "/DATA_10TB/data_rpg/outputs/train",
             ]
@@ -32,7 +32,7 @@
             "program": "run_eval.py",
             "console": "integratedTerminal",
             "args": [
-                "./configs/inference_circa.yaml",
+                "./configs/config_run_eval.yaml",
                 "utilise",
                 "--checkpoint",
                 "/DATA_10TB/data_rpg/outputs/U-TILISE/results/ALL_BANDS_120_epochs_2025-07-11_18-05/checkpoints/Model_best.pth",

@@ -1,19 +1,20 @@
 # TODO LIST
-- [ ] VISU: Tester les cas d'intersection des nuages
+
+- [X] VISU: Sur les sorties du dataloaders
+- [ ] VISU: sur les prédictions avec les métriques correspondantes.
+
+- [ ] Mettre en place le système d'imputation pour le training afin d'avoir une validation sur une TS complète
+
+- [ ] Changement des noms des mask_type pour avoir les même random_fully_masked pour le cas de test.
 - [ ] Travailler sur les args de masquage dilation / fully_masked dans random clouds / p_filter
+- [ ] Faire une vérification que les données ne peuvent pas être à 0 dans le y (image originelle) en partie ou full noir
 - [X] Corriger dans le generate_masks cas du génération real_clouds
     - [X] dans le cas du train
     - [X] dans le cas du test
-
-- [ ] Corriger le problème d'indices dans le cas de test
+- [X] Corriger le problème d'indices dans le cas de test
     - [X] pb correspondance entre les idx consecutif/aléatoire avec idx_valid_obvs
     - [X] faire un filtre sur les idx valid_obs + image masked syn pour avoir la TS valide à passer à l'inférence
-
-- [ ] Faire une vérification que les données ne peuvent pas être à 0 dans le y (image originelle) en partie ou full noir
-
 - [X] Adapter le code pour faire varier la génération de mask d'un split à l'autre (cas du train avec une différence entre la validation et le training): par exemple random cloud pour le train et fully masked pour la validation.
-
-- [ ] Mettre en place le système d'imputation pour le training afin d'avoir une validation sur une TS complète
 
 ---
 
