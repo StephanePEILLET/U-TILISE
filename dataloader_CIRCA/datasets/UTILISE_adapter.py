@@ -364,16 +364,27 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
 
         if self.use_sar:
             if self.use_sar == "asc+desc":
-                s1_asc = patch_data["S1"]["S1_asc"][t_sampled]
-                s1_asc_dates = patch_data["S1"]["S1_dates_asc"][t_sampled]
-                s1_desc = patch_data["S1"]["S1_desc"][t_sampled]
-                s1_desc_dates = patch_data["S1"]["S1_dates_desc"][t_sampled]
+                if self.phase == "test":
+                    s1_asc = patch_data["S1"]["S1_asc"][patch_data["valid_obs"]][t_sampled]
+                    s1_asc_dates = patch_data["S1"]["S1_dates_asc"][patch_data["valid_obs"]][t_sampled]
+                    s1_desc = patch_data["S1"]["S1_desc"][patch_data["valid_obs"]][t_sampled]
+                    s1_desc_dates = patch_data["S1"]["S1_dates_desc"][patch_data["valid_obs"]][t_sampled]
+                else:
+                    s1_asc = patch_data["S1"]["S1_asc"][t_sampled]
+                    s1_asc_dates = patch_data["S1"]["S1_dates_asc"][t_sampled]
+                    s1_desc = patch_data["S1"]["S1_desc"][t_sampled]
+                    s1_desc_dates = patch_data["S1"]["S1_dates_desc"][t_sampled]
 
                 s1 = torch.cat((s1_asc, s1_desc), dim=1)
                 s1_dates = get_pairwise_representative_dates(asc_dates=s1_asc_dates, desc_dates=s1_desc_dates)
+
             else:
-                s1 = patch_data["S1"]["S1"][t_sampled]
-                s1_dates = patch_data["S1"]["S1_dates"][t_sampled]
+                if self.phase == "test":
+                    s1 = patch_data["S1"]["S1"][patch_data["valid_obs"]][t_sampled]
+                    s1_dates = patch_data["S1"]["S1_dates"][patch_data["valid_obs"]][t_sampled]
+                else:
+                    s1 = patch_data["S1"]["S1"][t_sampled]
+                    s1_dates = patch_data["S1"]["S1_dates"][t_sampled]
 
             if self.process_data:
                 s1 = SentinelDataProcessor.process_SAR(s1)
@@ -403,9 +414,10 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
             ):
                 for i in patch_data["idx_syn_aleatoire"]:
                     cloud_mask[i] = torch.ones_like(cloud_mask[i])
-            cloud_mask = cloud_mask[
-                patch_data["valid_obs"]
-            ]  # l'intersection entre valid_obs et idx_syn_aleatoire / idx_syn_consecutif est faite dans etl_item
+
+            # Une fois les masques completement masqués, on va pouvoir appliquer le sampling avec valids obs
+            # l'intersection entre valid_obs et idx_syn_aleatoire / idx_syn_consecutif est faite dans etl_item
+            cloud_mask = cloud_mask[patch_data["valid_obs"]]
 
         # Sampling temporel
         cloud_mask = cloud_mask[t_sampled]  # T x C x H x W

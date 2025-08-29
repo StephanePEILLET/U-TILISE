@@ -1,5 +1,7 @@
 # TODO LIST
+Vérification taille mbatch / max_len seq jzellou
 
+- Lancer un training sur la machine à tester pour Etienne Corre
 - [X] VISU: Sur les sorties du dataloaders
 - [ ] VISU: sur les prédictions avec les métriques correspondantes.
 
@@ -15,6 +17,8 @@
     - [X] pb correspondance entre les idx consecutif/aléatoire avec idx_valid_obvs
     - [X] faire un filtre sur les idx valid_obs + image masked syn pour avoir la TS valide à passer à l'inférence
 - [X] Adapter le code pour faire varier la génération de mask d'un split à l'autre (cas du train avec une différence entre la validation et le training): par exemple random cloud pour le train et fully masked pour la validation.
+
+python run_train.py ./configs/config_run_train.yaml --save_dir /DATA_10TB/data_rpg/outputs/train
 
 ---
 
