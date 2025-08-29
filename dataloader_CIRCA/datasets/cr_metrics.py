@@ -441,3 +441,79 @@ class CloudRemovalMetrics:
             else:
                 metrics[key] = value
         return metrics
+
+
+import math
+from typing import Dict
+
+from rich.console import Console
+from rich.table import Table
+
+
+def display_metrics(results: Dict[str, float]):
+    """
+    Displays result metrics in a formatted table using rich.
+    The table structure adapts based on whether detailed metrics are provided.
+
+    Args:
+        results (Dict[str, float]): The dictionary containing metric names and their values.
+    """
+    console = Console()
+
+    # Check if detailed (occluded/observed) metrics are present in the results
+    has_detailed_metrics = any(
+        "_occluded_input_pixels" in key or "_observed_input_pixels" in key for key in results.keys()
+    )
+
+    table = Table(
+        title="[bold bright_blue]Cloud Reconstruction Metrics[/bold bright_blue]",
+        show_header=True,
+        header_style="bold magenta",
+    )
+
+    # Define table columns based on the content of the results dictionary
+    table.add_column("Metric", style="cyan", no_wrap=True, justify="right")
+    if has_detailed_metrics:
+        table.add_column("Overall", style="white", justify="center")
+        table.add_column("Occluded Pixels", style="yellow", justify="center")
+        table.add_column("Observed Pixels", style="green", justify="center")
+    else:
+        table.add_column("Value", style="white", justify="center")
+
+    # Get a sorted list of base metrics for consistent display order
+    base_metrics = sorted([k for k in results.keys() if not ("_occluded" in k or "_observed" in k)])
+
+    # Helper function to format numbers into strings, handling NaN values
+    def format_value(v: float) -> str:
+        if v is None or (isinstance(v, float) and math.isnan(v)):
+            return "[dim]N/A[/dim]"
+        return f"{v:.4f}"
+
+    for metric in base_metrics:
+        # If detailed metrics exist, populate all columns
+        if has_detailed_metrics:
+            # Handle the special case for 'ssim' key naming
+            occluded_key = (
+                f"{metric}_images_occluded_input_pixels" if metric == "ssim" else f"{metric}_occluded_input_pixels"
+            )
+            observed_key = (
+                f"{metric}_images_observed_input_pixels" if metric == "ssim" else f"{metric}_observed_input_pixels"
+            )
+
+            # Get values, which will be None if the key is missing
+            val_global = results.get(metric)
+            val_occluded = results.get(occluded_key)
+            val_observed = results.get(observed_key)
+
+            table.add_row(
+                metric.upper(),
+                format_value(val_global),
+                format_value(val_occluded),
+                format_value(val_observed),
+            )
+        # Otherwise, populate the simple table
+        else:
+            val_global = results.get(metric)
+            table.add_row(metric.upper(), format_value(val_global))
+
+    console.print(table)

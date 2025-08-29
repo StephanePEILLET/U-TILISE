@@ -1,7 +1,7 @@
 data:
     dataset: circa         # Name of the dataset, ['earthnet2021', 'sen12mscrts']
     hdf5_file: /var/data/datasets/CIRCA_CR_merged.hdf5
-    max_seq_length: 14
+    max_seq_length: 12
     channels: all
     use_sar: asc+desc # asc / desc / mix_closest / asc+desc
     image_size: [256, 256]

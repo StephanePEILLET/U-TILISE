@@ -1,6 +1,6 @@
 # TODO LIST
-Vérification taille mbatch / max_len seq jzellou
-
+Vérifier le nombre d'observation dans le test set (30 * 64)
+Refaire une passe sur les métriques (pb nan => regarder si le occluded observed s'applique bien sur tout le mask nuage)
 - Lancer un training sur la machine à tester pour Etienne Corre
 - [X] VISU: Sur les sorties du dataloaders
 - [ ] VISU: sur les prédictions avec les métriques correspondantes.
@@ -18,8 +18,6 @@ Vérification taille mbatch / max_len seq jzellou
     - [X] faire un filtre sur les idx valid_obs + image masked syn pour avoir la TS valide à passer à l'inférence
 - [X] Adapter le code pour faire varier la génération de mask d'un split à l'autre (cas du train avec une différence entre la validation et le training): par exemple random cloud pour le train et fully masked pour la validation.
 
-python run_train.py ./configs/config_run_train.yaml --save_dir /DATA_10TB/data_rpg/outputs/train
-
 ---
 
 ### Aujourd'hui:
@@ -27,24 +25,23 @@ python run_train.py ./configs/config_run_train.yaml --save_dir /DATA_10TB/data_r
 - [X] Comment se fait le découpage de la TS => comprehension du trimming avec max_seq_length
 - [X] Finir l'adaptation du chargement de données aux tests sets
 - [ ] Sortir des métriques avec les modèles déjà entrainés sur les nouveaux jeu de tests.
-- [ ] Sortir d'avantage d'images d'inférence pour chacun des modèles 
-- [ ] Mettre l'étape d'évaluation complète à la fin d'un training (changement dans les seeds)
+- [X] Sortir d'avantage d'images d'inférence pour chacun des modèles 
 - [ ] Lancer de nouveaux trainings sur jzellou (=> check si les data ont bien été copié sur les noeuds)
 - [ ] *si temps mettre la possiblité de faire une évaluation complète lors des entrainements
 
 ---
 ### Test visuels via notebooks 
 Qu'est ce que je veux dans ce notebook de visu:
-1. Vérification des sorties => avoir un dataloader => avoir d'un dataset et regarder les sorties du getitem
-- [ ] Voir ce que renvoie la dataloader en temps normal:
+1. [X] Vérification des sorties => avoir un dataloader => avoir d'un dataset et regarder les sorties du getitem
+- [X] Voir ce que renvoie la dataloader en temps normal:
     - [X] random_clouds: Le masquage est-il suffisant?. est-il bien réparti ? Utilisation redondante de masks? 
-    - [ ] voir dans le cas classique ce que renvoie les données pour le test set => est-ce que 
-- [ ] Vérifier visuellement ce que renvoie le dataset dans les différents cas consecutive/aleatoire
+    - [X] voir dans le cas classique ce que renvoie les données pour le test set => est-ce que 
+- [X] Vérifier visuellement ce que renvoie le dataset dans les différents cas consecutive/aleatoire
     - [X] Vérification dans le cas du train / valid avec maskage synthétique à la volée
-    - [ ] Vérification dans le cas du test => sortir ausi des métriques si tout se passe bien .
-    - [ ] Vérification au niveau des idx tirée au sort ?
-2. Sortir des visusu d'inférences pour pouvoir constater les résultats
-3. Appliquer des métriques sur une observation afin de voir la correspondance / lien entre les métriques et les images d'inférences.
+    - [X] Vérification dans le cas du test => sortir ausi des métriques si tout se passe bien .
+    - [X] Vérification au niveau des idx tirée au sort ?
+2. [X] Sortir des visusu d'inférences pour pouvoir constater les résultats
+3. [X] Appliquer des métriques sur une observation afin de voir la correspondance / lien entre les métriques et les images d'inférences.
 
 ### 🚚 Dataloaders
 - [ ] **Vérifications de la variétés des dates sélectionnées d'une epoch à une autre.** 
@@ -52,7 +49,7 @@ Qu'est ce que je veux dans ce notebook de visu:
 Regarder potentiellement aussi si les images paraissent bonnes et permettent d'être observé.
 - [X] Vérification des t_sampled pour la même TS, (correspondance avec les dates marquées comme valides)
 - [X] Regarder si le paramètre render_occluded_above_p change qch dans la création de masks 
-- [ ] Refaire une passe sur la génération de masks dans le getitem du dataloader. (est-ce que la génération de mask n'est-elle pas trop faible..)
+- [X] Refaire une passe sur la génération de masks dans le getitem du dataloader. (est-ce que la génération de mask n'est-elle pas trop faible..)
 
 ---
 
@@ -60,7 +57,7 @@ Regarder potentiellement aussi si les images paraissent bonnes et permettent d'�
 - [ ] **Avancer sur le code pour les inférences: aussi bien métriques que visuels**
     - [X] Dev code de test sur les zones MGRS test => prise en compte full data et faire en sorte de sortir des métriques occluded / observed !!!URGENT!!!
     - [X] Côté visuel : regarder la gestion des données de Célestin avec le + 150. 
-    - [ ] Reconstruction `full MS` avec une observation / une TS complète (metrics + objectif de visu)
+    - [X] Reconstruction `full MS` avec une observation / une TS complète (metrics + objectif de visu)
     - [X] Reconstruction `full MS` obtention des métriques pour un test complets.
     - [ ] Reconstruction seulement des bandes à `RGB-NIR` (10m resolution seulement.) 
     - [X] Pour chacun des cas vérifier que les métriques soient faites selon les manières suivantes:
