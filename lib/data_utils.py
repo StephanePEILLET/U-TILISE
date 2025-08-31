@@ -172,8 +172,8 @@ def get_dataloader(
         collate_fn=collate_fn,
         pin_memory=config.misc.get("pin_memory", pin_memory),
         drop_last=drop_last,
-        generator=generator,
-        worker_init_fn=seed_worker,
+        # generator=generator,
+        # worker_init_fn=seed_worker,
     )
     return loader
 

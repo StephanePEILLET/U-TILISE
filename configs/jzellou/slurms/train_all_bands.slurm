@@ -5,10 +5,8 @@
 #SBATCH --gres=gpu:1                 # nombre de GPU (1/4 des GPU)
 #SBATCH --cpus-per-task=12           # nombre de coeurs CPU par tache (1/4 du noeud 4-GPU)
 #SBATCH --hint=nomultithread         # hyperthreading desactive
-#SBATCH --mem=100G       # Memory proportional to GPUs: 32000 Cedar, 64000 Graham.
-#SBATCH --partition=jean-zellou
-
-#SBATCH -e /mnt/stores/store-DAI/tmp/speillet/logs/utilise_all_bands-%j.out
+#SBATCH --mem=10G       # Memory proportional to GPUs: 32000 Cedar, 64000 Graham.
+#SBATCH --nodelist=DEL2212S018
 #SBATCH -o /mnt/stores/store-DAI/tmp/speillet/logs/utilise_all_bands-%j.out
 
 cat "$0"
@@ -23,8 +21,11 @@ export TORCH_SHOW_CPP_STACKTRACES=1
 set -x
 
 eval "$(conda shell.bash hook)"
-conda deactivate
+python /mnt/common/hdd/home/SPeillet/U-TILISE/run_train.py /mnt/common/hdd/home/SPeillet/U-TILISE/configs/jzellou/configs/train_all_bands.yaml --save_dir /mnt/common/hdd/home/SPeillet/outputs/U-TILISE/all_bands
 conda activate cloud_reconstruction
 
+
+# nohup python /mnt/common/hdd/home/SPeillet/U-TILISE/run_train.py /mnt/common/hdd/home/SPeillet/U-TILISE/configs/jzellou/configs/train_all_bands.yaml --save_dir /mnt/common/hdd/home/SPeillet/outputs/U-TILISE/all_bands > /mnt/stores/store-DAI/tmp/speillet/logs/utilise_all_bands.log 2>&1 &
+# nohup python /mnt/common/hdd/home/SPeillet/U-TILISE/run_train.py /mnt/common/hdd/home/SPeillet/U-TILISE/configs/jzellou/configs/train_all_bands_sar_closest_mix.yaml --save_dir /mnt/common/hdd/home/SPeillet/outputs/U-TILISE/all_bands_sar_closest_mix > /mnt/stores/store-DAI/tmp/speillet/logs/utilise_all_bands_sar_closest_mix.log 2>&1 &
 srun --cpu-bind=none python /mnt/common/hdd/home/SPeillet/U-TILISE/run_train.py /mnt/common/hdd/home/SPeillet/U-TILISE/configs/jzellou/configs/train_all_bands.yaml --save_dir /mnt/common/hdd/home/SPeillet/outputs/U-TILISE/all_bands
 echo "Job complete"
