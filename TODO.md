@@ -1,6 +1,5 @@
 # TODO LIST
-Vérifier le nombre d'observation dans le test set (30 * 64)
-Refaire une passe sur les métriques (pb nan => regarder si le occluded observed s'applique bien sur tout le mask nuage)
+
 - Lancer un training sur la machine à tester pour Etienne Corre
 - [X] VISU: Sur les sorties du dataloaders
 - [ ] VISU: sur les prédictions avec les métriques correspondantes.
@@ -30,6 +29,7 @@ Refaire une passe sur les métriques (pb nan => regarder si le occluded observed
 - [ ] *si temps mettre la possiblité de faire une évaluation complète lors des entrainements
 
 ---
+
 ### Test visuels via notebooks 
 Qu'est ce que je veux dans ce notebook de visu:
 1. [X] Vérification des sorties => avoir un dataloader => avoir d'un dataset et regarder les sorties du getitem
@@ -42,6 +42,7 @@ Qu'est ce que je veux dans ce notebook de visu:
     - [X] Vérification au niveau des idx tirée au sort ?
 2. [X] Sortir des visusu d'inférences pour pouvoir constater les résultats
 3. [X] Appliquer des métriques sur une observation afin de voir la correspondance / lien entre les métriques et les images d'inférences.
+
 
 ### 🚚 Dataloaders
 - [ ] **Vérifications de la variétés des dates sélectionnées d'une epoch à une autre.** 

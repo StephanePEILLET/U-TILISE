@@ -255,6 +255,7 @@ class CIRCA_from_HDF5(Dataset):
             Dictionary of tensors with properly formatted data types and shapes
         """
         data = {
+            "info": sample["info"],
             "S2": {
                 "S2": torch.from_numpy(sample["S2"]["S2"].astype(np.float32)),
                 "S2_dates": np.array([self.str2date(date) for date in sample["S2"]["S2_dates"]]),
@@ -309,6 +310,11 @@ class CIRCA_from_HDF5(Dataset):
         patch = self.hdf5_file[f"{row.mgrs}/{row.mgrs25}/{row.window}"]
 
         sample: SampleDict = {
+            "info": {
+                "mgrs": row.mgrs,
+                "mgrs25": row.mgrs25,
+                "window": row.window,
+            },
             "S2": {
                 "S2": patch["S2/S2"][:],  # T * C * H * W
                 "S2_dates": self.decode_dates(patch["S2/S2_dates"][:]),

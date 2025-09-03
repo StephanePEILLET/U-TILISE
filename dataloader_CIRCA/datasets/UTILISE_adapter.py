@@ -336,9 +336,14 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
         patch_data = self.etl_item(item=item)
 
         if "idx_syn_aleatoire" in patch_data and self.mask_kwargs.mask_type == "random_fully_masked":
-            patch_data["valid_obs"] = np.union1d(patch_data["valid_obs"], patch_data["idx_syn_aleatoire"])
+            patch_data["valid_obs"] = torch.from_numpy(
+                np.union1d(patch_data["valid_obs"], patch_data["idx_syn_aleatoire"]).astype(int)
+            )
+
         elif "idx_syn_consecutif" in patch_data and self.mask_kwargs.mask_type == "consecutive_fully_masked":
-            patch_data["valid_obs"] = np.union1d(patch_data["valid_obs"], patch_data["idx_syn_consecutif"])
+            patch_data["valid_obs"] = torch.from_numpy(
+                np.union1d(patch_data["valid_obs"], patch_data["idx_syn_consecutif"]).astype(int)
+            )
 
         if self.phase == "test":
             patch_data["S2"]["S2"] = patch_data["S2"]["S2"][patch_data["valid_obs"]]
@@ -360,7 +365,10 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
             frames_input = SentinelDataProcessor.process_MS(frames_input)
             frames_target = SentinelDataProcessor.process_MS(frames_target)
 
-        s2_dates = np.asarray(patch_data["S2"]["S2_dates"])[t_sampled]
+        if self.phase == "test":
+            s2_dates = np.asarray(patch_data["S2"]["S2_dates"])[patch_data["valid_obs"]][t_sampled]
+        else:
+            s2_dates = np.asarray(patch_data["S2"]["S2_dates"])[t_sampled]
 
         if self.use_sar:
             if self.use_sar == "asc+desc":
@@ -404,14 +412,17 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
                 and self.mask_kwargs.mask_type == "consecutive_fully_masked"
                 and "idx_syn_consecutif" in patch_data
             ):
+                if not self.intersect_real_cloud_masks:
+                    cloud_mask = torch.zeros_like(cloud_mask)
                 for i in patch_data["idx_syn_consecutif"]:
                     cloud_mask[i] = torch.ones_like(cloud_mask[i])
-
             elif (
                 self.mask_kwargs is not None
                 and self.mask_kwargs.mask_type == "random_fully_masked"
                 and "idx_syn_aleatoire" in patch_data
             ):
+                if not self.intersect_real_cloud_masks:
+                    cloud_mask = torch.zeros_like(cloud_mask)
                 for i in patch_data["idx_syn_aleatoire"]:
                     cloud_mask[i] = torch.ones_like(cloud_mask[i])
 
@@ -450,6 +461,7 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
         position_days = get_position_for_positional_encoding(s2_dates, self.pe_strategy)
         # Assemble output
         out = {
+            "info": patch_data["info"],
             "x": frames_input,  # (synthetically masked) S2 TS, (T x C x H x W), optionally including S1.
             "y": frames_target,  # observed/target satellite image time series, (T x C x H x W)
             "masks": masks,  # masks applied to `x`, (T x 1 x H x W); pixel with value 1 is masked, 0 otherwise
@@ -567,6 +579,7 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
                     dilate_cloud_masks=self.dilate_cloud_masks,
                 )
             else:
+
                 # Use the real cloud masks for masking
                 frames_input, masks = masks_init_filling(
                     frames_input,
@@ -793,49 +806,86 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
 ######################################################################################
 
 if __name__ == "__main__":
-    filter_settings = {
-        "type": "cloud-free",  # Strategy for removing observations with data gaps.
-        # ['cloud-free', 'cloud-free_consecutive']
-        "min_length": 5,  # Minimum sequence length.
-        "return_valid_obs_only": True,  # True to return the cloud-filtered sequences, False otherwise.
-        # "max_t_sampling": 10,            # Maximum temporal sampling frequency in days.
-    }
+    # filter_settings = {
+    #     "type": "cloud-free",  # Strategy for removing observations with data gaps.
+    #     # ['cloud-free', 'cloud-free_consecutive']
+    #     "min_length": 5,  # Minimum sequence length.
+    #     "return_valid_obs_only": True,  # True to return the cloud-filtered sequences, False otherwise.
+    #     # "max_t_sampling": 10,            # Maximum temporal sampling frequency in days.
+    # }
 
-    mask_kwargs = {
-        "mask_type": "random_clouds",  # Mask the input time series with randomly sampled cloud masks or the actual cloud masks. ['random_clouds', 'real_clouds']
-        "ratio_masked_frames": 0.5,  # Ratio of partially/fully masked images per image time series (upper bound).
-        "ratio_fully_masked_frames": 0.0,  # Ratio of fully masked images per image time series (upper bound).
-        "fixed_masking_ratio": False,  # True to vary the masking ratio across different image time series, False otherwise.
-        "non_masked_frames": [
-            0
-        ],  # list of int, time steps to be excluded from masking. E.g., [0] never masks the first frame in a sequence.
-        "intersect_real_cloud_masks": False,  # True to intersect randomly sampled cloud masks with the actual cloud masks, False otherwise.
-        "dilate_cloud_masks": False,  # True to dilate the cloud masks before masking, False otherwise.
-        "fill_type": "fill_value",  # Strategy for initializing masked pixels. ['fill_value', 'white_noise', 'mean']
-        "fill_value": 1,  # Pixel value of masked pixels. Used if fill_type == 'fill_value'.
-        "p_filter": 0.1,
-    }
+    # mask_kwargs = {
+    #     "mask_type": "random_clouds",  # Mask the input time series with randomly sampled cloud masks or the actual cloud masks. ['random_clouds', 'real_clouds']
+    #     "ratio_masked_frames": 0.5,  # Ratio of partially/fully masked images per image time series (upper bound).
+    #     "ratio_fully_masked_frames": 0.0,  # Ratio of fully masked images per image time series (upper bound).
+    #     "fixed_masking_ratio": False,  # True to vary the masking ratio across different image time series, False otherwise.
+    #     "non_masked_frames": [
+    #         0
+    #     ],  # list of int, time steps to be excluded from masking. E.g., [0] never masks the first frame in a sequence.
+    #     "intersect_real_cloud_masks": False,  # True to intersect randomly sampled cloud masks with the actual cloud masks, False otherwise.
+    #     "dilate_cloud_masks": False,  # True to dilate the cloud masks before masking, False otherwise.
+    #     "fill_type": "fill_value",  # Strategy for initializing masked pixels. ['fill_value', 'white_noise', 'mean']
+    #     "fill_value": 1,  # Pixel value of masked pixels. Used if fill_type == 'fill_value'.
+    #     "p_filter": 0.1,
+    # }
 
-    params_dataset = {
-        "phase": "test",
-        "hdf5_file": "/DATA_10TB/data_rpg/circa/hdf5/CIRCA_CR_merged.hdf5",
-        "shuffle": False,
-        "use_sar": False,
-        "channels": "all",
-        # U-TILISE specific parameters
-        "filter_settings": filter_settings,
-        "max_seq_length": 30,
-        "render_occluded_above_p": None,  # Set to None to keep original cloud masks. Minimum cloud cover to fully mask an input image (0.9 demo config)
-        "mask_kwargs": mask_kwargs,
-        "pe_strategy": "day-within-sequence",
-        "augment": False,
-        "process_data": True,
-        "seed": 42,
-        # Récupération de vieux arguments du repo
-        "crop_settings": None,
-        "return_cloud_mask": True,
-    }
+    # params_dataset = {
+    #     "phase": "test",
+    #     "hdf5_file": "/DATA_10TB/data_rpg/circa/hdf5/CIRCA_CR_merged.hdf5",
+    #     "shuffle": False,
+    #     "use_sar": False,
+    #     "channels": "all",
+    #     # U-TILISE specific parameters
+    #     "filter_settings": filter_settings,
+    #     "max_seq_length": 30,
+    #     "render_occluded_above_p": None,  # Set to None to keep original cloud masks. Minimum cloud cover to fully mask an input image (0.9 demo config)
+    #     "mask_kwargs": mask_kwargs,
+    #     "pe_strategy": "day-within-sequence",
+    #     "augment": False,
+    #     "process_data": True,
+    #     "seed": 42,
+    #     # Récupération de vieux arguments du repo
+    #     "crop_settings": None,
+    #     "return_cloud_mask": True,
+    # }
 
-    dset = CIRCA_ADAPTED2UTILISE_Dataset(**params_dataset)
-    sample = next(iter(dset))
-    print(sample.keys())
+    from lib import config_utils
+    from lib import data_utils
+    from run_train import setup_logging
+
+    # Setup configuration
+    config_file = Path("./configs/config_run_train.yaml")
+    default_config_path = Path("./configs/default.yaml")
+    cfg_custom = config_utils.read_config(config_file)
+    cfg_default = config_utils.read_config(default_config_path)
+    config = OmegaConf.merge(cfg_default, cfg_custom)
+
+    # Faire différents changments dans les fichiers de configs pour les vérifications
+    config.data.hdf5_file = "/DATA_10TB/data_rpg/circa/hdf5/CIRCA_CR_merged.hdf5"
+    config.mask.mask_type = "random_fully_masked"
+    config.data.max_seq_length = None
+    config.training_settings.batch_size = 10
+    config.mask.ratio_masked_frames = 0.8
+    config.mask.intersect_real_cloud_masks = False
+    config.mask.dilate_cloud_masks = False
+    # !!! Mettre un ratio_masked_frames plus petit que 0.5 dans le cas fully_masked aléatoire
+
+    BRIGHTNESS_FACTOR = 3
+    # Setup logging
+    logger = setup_logging(config)
+
+    # Génération des dataset
+    phase = "test"
+    dset = data_utils.get_dataset(config, phase=phase, logger=logger)
+
+    index = 4
+    sample = dset.__getitem__(index)
+
+    print(f"Sample {index}:")
+    print(f"  - Number of input time steps: {sample['x'].shape[0]}")
+    print(f"  - Number of target time steps: {sample['y'].shape[0]}")
+    print(f"  - Number of channels: {sample['x'].shape[1]}")
+    print(f"  - Height: {sample['x'].shape[2]}")
+    print(f"  - Width: {sample['x'].shape[3]}")
+    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
+    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
