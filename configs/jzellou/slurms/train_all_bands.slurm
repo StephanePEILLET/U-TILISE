@@ -5,8 +5,7 @@
 #SBATCH --gres=gpu:1                 # nombre de GPU (1/4 des GPU)
 #SBATCH --cpus-per-task=12           # nombre de coeurs CPU par tache (1/4 du noeud 4-GPU)
 #SBATCH --hint=nomultithread         # hyperthreading desactive
-#SBATCH --mem=10G       # Memory proportional to GPUs: 32000 Cedar, 64000 Graham.
-#SBATCH --nodelist=DEL2212S018
+#SBATCH --mem=100G       # Memory proportional to GPUs: 32000 Cedar, 64000 Graham.
 #SBATCH -o /mnt/stores/store-DAI/tmp/speillet/logs/utilise_all_bands-%j.out
 
 cat "$0"
