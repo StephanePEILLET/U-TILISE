@@ -1,3 +1,8 @@
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).parents[2]))
+
 import math
 from enum import Enum
 from functools import partial
@@ -7,6 +12,7 @@ from typing import Literal
 from typing import Optional
 
 import numpy as np
+import scipy
 
 # import sklearn
 import torch
@@ -198,6 +204,28 @@ class CloudRemovalMetrics:
 
         return metrics
 
+    # def r_correlation_coefficient(self, y_target: np.ndarray, y_pred: np.ndarray) -> float:
+    #     """
+    #     Computes the Pearson correlation coefficient (R) between the true and predicted values.
+
+    #     Args:
+    #         y_true (np.ndarray): The ground truth values.
+    #         y_pred (np.ndarray): The predicted values.
+    #     Returns:
+    #         float: The Pearson correlation coefficient (R) value.
+    #     """
+
+    #     # Compute the Pearson correlation coefficient using scipy
+    #     # r_pearson, _ = scipy.stats.pearsonr(y_target, y_pred)
+
+    #     slope, intercept, r_value, p_value, std_err = scipy.stats.linregress(y_target, y_pred)
+    #     # print("###########################")
+    #     # print(f"R2: {r_value**2}, R: {np.square(r_pearson)}, delta R absolute: {abs(r_pearson - np.square(r_value))}")
+    #     # r2_torch = self.r2_score_torch(torch.tensor(y_pred), torch.tensor(y_target))
+    #     # print(f"R2 torch: {r2_torch}, delta R absolute pearson: {abs(r_pearson - r2_torch)}")
+    #     # print(f"R2 torch: {r2_torch}, delta R absolute lingress: {abs(r_value**2 - r2_torch)}")
+    #     return r_value**2
+
     @staticmethod
     def r2_score_torch(y_pred: Tensor, y_target: Tensor, epsilon: float = 1e-6) -> Tensor:
         """
@@ -226,6 +254,9 @@ class CloudRemovalMetrics:
             raise ValueError(
                 f"Input tensor shapes must be the same. " f"Got y_pred={y_pred.shape} and y_target={y_target.shape}"
             )
+        # R² is not defined for single-sample inputs
+        if y_pred.shape[0] <= 1:
+            return None
 
         ss_res = torch.sum((y_target - y_pred) ** 2)
         ss_tot = torch.sum((y_target - torch.mean(y_target)) ** 2)
@@ -517,3 +548,116 @@ def display_metrics(results: Dict[str, float]):
             table.add_row(metric.upper(), format_value(val_global))
 
     console.print(table)
+
+
+# if __name__ == "__main__":
+#     # Ajout calcul de métriques
+#     from pathlib import Path
+#     from typing import Any
+
+#     from omegaconf import OmegaConf
+
+#     from dataloader_CIRCA.datasets.cr_metrics import CloudRemovalMetrics
+#     from dataloader_CIRCA.datasets.cr_metrics import display_metrics
+#     from lib import config_utils
+#     from lib import data_utils
+#     from lib.eval_tools import Imputation
+#     from run_train import setup_logging
+
+#     def get_sample(dataloader: torch.utils.data.dataloader.DataLoader, sample_index: int) -> Dict[str, Any]:
+
+#         batch = dataloader.dataset.__getitem__(sample_index)
+
+#         # Introduce the batch dimension (required for the forward pass)
+#         for k, v in batch.items():
+#             if isinstance(v, torch.Tensor):
+#                 batch[k] = v.unsqueeze(0)
+#             elif isinstance(v, int):
+#                 batch[k] = [v]
+
+#         return batch
+
+#     # Setup configuration
+#     config_file = Path("./configs/config_run_train.yaml")
+#     default_config_path = Path("./configs/default.yaml")
+#     cfg_custom = config_utils.read_config(config_file)
+#     cfg_default = config_utils.read_config(default_config_path)
+#     config = OmegaConf.merge(cfg_default, cfg_custom)
+
+#     path_inference_config_file = Path("/home/SPeillet/cloud_reconstruction/U-TILISE/configs/config_run_eval.yaml")
+
+#     # Faire différents changments dans les fichiers de configs pour les vérifications
+#     config.data.hdf5_file = "/DATA_10TB/data_rpg/circa/hdf5/CIRCA_CR_merged.hdf5"
+#     config.mask.mask_type = "random_fully_masked"
+#     config.data.max_seq_length = None
+#     config.training_settings.batch_size = 10
+#     config.mask.ratio_masked_frames = 0.8
+#     config.mask.intersect_real_cloud_masks = False
+#     config.mask.dilate_cloud_masks = False
+
+#     # Setup logging
+#     logger = setup_logging(config)
+
+#     # Génération des dataset
+#     phase = "test"
+#     dset = data_utils.get_dataset(config, phase=phase, logger=logger)
+
+#     # Modèle ALL_BANDS avec SAR
+#     path_ckpt_config_file = Path(
+#         "/DATA_10TB/data_rpg/outputs/U-TILISE/results/ALL_SAR_120_epochs_2025-07-11_16-56/config.yaml"
+#     )
+#     path_ckpt_pth = Path(
+#         "/DATA_10TB/data_rpg/outputs/U-TILISE/results/ALL_SAR_120_epochs_2025-07-11_16-56/checkpoints/Model_best.pth"
+#     )
+
+#     training_config_file = config_utils.read_config(path_ckpt_config_file)
+#     inference_config_file = config_utils.read_config(path_inference_config_file)
+
+#     inference_imputation = Imputation(
+#         config_file_train=path_inference_config_file,  # Config permettant de faire la configuration de l'inference
+#         method="utilise",
+#         checkpoint=path_ckpt_pth,
+#         config_file_test=path_ckpt_config_file,  # Fichier ayant servi à l'entrainement du modèle (update params model)
+#     )
+
+#     # Setup data loader
+#     subset = config.data.get("subset", False)
+#     if subset and isinstance(config.data.subset, bool):
+#         subset = 10
+
+#     generator = torch.Generator()
+#     generator.manual_seed(config.misc.get("random_seed", 42))
+
+#     data_loader = data_utils.get_dataloader(
+#         dset,
+#         config,
+#         drop_last=False,
+#         shuffle=True,
+#         generator=generator,
+#         subset=subset,
+#     )
+
+#     for i in range(len(dset)):
+
+#         sample = get_sample(data_loader, i)
+#         batch, y_pred, att = inference_imputation.impute_sample(
+#             batch=sample,
+#             t_start=0,
+#             t_end=5,
+#             return_att=True,
+#         )
+
+#         cr_metrics = CloudRemovalMetrics(
+#             eval_occluded_observed=True,
+#             clean_gt_cloudy_pixels=False,
+#         )
+
+#         results = cr_metrics(
+#             target=batch["y"],
+#             predicted=y_pred,
+#             masks=batch["masks"],
+#             cloud_masks=batch["cloud_mask"],
+#         )
+
+#         display_metrics(results)
+#         print("Sample info: ", sample["info"])

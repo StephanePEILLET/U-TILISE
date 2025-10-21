@@ -45,6 +45,23 @@ class SentinelDataProcessor:
             return patch_S2_array
 
     @staticmethod
+    def get_window_info(path_raster: str, window: Window) -> rasterio.Affine:
+        """
+        Retrieves the affine transformation for a specific window in a raster file.
+        Parameters:
+        - path_raster (str): Path to the raster file.
+        - window (rasterio.windows.Window): Window defining the region of interest.
+        Returns:
+        - rasterio.Affine: Affine transformation for the specified window.
+        """
+        with rasterio.open(path_raster) as src:
+            meta = src.meta.copy()
+            window_transform = src.window_transform(window)
+            meta["transform"] = list(window_transform)
+            meta["crs"] = meta["crs"].to_string()
+            return meta
+
+    @staticmethod
     def read_SAR(path_raster: str, window: Window) -> np.ndarray:
         """
         Reads and processes SAR data from a raster file.

@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 import torch
 from numpy.typing import NDArray
+from rasterio import Affine
 from torch.utils.data import Dataset
 
 sys.path.append(str(Path(__file__).parents[2]))
@@ -59,6 +60,7 @@ class CIRCA_from_HDF5(Dataset):
         self,
         phase: PhaseType = "all",
         hdf5_file: Optional[Union[str, Path]] = None,
+        load_transforms: Optional[str] = None,
         shuffle: bool = False,
         use_sar: Union[bool | SarPairingType] = "mix_closest",
         channels: ChannelType = "all",
@@ -88,6 +90,8 @@ class CIRCA_from_HDF5(Dataset):
         self.hdf5_file: h5py.File
         self.patches_dataset: pd.DataFrame
         self.hdf5_file, self.patches_dataset = self.setup_hdf5_file(hdf5_file)
+        if load_transforms is not None:
+            self.load_transforms_from_file(load_transforms)
 
         # Channel configuration
         self.num_channels: int
@@ -99,6 +103,36 @@ class CIRCA_from_HDF5(Dataset):
     def __len__(self) -> int:
         """Return the number of patches in the dataset."""
         return len(self.patches_dataset)
+
+    def load_transforms_from_file(self, path_file: str) -> None:
+        """
+        Load transformation settings from a JSON file containing info of the patches_dataset object.
+        Args:
+            path_file: Path to the JSON file with transformation settings
+
+        Raises:
+            FileNotFoundError: If the JSON file doesn't exist
+        """
+        import ast
+
+        if Path(path_file).exists():
+            df_transforms = pd.read_json(path_file)
+            # cols_to_convert = [
+            #     "files",
+            #     "dates_S2",
+            #     "dates_S1_ASC",
+            #     "dates_S1_DESC",
+            # ]
+            # df_transforms[cols_to_convert] = df_transforms[cols_to_convert].map(ast.literal_eval)
+            df_transforms.window = df_transforms.window.apply(lambda x: "_".join(map(str, x)))
+            self.patches_dataset["patch"] = [
+                f"patches_{row.mgrs25}_window_{row.window}" for i, row in self.patches_dataset.iterrows()
+            ]
+            self.patches_dataset = pd.merge(self.patches_dataset, df_transforms)
+            # self.patches_dataset.drop("Unnamed: 0", axis=1, inplace=True)
+            print(f"Loaded transforms from {path_file}.")
+        else:
+            raise FileNotFoundError(f"Transform file {path_file} does not exist.")
 
     def str2date(self, date_string: str) -> dt.date:
         """
@@ -339,9 +373,11 @@ class CIRCA_from_HDF5(Dataset):
         if patch.get("idx_syn_consecutif", False):
             sample["idx_syn_consecutif"] = patch["idx_syn_consecutif"][:]
 
-        if self.num_channels != sample["S2"]["S2"].shape[1]:
+        if len(self.s2_channels) != sample["S2"]["S2"].shape[1]:
             sample["S2"]["S2"] = sample["S2"]["S2"][:, self.s2_channels, :, :]
 
+        # if "meta" in row:
+        #     sample["info"]["meta"] = row["meta"]
         return self.format_item(sample)
 
     def pairing_and_reconstruct_s1_to_s2_shape(self, method: SarPairingType, patch: dict, s2_dates) -> torch.Tensor:
@@ -441,17 +477,14 @@ class CIRCA_from_HDF5(Dataset):
         Returns:
             Dictionary containing the sample data with selected channels
         """
-        patch_data = self.etl_item(item=item)
-        if self.num_channels != patch_data["S2"]["S2"].shape[1]:
-            patch_data["S2"]["S2"] = patch_data["S2"]["S2"][:, self.s2_channels, :, :]
-        return patch_data
+        return self.etl_item(item=item)
 
 
 if __name__ == "__main__":
     # Example usage
     path_dataset_circa = Path("/DATA_10TB/data_rpg/circa/hdf5")
     # hdf5_file = path_dataset_circa / "new_circa_ligth.hdf5"
-    hdf5_file = path_dataset_circa / "merged_archives.hdf5"
+    hdf5_file = path_dataset_circa / "CIRCA_CR_merged.hdf5"
     # Import data from HDF5 file
     dataset = CIRCA_from_HDF5(
         hdf5_file=hdf5_file,
@@ -459,7 +492,8 @@ if __name__ == "__main__":
         shuffle=False,
         channels="all",
         use_sar="asc+desc",
+        load_transforms="./data/CIRCA_patches_datasets_with_transforms.json",
     )
-
+    # Get a sample
     sample = next(iter(dataset))
     print(sample.keys())

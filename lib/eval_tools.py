@@ -80,7 +80,14 @@ class Imputation:
             if self.method == Method.UTILISE and config_file_test is not None:
                 test_config = config_utils.read_config(config_file_test)
                 self.config.utilise.update(test_config.utilise)
-
+                self.config.data.channels = test_config.data.channels
+                if "include_S1" in test_config.data:
+                    if test_config.data.include_S1 is True:
+                        self.config.data.use_sar = "mix_closest"
+                    else:
+                        self.config.data.use_sar = test_config.data.include_S1
+                elif "use_sar" in test_config.data:
+                    self.config.data.use_sar = test_config.data.use_sar
             # Extract the temporal window size and the number of channels used during training
             if temporal_window is not None:
                 self.temporal_window = temporal_window

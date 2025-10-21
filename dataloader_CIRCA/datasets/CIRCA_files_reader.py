@@ -276,6 +276,22 @@ class CIRCA_from_files(Dataset):
         df_mgrs = self.get_patches_per_mgrs(mgrs=mgrs)
         return self.__getitem__(np.random.choice(df_mgrs.index.values))
 
+    def enrich_patches_df_with_transforms(self):
+        """
+        Enriches the patches DataFrame with transformation information.
+        """
+        if self.patches_dataset is None:
+            raise ValueError("Patches dataset is not initialized. Please run setup() first")
+
+        self.patches_dataset["meta"] = None
+        from tqdm.auto import tqdm
+
+        for idx, row in tqdm(
+            self.patches_dataset.iterrows(), total=len(self.patches_dataset), desc="Enriching patches with transforms"
+        ):
+            meta = SentinelDataProcessor.get_window_info(row.files[0], Window(*row.window))
+            self.patches_dataset.at[idx, "meta"] = meta
+
     def __getitem__(self, item: int) -> Dict[str, Union[np.ndarray, str, List[str]]]:
         """
         Retrieves an item from the dataset.
@@ -338,9 +354,15 @@ class CIRCA_from_files(Dataset):
 
 
 if __name__ == "__main__":
-    path_dataset_circa_sample = Path("/home/SPeillet/cloud_reconstruction/data/circa/CIRCA_MGRS25_SAMPLE")
-    data_optique = path_dataset_circa_sample / "optique_dataset"
-    data_radar = path_dataset_circa_sample / "radar_dataset_v4"
+    # path_dataset_circa_sample = Path("/home/SPeillet/cloud_reconstruction/data/circa/CIRCA_MGRS25_SAMPLE")
+    # data_optique = path_dataset_circa_sample / "optique_dataset"
+    # data_radar = path_dataset_circa_sample / "radar_dataset_v4"
+
+    store_dai = Path("/mnt/stores/store-dai")
+    path_dataset_circa = store_dai / "projets/pac/3str/EXP_2/Data_Raster"
+    data_optique = path_dataset_circa / "optique_dataset"
+    data_radar = path_dataset_circa / "radar_dataset_v4"
+
     image_size = [256, 256]
     OVERLAP = 0
 
@@ -350,5 +372,9 @@ if __name__ == "__main__":
         image_size=image_size,
         overlap=OVERLAP,
     )
+
+    ds.setup()
+    ds.enrich_patches_df_with_transforms()
+    ds.patches_dataset.to_json("./CIRCA_patches_datasets_with_transforms.json")
     sample = next(iter(ds))
     print(sample.keys())

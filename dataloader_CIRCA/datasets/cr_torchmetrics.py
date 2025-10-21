@@ -34,7 +34,6 @@ class CloudRemovalDatasetMetrics:
         sam_units: str = "rad",
         window_size: int = 5,
         skip_nan: bool = True,
-        device: Optional[torch.device] = None,
     ) -> None:
         """Args:
         metrics: List of metric names or None for all.
@@ -43,7 +42,6 @@ class CloudRemovalDatasetMetrics:
         sam_units: "rad" | "deg".
         window_size: SSIM window size.
         skip_nan: If True, ignore NaN values when updating aggregates.
-        device: Optional device for internal MeanMetric tensors.
         """
         self.sample_metrics = CloudRemovalMetrics(
             metrics=metrics,
@@ -53,12 +51,11 @@ class CloudRemovalDatasetMetrics:
             window_size=window_size,
         )
         self.skip_nan = skip_nan
-        self.device = device if device is not None else torch.device("cpu")
         self._aggregators: Dict[str, MeanMetric] = {}
 
     def _get_or_create_aggregator(self, name: str) -> MeanMetric:
         if name not in self._aggregators:
-            self._aggregators[name] = MeanMetric().to(self.device)
+            self._aggregators[name] = MeanMetric()
         return self._aggregators[name]
 
     @torch.no_grad()
@@ -85,7 +82,7 @@ class CloudRemovalDatasetMetrics:
             if v is None or (isinstance(v, float) and (math.isnan(v) or math.isinf(v))):
                 if self.skip_nan:
                     continue
-            value = torch.tensor(v, dtype=torch.float32, device=self.device)
+            value = torch.tensor(v, dtype=torch.float32)
             if torch.isnan(value) or torch.isinf(value):
                 if self.skip_nan:
                     continue
@@ -101,12 +98,6 @@ class CloudRemovalDatasetMetrics:
     def reset(self) -> None:
         for agg in self._aggregators.values():
             agg.reset()
-
-    def to(self, device: torch.device):  # convenience
-        self.device = device
-        for agg in self._aggregators.values():
-            agg.to(device)
-        return self
 
     # Optional: make the class iterable-friendly with state_dict / load_state_dict
     def state_dict(self) -> Dict[str, Dict[str, Tensor]]:

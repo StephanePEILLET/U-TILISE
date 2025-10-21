@@ -2,6 +2,7 @@ import logging
 from typing import Optional
 
 import numpy as np
+
 from lib.formatter import LeveledFormatter
 
 

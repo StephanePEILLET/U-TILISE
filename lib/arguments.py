@@ -25,7 +25,7 @@ eval_parser.add_argument(
 eval_parser.add_argument(
     "--checkpoint",
     type=str,
-    required="utilise" in sys.argv,
+    required=False,
     help="Model checkpoint for U-TILISE",
 )
 eval_parser.add_argument(

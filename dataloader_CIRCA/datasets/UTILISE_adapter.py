@@ -57,6 +57,7 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
         shuffle: bool = False,
         use_sar: bool = "asc",
         channels: ChannelType = "all",
+        load_transforms: Optional[str] = None,
         # U-TILISE specific parameters
         filter_settings: dict = None,
         max_seq_length: Optional[int] = MAX_SEQ_LENGTH,
@@ -83,6 +84,7 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
             use_sar=use_sar,
             channels=channels,
             image_size=image_size,
+            load_transforms=load_transforms,
         )
         self.crop_settings = crop_settings
         self.return_cloud_mask = return_cloud_mask
@@ -347,10 +349,6 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
 
         if self.phase == "test":
             patch_data["S2"]["S2"] = patch_data["S2"]["S2"][patch_data["valid_obs"]]
-
-        # Select the correct channels
-        if self.num_channels != patch_data["S2"]["S2"].shape[1]:
-            patch_data["S2"]["S2"] = patch_data["S2"]["S2"][:, self.s2_channels, :, :]
 
         if t_sampled is None:
             t_sampled, masks_valid_obs = self.subsample_sequence(patch_data["valid_obs"])

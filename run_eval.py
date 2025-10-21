@@ -2,11 +2,15 @@ import argparse
 import os
 import sys
 import time
+from pathlib import Path
 
+import numpy as np
+import rasterio
 import torch
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
 from prodict import Prodict
+from rasterio import Affine
 from tqdm import tqdm
 
 from lib import config_utils
@@ -14,9 +18,60 @@ from lib.arguments import eval_parser
 from lib.data_utils import get_dataset
 from lib.eval_tools import Imputation
 
+THRESHOLD = 0.5
+GDAL_OPTIONS = {
+    "compress": "LZW",
+    "tiled": True,
+    "blockxsize": 256,
+    "blockysize": 256,
+    "SPARSE_MODE": False,
+}
+
+
+class TypeConverter:
+
+    def __init__(self):
+        self._from = "float32"
+        self._to = "uint8"
+
+    def from_type(self, img_type):
+        self._from = img_type
+        return self
+
+    def to_type(self, img_type):
+        self._to = img_type
+        return self
+
+    def convert(self, img, threshold=0.5):
+        if self._from == "float32":
+            if self._to == "float32":
+                return img
+            elif self._to == "uint8":
+                if img.max() > 1:
+                    info = np.idebug(img.dtype)  # Get the information of the incoming image type
+                    img = img.astype(np.float32) / info.max  # normalize the data to 0 - 1
+                img = 255 * img  # scale by 255
+                return img.astype(np.uint8)
+            elif self._to == "uint16":
+                if img.max() > 1:
+                    info = np.idebug(img.dtype)  # Get the information of the incoming image type
+                    img = img.astype(np.float32) / info.max  # normalize the data to 0 - 1
+                img = np.iinfo(np.uint16).max * img  # scale by 65535
+                return img.astype(np.uint16)
+            elif self._to == "bit":
+                img = img > threshold
+                return img.astype(np.uint8)
+            else:
+                return img
+
 
 class Evaluator:
-    def __init__(self, args: argparse.Namespace, args_test_data: DictConfig):
+    def __init__(
+        self,
+        args: argparse.Namespace,
+        args_test_data: DictConfig,
+    ):
+
         self.args = args
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.args_metrics = {
@@ -30,20 +85,26 @@ class Evaluator:
             "psnr": True,
             "sam": True,
         }
+
         from dataloader_CIRCA.datasets.cr_metrics import CloudRemovalMetrics
         from dataloader_CIRCA.datasets.cr_torchmetrics import CloudRemovalDatasetMetrics
 
         list_available_metrics = [l.value for l in CloudRemovalMetrics.MetricType]
-        metrics = (
-            [k for k in self.args.metrics if k in list_available_metrics]
-            if ("metrics" in self.args and self.args.metrics is not None)
-            else list_available_metrics
-        )
-
+        # metrics = (
+        #     [k for k in self.args.metrics if k in list_available_metrics]
+        #     if ("metrics" in self.args and self.args.metrics is not None)
+        #     else list_available_metrics
+        # )
+        metrics = ["mae", "mse", "rmse", "psnr", "ssim", "r2", "sam"]
+        # metrics = ["mae"]
         self.compute_metrics = CloudRemovalDatasetMetrics(
             metrics=metrics,
             eval_occluded_observed=True,
-            # device=self.device,
+        )
+
+        self.cr_metrics = CloudRemovalMetrics(
+            metrics=metrics,
+            eval_occluded_observed=True,
         )
 
         # self.compute_metrics = EvalMetrics(self.args_metrics)
@@ -55,6 +116,9 @@ class Evaluator:
 
         # Read config file used during training
         self.config = config_utils.read_config(args.config_file)
+
+        # if "test_data" in self.config:
+        #     args_test_data = self.config.test_data
 
         # Merge generic data settings (used during training) with test-specific data settings
         if self.config.data.get("hdf5_file", False):
@@ -77,7 +141,7 @@ class Evaluator:
         # Evaluate the entire image sequence (dans le cas de l'evaluation)
         self.config.data.max_seq_length = None
 
-        if args_test_data.mode is not None:
+        if args_test_data.get("mode", False) and args_test_data.mode is not None:
             phase = args_test_data.mode
         else:
             phase = "test"
@@ -97,8 +161,8 @@ class Evaluator:
                 or “consecutive_fully_masked“."
             )
 
-        dset = get_dataset(self.config, phase=phase)
-        print(f"Dataset length: {len(dset)}")
+        self.dset = get_dataset(self.config, phase=phase)
+        print(f"Dataset length: {len(self.dset)}")
         subset = self.config.data.get("subset", False)
         if subset and isinstance(self.config.data.subset, bool):
             subset = 1
@@ -110,10 +174,10 @@ class Evaluator:
         from lib import data_utils
 
         self.dataloader = data_utils.get_dataloader(
-            dset,
+            self.dset,
             self.config,
             batch_size=1,
-            shuffle=False,
+            shuffle=True,
             drop_last=False,
             subset=subset,
         )
@@ -135,23 +199,77 @@ class Evaluator:
             # temporal_window=MAX_SAMPLES_ON_GPU,
             device=device,
         )
+        # Case with return of predictions
+        if "return_predictions" in self.args:
+            self.return_predictions = self.args.return_predictions
+        else:
+            self.return_predictions = False
+
+        if "predictions_save_path" in self.args:
+            self.predictions_save_path = Path(self.args.predictions_save_path)
+            if self.return_predictions and not self.predictions_save_path.exists():
+                self.predictions_save_path.mkdir(parents=True, exist_ok=True)
+                print(f"Prediction save path created: {self.predictions_save_path}")
+        else:
+            self.predictions_save_path = None
+            if self.return_predictions:
+                raise ValueError(
+                    "The argument 'predictions_save_path' must be specified if 'return_predictions' is set to True."
+                )
+
+    def write_predictions(
+        self,
+        batch,
+        y_pred,
+    ):
+        """
+        Write the predictions to disk with rasterio (georeferenced tiff).
+        """
+        output_type = "uint16"
+        row = self.dset.patches_dataset[
+            (self.dset.patches_dataset["mgrs25"] == batch["info"]["mgrs25"][0])
+            & (self.dset.patches_dataset["window"] == batch["info"]["window"][0])
+        ]
+        y_pred = y_pred.squeeze(0).detach().numpy()
+        y_pred = y_pred.reshape(y_pred.shape[0] * y_pred.shape[1], y_pred.shape[2], y_pred.shape[3])
+
+        meta = row.meta.values[0].copy()
+        meta = {
+            "driver": "GTiff",
+            "dtype": output_type,
+            "count": y_pred.shape[0],
+            "width": y_pred.shape[1],
+            "height": y_pred.shape[2],
+        }
+        out_filename = self.predictions_save_path / f"pred_{row.mgrs25.values[0]}_window_{row.window.values[0]}.tif"
+        print(f"Writing predictions to {out_filename}")
+        with rasterio.open(out_filename, "w", **meta, **GDAL_OPTIONS) as src:
+            converter = TypeConverter()
+            pred = converter.from_type("float32").to_type(output_type).convert(y_pred, threshold=THRESHOLD)
+            src.write(pred)
 
     def evaluate(self):
         with torch.no_grad():  # Envelopper la boucle
             for i, batch in enumerate(tqdm(self.dataloader, leave=False)):
-                _, y_pred = self.imputation.impute_sample(
-                    batch,
-                    # t_start=None,
-                    # t_end=None,
-                    # return_all=False,
-                )
+                # print(("Info batch:", batch["info"]))
+                batch, y_pred = self.imputation.impute_sample(batch)
+                # if self.return_predictions:
+                #     self.write_predictions(batch, y_pred)
+                # metrics_dict = self.cr_metrics(
+                #     target=batch["y"],
+                #     masks=batch["masks"],
+                #     predicted=y_pred,
+                #     cloud_masks=batch.get("cloud_mask", None),
+                # )
                 # Evaluation
+
                 self.compute_metrics.update(
                     target=batch["y"],
                     masks=batch["masks"],
                     predicted=y_pred,
                     cloud_masks=batch.get("cloud_mask", None),
                 )
+
             return self.compute_metrics.compute()
 
 
@@ -161,6 +279,25 @@ if __name__ == "__main__":
         sys.exit(1)
 
     args = eval_parser.parse_args()
+
+    config = config_utils.read_config(args.config_file)
+    if "test_data" in config:
+        temp = OmegaConf.create()
+        temp.config_file = args.config_file
+        temp.method = args.method
+        temp.test_data = config.test_data
+        if "mode" in temp.test_data:
+            temp.mode = config.test_data.mode
+        if "checkpoint" in temp.test_data:
+            temp.checkpoint = config.test_data.checkpoint
+            del temp.test_data.checkpoint
+        if "return_predictions" in temp.test_data:
+            temp.return_predictions = config.test_data.return_predictions
+            del temp.test_data.return_predictions
+        if "predictions_save_path" in temp.test_data:
+            temp.predictions_save_path = config.test_data.predictions_save_path
+            del temp.test_data.predictions_save_path
+        args = temp
 
     # Extract settings w.r.t. test data
     if args.test_data.test_config is not None:
@@ -172,20 +309,17 @@ if __name__ == "__main__":
         args_test_data = OmegaConf.create()
 
     if args.test_data.hdf5_file is not None:
-        if not os.path.isfile(os.path.join(args_test_data.root, args.test_data.hdf5_file)):
-            raise FileNotFoundError(
-                f"Cannot find the data file: {os.path.join(args_test_data.root, args.test_data.hdf5_file)}\n"
-            )
+        # if not os.path.isfile(os.path.join(args_test_data.root, args.test_data.hdf5_file)):
+        #     raise FileNotFoundError(
+        #         f"Cannot find the data file: {os.path.join(args_test_data.root, args.test_data.hdf5_file)}\n"
+        #     )
         args_test_data.hdf5_file = args.test_data.hdf5_file
-    if args.test_data.hdf5_file_read is not None:
-        args_test_data.hdf5_file = args.test_data.hdf5_file_read
     if args.test_data.split is not None:
         args_test_data.split = args.test_data.split
     if args.test_data.mode is not None:
         args_test_data.mode = args.test_data.mode
 
     evaluator = Evaluator(args, args_test_data)
-
     since = time.time()
     stats = evaluator.evaluate()
     time_elapsed = time.time() - since
