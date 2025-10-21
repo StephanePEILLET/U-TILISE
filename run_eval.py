@@ -96,7 +96,6 @@ class Evaluator:
         #     else list_available_metrics
         # )
         metrics = ["mae", "mse", "rmse", "psnr", "ssim", "r2", "sam"]
-        # metrics = ["mae"]
         self.compute_metrics = CloudRemovalDatasetMetrics(
             metrics=metrics,
             eval_occluded_observed=True,
