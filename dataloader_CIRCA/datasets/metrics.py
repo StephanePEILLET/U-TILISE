@@ -43,7 +43,7 @@ class CloudRemovalMetrics:
         self,
         metrics: List[MetricType] = list(MetricType),
         eval_occluded_observed: bool = True,  #  to evaluate the metrics over all pixels and separately for occluded and observed input pixels
-        clean_gt_cloudy_pixels: bool = True,  # whether to keep the ground truth cloudy pixels in the evaluation,
+        clean_gt_cloudy_pixels: bool = False,  # whether to keep the ground truth cloudy pixels in the evaluation,
         sam_units: str = "rad",  # "deg" or "rad"
         window_size: int = 5,  # For SSIM
     ):

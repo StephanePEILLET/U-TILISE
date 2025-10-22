@@ -2,7 +2,6 @@ import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parents[2]))
-
 import math
 from enum import Enum
 from functools import partial
@@ -17,6 +16,7 @@ import scipy
 # import sklearn
 import torch
 import torchgeometry as tgm
+from sklearn.metrics import r2_score
 from torch import Tensor
 
 
@@ -38,7 +38,7 @@ class CloudRemovalMetrics:
         self,
         metrics: Optional[List[str]] = None,
         eval_occluded_observed: bool = True,
-        clean_gt_cloudy_pixels: bool = True,
+        clean_gt_cloudy_pixels: bool = False,
         sam_units: str = "rad",
         window_size: int = 5,
     ) -> None:
@@ -128,7 +128,9 @@ class CloudRemovalMetrics:
             self.metric_fns[MetricType.SAM] = partial(self._compute_sam, units=self.sam_units)
 
         if MetricType.R2 in metric_set:
-            self.metric_fns[MetricType.R2] = lambda p, t: self.r2_score_torch(y_target=t.flatten(), y_pred=p.flatten())
+            self.metric_fns[MetricType.R2] = lambda p, t: r2_score(
+                y_true=t.flatten(), y_pred=p.flatten(), sample_weight=None, multioutput=None
+            )
 
     @staticmethod
     def _compute_sam(predicted: Tensor, target: Tensor, units: Literal["deg", "rad"] = "rad") -> Tensor:
@@ -204,64 +206,42 @@ class CloudRemovalMetrics:
 
         return metrics
 
-    # def r_correlation_coefficient(self, y_target: np.ndarray, y_pred: np.ndarray) -> float:
+    # @staticmethod
+    # def r2_score_torch(y_pred: Tensor, y_target: Tensor, epsilon: float = 1e-6) -> Tensor:
     #     """
-    #     Computes the Pearson correlation coefficient (R) between the true and predicted values.
+    #     Computes the R² (coefficient of determination) score using PyTorch.
+
+    #     The R² score is a statistical measure of how well the regression predictions
+    #     approximate the real data points. An R² of 1 indicates that the predictions
+    #     perfectly fit the data.
+
+    #     The formula is: R² = 1 - (SS_res / SS_tot)
+    #     where:
+    #     - SS_res (Residual Sum of Squares) is the sum of squared differences: Σ(y_target - y_pred)²
+    #     - SS_tot (Total Sum of Squares) is the sum of squared differences from the mean: Σ(y_target - mean(y_target))²
 
     #     Args:
-    #         y_true (np.ndarray): The ground truth values.
-    #         y_pred (np.ndarray): The predicted values.
+    #         y_pred (Tensor): The tensor containing the predicted values from the model.
+    #         y_target (Tensor): The tensor containing the ground truth (target) values.
+    #                         Must have the same shape as y_pred.
+    #         epsilon (float): A small value added to the denominator for numerical
+    #                         stability to prevent division by zero.
+
     #     Returns:
-    #         float: The Pearson correlation coefficient (R) value.
+    #         Tensor: A scalar tensor containing the R² score.
     #     """
+    #     if y_pred.shape != y_target.shape:
+    #         raise ValueError(
+    #             f"Input tensor shapes must be the same. " f"Got y_pred={y_pred.shape} and y_target={y_target.shape}"
+    #         )
+    #     # R² is not defined for single-sample inputs
+    #     if y_pred.shape[0] <= 1:
+    #         return None
 
-    #     # Compute the Pearson correlation coefficient using scipy
-    #     # r_pearson, _ = scipy.stats.pearsonr(y_target, y_pred)
+    #     ss_res = torch.sum((y_target - y_pred) ** 2)
+    #     ss_tot = torch.sum((y_target - torch.mean(y_target)) ** 2)
 
-    #     slope, intercept, r_value, p_value, std_err = scipy.stats.linregress(y_target, y_pred)
-    #     # print("###########################")
-    #     # print(f"R2: {r_value**2}, R: {np.square(r_pearson)}, delta R absolute: {abs(r_pearson - np.square(r_value))}")
-    #     # r2_torch = self.r2_score_torch(torch.tensor(y_pred), torch.tensor(y_target))
-    #     # print(f"R2 torch: {r2_torch}, delta R absolute pearson: {abs(r_pearson - r2_torch)}")
-    #     # print(f"R2 torch: {r2_torch}, delta R absolute lingress: {abs(r_value**2 - r2_torch)}")
-    #     return r_value**2
-
-    @staticmethod
-    def r2_score_torch(y_pred: Tensor, y_target: Tensor, epsilon: float = 1e-6) -> Tensor:
-        """
-        Computes the R² (coefficient of determination) score using PyTorch.
-
-        The R² score is a statistical measure of how well the regression predictions
-        approximate the real data points. An R² of 1 indicates that the predictions
-        perfectly fit the data.
-
-        The formula is: R² = 1 - (SS_res / SS_tot)
-        where:
-        - SS_res (Residual Sum of Squares) is the sum of squared differences: Σ(y_target - y_pred)²
-        - SS_tot (Total Sum of Squares) is the sum of squared differences from the mean: Σ(y_target - mean(y_target))²
-
-        Args:
-            y_pred (Tensor): The tensor containing the predicted values from the model.
-            y_target (Tensor): The tensor containing the ground truth (target) values.
-                            Must have the same shape as y_pred.
-            epsilon (float): A small value added to the denominator for numerical
-                            stability to prevent division by zero.
-
-        Returns:
-            Tensor: A scalar tensor containing the R² score.
-        """
-        if y_pred.shape != y_target.shape:
-            raise ValueError(
-                f"Input tensor shapes must be the same. " f"Got y_pred={y_pred.shape} and y_target={y_target.shape}"
-            )
-        # R² is not defined for single-sample inputs
-        if y_pred.shape[0] <= 1:
-            return None
-
-        ss_res = torch.sum((y_target - y_pred) ** 2)
-        ss_tot = torch.sum((y_target - torch.mean(y_target)) ** 2)
-
-        return 1 - ss_res / (ss_tot + epsilon)
+    #     return 1 - ss_res / (ss_tot + epsilon)
 
     def _compute_imagewise_metrics(self, predicted: Tensor, target: Tensor, masks: Tensor) -> Dict[str, float]:
         """

@@ -104,6 +104,7 @@ class Evaluator:
         self.cr_metrics = CloudRemovalMetrics(
             metrics=metrics,
             eval_occluded_observed=True,
+            clean_gt_cloudy_pixels=False,
         )
 
         # self.compute_metrics = EvalMetrics(self.args_metrics)

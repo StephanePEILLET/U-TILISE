@@ -1,14 +1,28 @@
 # TODO LIST
 ### Aujourd'hui:
+Faire d'abord le calcul sur une seule série temporelle 
+
+visualisation des obs qui pète 
 Lancer une inférence pour U-TILISE:
     - sortir les métriques en fonction des différents masquages
-run une boucle juste avec les inférences
-run une boucle avec les métrics (juste mae et sans torchmetrics)
+refaire un dataloadrr permettant de prendre les données directement devant les fichiers sur le store-dai et non
+depuis le fichier hdf5.
+run une boucle juste avec les inférences (ça passe)
+run une boucle avec juste mae et sans torchmetrics: erreur arrive à 156
+    => 'Info batch:', {'mgrs': ['30TYP'], 'mgrs25': ['30TYP_row-2_col-3'], 'window': ['0_0_256_256']}
+
+seconde erreur:
+'mgrs': ['30TYP'], 'mgrs25': ['30TYP_row-2_col-3'], 'window': ['0_0_256_256']
+'mgrs': ['30TYP'], 'mgrs25': ['30TYP_row-4_col-3'], 'window': ['1280_512_256_256']
+'mgrs': ['31UFP'], 'mgrs25': ['31UFP_row-3_col-3'], 'window': ['1792_256_256_256']
+'mgrs': ['31UFP'], 'mgrs25': ['31UFP_row-4_col-2'], 'window': ['512_1280_256_256']
+'mgrs': ['31UDR'], 'mgrs25': ['31UDR_row-4_col-4'], 'window': ['1536_1940_256_256']
+
 run une boucle sans utiliser l'objet torchmetric pour voir si déjà cela passe..
 
 Tâches à faire:
     - regarder où se trouve le dataset: CIRCA_CR_merged.hdf5 (LNV87/store_dai equipiers)
-
+    - lancer des métriques et les faire tourner
 
 - [ ] Travailler sur le géoréfécement des données et la sorties de prédictions durant une eval.
 Relancer les trainings et les validations 
