@@ -1,5 +1,11 @@
 # TODO LIST
 ### Aujourd'hui:
+Vérifier l'aspect des masks nuages (d'origine) en sortie des dataloaders
+Relancer les métriques
+
+Regarder l'état du training avec U-TILISE
+Serait-il mieux de tous passer rapidement sur lightning? 
+
 Faire d'abord le calcul sur une seule série temporelle 
 
 visualisation des obs qui pète 

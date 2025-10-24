@@ -399,17 +399,21 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
             frames_input = torch.cat((frames_input, s1), dim=1)
 
         cloud_mask = patch_data["S2"]["cloud_mask"]
+
+        retrieve_original_cloud_masks = False
         if self.phase != "test":
             cloud_mask = cloud_mask[patch_data["valid_obs"]]
         else:
             # La présence des arrays consecutive_fully_masked et random_fully_masked n'a lieu que
             # pour les observations de test.
             # Avant le sampling temporel on va modifier le masque en fonction du paramètre dans mask_kwargs
+
             if (
                 self.mask_kwargs is not None
                 and self.mask_kwargs.mask_type == "consecutive_fully_masked"
                 and "idx_syn_consecutif" in patch_data
             ):
+                retrieve_original_cloud_masks = True
                 if not self.intersect_real_cloud_masks:
                     cloud_mask = torch.zeros_like(cloud_mask)
                 for i in patch_data["idx_syn_consecutif"]:
@@ -419,6 +423,7 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
                 and self.mask_kwargs.mask_type == "random_fully_masked"
                 and "idx_syn_aleatoire" in patch_data
             ):
+                retrieve_original_cloud_masks = True
                 if not self.intersect_real_cloud_masks:
                     cloud_mask = torch.zeros_like(cloud_mask)
                 for i in patch_data["idx_syn_aleatoire"]:
@@ -446,6 +451,11 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
             )
         else:
             masks = torch.zeros((frames_input.shape[0], 1, *frames_input.shape[-2:]))  # T x C x H x W
+
+        if retrieve_original_cloud_masks:
+            cloud_mask = patch_data["S2"]["cloud_mask"][patch_data["valid_obs"]][t_sampled]
+            if self.render_occluded_above_p and self.render_occluded_above_p > 0.0:
+                cloud_mask = self._mask_images_with_cloud_coverage_above_p(cloud_mask)
 
         # Cast des dates en datetime.datetime à datetime.date si besoin
         if isinstance(s2_dates[0], dt.datetime):

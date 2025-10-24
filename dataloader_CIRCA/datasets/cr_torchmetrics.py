@@ -30,7 +30,7 @@ class CloudRemovalDatasetMetrics:
         self,
         metrics: Optional[List[str]] = None,
         eval_occluded_observed: bool = True,
-        clean_gt_cloudy_pixels: bool = False,
+        clean_gt_cloudy_pixels: bool = True,
         sam_units: str = "rad",
         window_size: int = 5,
         skip_nan: bool = True,
