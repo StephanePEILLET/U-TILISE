@@ -38,9 +38,10 @@ class CloudRemovalMetrics:
         self,
         metrics: Optional[List[str]] = None,
         eval_occluded_observed: bool = True,
-        clean_gt_cloudy_pixels: bool = False,
+        clean_gt_cloudy_pixels: bool = True,
         sam_units: str = "rad",
         window_size: int = 5,
+        max_pixel_intensity: int = 1,
     ) -> None:
         """
         Initializes the CloudRemovalMetrics class.
@@ -59,6 +60,7 @@ class CloudRemovalMetrics:
         self.clean_gt_cloudy_pixels = clean_gt_cloudy_pixels
         self.sam_units = sam_units
         self.window_size = window_size
+        self.max_pixel_intensity = max_pixel_intensity
         # Initialize metric functions
         self.metric_fns: Dict[CloudRemovalMetrics.MetricType, callable] = {}
         metrics_enum = self._parse_metrics(metrics)
@@ -122,7 +124,9 @@ class CloudRemovalMetrics:
             self.metric_fns[MetricType.SSIM] = tgm.losses.SSIM(self.window_size, reduction="mean")
 
         if MetricType.PSNR in metric_set:
-            self.metric_fns[MetricType.PSNR] = lambda p, t: 20 * torch.log10(1 / self.metric_fns[MetricType.RMSE](p, t))
+            self.metric_fns[MetricType.PSNR] = lambda p, t: 20 * torch.log10(
+                self.max_pixel_intensity / self.metric_fns[MetricType.RMSE](p, t)
+            )
 
         if MetricType.SAM in metric_set:
             self.metric_fns[MetricType.SAM] = partial(self._compute_sam, units=self.sam_units)

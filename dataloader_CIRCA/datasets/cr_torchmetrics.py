@@ -31,6 +31,7 @@ class CloudRemovalDatasetMetrics:
         metrics: Optional[List[str]] = None,
         eval_occluded_observed: bool = True,
         clean_gt_cloudy_pixels: bool = True,
+        max_pixel_intensity: int = 1,
         sam_units: str = "rad",
         window_size: int = 5,
         skip_nan: bool = True,
@@ -47,6 +48,7 @@ class CloudRemovalDatasetMetrics:
             metrics=metrics,
             eval_occluded_observed=eval_occluded_observed,
             clean_gt_cloudy_pixels=clean_gt_cloudy_pixels,
+            max_pixel_intensity=max_pixel_intensity,
             sam_units=sam_units,
             window_size=window_size,
         )

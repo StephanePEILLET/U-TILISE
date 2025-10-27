@@ -13,12 +13,14 @@ from prodict import Prodict
 from rasterio import Affine
 from tqdm import tqdm
 
+from dataloader_CIRCA.tools.data_processor import SentinelDataProcessor
 from lib import config_utils
 from lib.arguments import eval_parser
 from lib.data_utils import get_dataset
 from lib.eval_tools import Imputation
 
 THRESHOLD = 0.5
+MAX_PIXEL_INTENSITY_USED_FOR_REVERSE = 10_000
 GDAL_OPTIONS = {
     "compress": "LZW",
     "tiled": True,
@@ -99,12 +101,15 @@ class Evaluator:
         self.compute_metrics = CloudRemovalDatasetMetrics(
             metrics=metrics,
             eval_occluded_observed=True,
+            clean_gt_cloudy_pixels=True,
+            max_pixel_intensity=10_000,
         )
 
         self.cr_metrics = CloudRemovalMetrics(
             metrics=metrics,
             eval_occluded_observed=True,
             clean_gt_cloudy_pixels=True,
+            max_pixel_intensity=MAX_PIXEL_INTENSITY_USED_FOR_REVERSE,
         )
 
         # self.compute_metrics = EvalMetrics(self.args_metrics)
@@ -263,10 +268,18 @@ class Evaluator:
                 # )
                 # Evaluation
 
+                # Reverse normalization
+                denorm_pred = SentinelDataProcessor.reverse_process_MS(
+                    y_pred, intensity_max=MAX_PIXEL_INTENSITY_USED_FOR_REVERSE
+                )
+                denorm_target = SentinelDataProcessor.reverse_process_MS(
+                    batch["y"], intensity_max=MAX_PIXEL_INTENSITY_USED_FOR_REVERSE
+                )
+
                 self.compute_metrics.update(
-                    target=batch["y"],
+                    target=denorm_target,
                     masks=batch["masks"],
-                    predicted=y_pred,
+                    predicted=denorm_pred,
                     cloud_masks=batch.get("cloud_mask", None),
                 )
 

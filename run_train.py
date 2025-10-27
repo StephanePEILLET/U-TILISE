@@ -37,13 +37,6 @@ parser.add_argument(
     required=True,
     help="Path to the directory where models and logs should be saved",
 )
-parser.add_argument(
-    "--wandb",
-    action="store_true",
-    default=False,
-    help="Use Weights & Biases instead of TensorBoard",
-)
-parser.add_argument("--wandb_project", type=str, default="utilise", help="Wandb project name")
 
 
 def setup_configuration(args: argparse.Namespace) -> OmegaConf:
@@ -55,7 +48,6 @@ def setup_configuration(args: argparse.Namespace) -> OmegaConf:
     cfg_custom = config_utils.read_config(args.config_file)
     if not cfg_custom:
         sys.exit(1)
-
     # Augment/overwrite the default parameter settings with the runtime arguments given by the user
     # Get the directory of the current script
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -63,11 +55,6 @@ def setup_configuration(args: argparse.Namespace) -> OmegaConf:
     cfg_default = config_utils.read_config(default_config_path)
     config = OmegaConf.merge(cfg_default, cfg_custom)
     config.output.output_directory = args.save_dir
-
-    if args.wandb:
-        config.wandb = OmegaConf.create()
-        config.wandb.project = args.wandb_project
-
     return config
 
 
@@ -75,7 +62,6 @@ def setup_logging(config: OmegaConf) -> logging.Logger:
     """Setup logging configuration."""
     # Create the output directory
     config.output.experiment_folder = utils.create_output_directory(config)
-
     # Set up the logger
     log_file = os.path.join(config.output.experiment_folder, "run.log") if config.output.experiment_folder else None
     return prepare_logger("root_logger", level=logging.INFO, log_to_console=True, log_file=log_file)
@@ -98,14 +84,11 @@ def setup_data_loaders(
 ) -> tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader]:
     """Initialize and return train and validation data loaders."""
     logger.info("\nInitialize data loader (training set)...")
-
     subset = config.data.get("subset", False)
     if subset and isinstance(config.data.subset, bool):
         subset = 10
-
     generator = torch.Generator()
     generator.manual_seed(config.misc.get("random_seed", SEED))
-
     train_loader = data_utils.get_dataloader(
         train_dset,
         config,
@@ -114,7 +97,6 @@ def setup_data_loaders(
         generator=generator,
         subset=subset,
     )
-
     logger.info("Initialize data loader (validation set)...\n")
     val_loader = data_utils.get_dataloader(
         val_dset,
@@ -124,7 +106,6 @@ def setup_data_loaders(
         generator=generator,
         subset=subset,
     )
-
     if subset:
         logger.info("Number of training samples: %d", subset)
         logger.info("Number of validation samples: %d", subset)
@@ -132,19 +113,16 @@ def setup_data_loaders(
         logger.info("Number of training samples: %d", train_dset.__len__())
         logger.info("Number of validation samples: %d", val_dset.__len__())
     logger.info("Variable sequence lengths: %r\n", train_dset.variable_seq_length)
-
     return train_loader, val_loader
 
 
 def setup_output_directories(config: OmegaConf, logger: logging.Logger) -> None:
     """Setup output directories and save configuration files."""
     logger.info("\nPrepare output folders and files\n--------------------------------\n")
-
     # Save the path of the checkpoint directory
     config.output.checkpoint_dir = os.path.join(config.output.experiment_folder, "checkpoints")
     os.makedirs(config.output.checkpoint_dir, exist_ok=True)
     logger.info("Model weights will be stored in: %s\n", config.output.checkpoint_dir)
-
     # Write the runtime configuration to file
     config_file = os.path.join(config.output.experiment_folder, "config.yaml")
     config_utils.write_config(config, config_file)
@@ -154,15 +132,12 @@ def setup_model(config: OmegaConf, train_dset: torch.utils.data.Dataset, logger:
     """Setup and configure the model."""
     logger.info("\nModel Architecture\n------------------\n")
     logger.info("Architecture: %s", config.method.model_type)
-
     input_dim = train_dset.num_channels
     model, args_model = utils.get_model(config, input_dim, logger)
     logger.info("Number of trainable parameters: %d\n", utils.count_model_parameters(model))
-
     # Log model parameters to file
     config_file = os.path.join(config.output.experiment_folder, "model_config.yaml")
     config_utils.write_config(OmegaConf.create({config.method.model_type: args_model}), config_file)
-
     # Write model architecture to txt file
     if config.output.plot_model_txt:
         file = os.path.join(config.output.experiment_folder, "model_parameters.txt")
@@ -228,6 +203,9 @@ def main(args: argparse.Namespace) -> None:
 
     # Setup training components
     optimizer, scheduler = setup_training_components(config, model, logger)
+    from lib.loss import TrainLoss
+
+    criterion = TrainLoss(config.loss)
 
     if config.misc.random_seed is not None:
         utils.set_seed(config.misc.random_seed)
@@ -305,6 +283,98 @@ def main(args: argparse.Namespace) -> None:
                 json.dump(results_test_metrics, outfile, indent=4)
             print("Test set metrics:")
             print(results_test_metrics)
+
+
+import pytorch_lightning as pl
+import torch
+from torchmetrics import MeanMetric
+
+from dataloader_CIRCA.datasets.cr_torchmetrics import CloudRemovalDatasetMetrics
+
+
+class SegmentationTask(pl.LightningModule):
+    def __init__(self, model, criterion, optimizer, scheduler):
+        super().__init__()
+        self.model = model
+        self.criterion = criterion
+        self.optimizer = optimizer
+        self.scheduler = scheduler
+
+    def setup(self, stage=None):
+        if stage == "fit":
+            self.train_epoch_loss, self.val_epoch_loss = None, None
+            self.train_epoch_metrics, self.val_epoch_metrics = None, None
+            self.train_metrics = CloudRemovalDatasetMetrics(eval_occluded_observed=True, clean_gt_cloudy_pixels=True)
+            self.val_metrics = CloudRemovalDatasetMetrics(eval_occluded_observed=True, clean_gt_cloudy_pixels=True)
+            self.train_loss = MeanMetric(nan_strategy="ignore")
+            self.val_loss = MeanMetric(nan_strategy="ignore")
+
+        elif stage == "validate":
+            self.val_epoch_loss, self.val_epoch_metrics = None, None
+            self.val_metrics = CloudRemovalDatasetMetrics(eval_occluded_observed=True, clean_gt_cloudy_pixels=True)
+            self.val_loss = MeanMetric(nan_strategy="ignore")
+
+    def forward(self, images):
+        logits = self.model(images)
+        return logits
+
+    def step(self, batch):
+        images, targets = batch["image"], batch["mask"]
+        logits = self.forward(images)
+        loss = self.criterion(logits, targets)
+        with torch.no_grad():
+            proba = torch.softmax(logits, dim=1)
+            preds = torch.argmax(proba, dim=1)
+            targets = torch.argmax(targets, dim=1)
+            # Change shapes and cast target to integer for metrics computation
+            preds = preds.flatten(start_dim=1)
+            targets = targets.flatten(start_dim=1).type(torch.int32)
+        return loss, preds, targets
+
+    def training_step(self, batch, batch_idx):
+        loss, preds, targets = self.step(batch)
+        self.train_loss.update(loss)
+        self.train_metrics.update(
+            preds=preds, target=targets, masks=batch["mask"], cloud_masks=batch.get("cloud_mask", None)
+        )
+        return loss
+
+    def training_epoch_end(self, outputs):
+        self.train_epoch_loss = self.train_loss.compute()
+        self.train_epoch_metrics = self.train_metrics.compute()
+        self.log("train_loss", self.train_epoch_loss, on_step=False, on_epoch=True, prog_bar=True, logger=False)
+        self.train_loss.reset()
+        self.train_metrics.reset()
+
+    def validation_step(self, batch, batch_idx):
+        loss, preds, targets = self.step(batch)
+        self.val_loss.update(loss)
+        self.val_metrics.update(
+            preds=preds, target=targets, masks=batch["mask"], cloud_masks=batch.get("cloud_mask", None)
+        )
+        return loss
+
+    def validation_epoch_end(self, outputs):
+        self.val_epoch_loss = self.val_loss.compute()
+        self.val_epoch_metrics = self.val_metrics.compute()
+        self.log("val_loss", self.val_epoch_loss, on_step=False, on_epoch=True, prog_bar=True, logger=False)
+        self.val_loss.reset()
+        self.val_metrics.reset()
+
+    def configure_optimizers(self):
+        lr_scheduler_config = {
+            "scheduler": self.scheduler,
+            "interval": "epoch",
+            "monitor": "val_loss",
+            "frequency": 1,
+            "strict": True,
+            "name": "LR Scheduler",
+        }
+        config = {
+            "optimizer": self.optimizer,
+            "lr_scheduler": lr_scheduler_config,
+        }
+        return config
 
 
 if __name__ == "__main__":
