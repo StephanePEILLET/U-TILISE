@@ -22,7 +22,7 @@
             "args": [
                 "./configs/config_run_train.yaml",
                 "--save_dir",
-                "/DATA_10TB/data_rpg/outputs/train",
+                "/DATA_10TB/data_rpg/outputs/U-TILISE/train",
             ]
         },
         {

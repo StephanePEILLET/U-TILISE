@@ -117,7 +117,7 @@ def get_default_model_settings(model, args_model: DictConfig) -> None:
             args_model[param] = val.value if isinstance(val, Enum) else val
 
 
-def get_model(config: DictConfig, input_dim: int, logger: Optional[logging.Logger] = None):
+def get_model(config: DictConfig, input_dim: int):
     """
     Returns a model instance and its parameter settings.
 
@@ -134,10 +134,7 @@ def get_model(config: DictConfig, input_dim: int, logger: Optional[logging.Logge
     model_type = config.method.model_type
 
     if model_type not in MODELS or model_type not in config:
-        if logger is not None:
-            logger.error(f"{model_type} model is not implemented.\n")
-        else:
-            raise NotImplementedError(f"ERROR: {model_type} model is not implemented.\n")
+        raise NotImplementedError(f"ERROR: {model_type} model is not implemented.\n")
 
     args_model = deepcopy(config[model_type]) if model_type in config else OmegaConf.create()
 

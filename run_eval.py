@@ -92,12 +92,12 @@ class Evaluator:
         from dataloader_CIRCA.datasets.cr_torchmetrics import CloudRemovalDatasetMetrics
 
         list_available_metrics = [l.value for l in CloudRemovalMetrics.MetricType]
-        # metrics = (
-        #     [k for k in self.args.metrics if k in list_available_metrics]
-        #     if ("metrics" in self.args and self.args.metrics is not None)
-        #     else list_available_metrics
-        # )
-        metrics = ["mae", "mse", "rmse", "psnr", "ssim", "r2", "sam"]
+        metrics = (
+            [k for k in self.args.metrics if k in list_available_metrics]
+            if ("metrics" in self.args and self.args.metrics is not None)
+            else list_available_metrics
+        )
+        # metrics = ["mae", "mse", "rmse", "psnr", "ssim", "r2", "sam"]
         self.compute_metrics = CloudRemovalDatasetMetrics(
             metrics=metrics,
             eval_occluded_observed=True,

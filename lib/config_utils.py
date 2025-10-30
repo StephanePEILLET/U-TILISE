@@ -3,10 +3,10 @@ import os
 import sys
 from typing import Optional
 
-import yaml
-from omegaconf import DictConfig, OmegaConf
-
 import prodict
+import yaml
+from omegaconf import DictConfig
+from omegaconf import OmegaConf
 from prodict import Prodict
 
 
@@ -15,9 +15,7 @@ class _PrettySafeLoader(yaml.SafeLoader):
         return tuple(self.construct_sequence(node))
 
 
-_PrettySafeLoader.add_constructor(
-    "tag:yaml.org,2002:python/tuple", _PrettySafeLoader.construct_python_tuple
-)
+_PrettySafeLoader.add_constructor("tag:yaml.org,2002:python/tuple", _PrettySafeLoader.construct_python_tuple)
 
 
 def resolve_tuple(*args):
@@ -25,12 +23,10 @@ def resolve_tuple(*args):
     return tuple(args)
 
 
-OmegaConf.register_new_resolver("tuple", resolve_tuple)
+# OmegaConf.register_new_resolver("tuple", resolve_tuple)
 
 
-def print_config(
-    config: DictConfig | prodict.Prodict | str, logger: Optional[logging.Logger] = None
-) -> None:
+def print_config(config: DictConfig | prodict.Prodict | str, logger: Optional[logging.Logger] = None) -> None:
     """
     Prints a yaml configuration file to the console.
 

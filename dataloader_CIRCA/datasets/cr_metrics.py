@@ -132,9 +132,10 @@ class CloudRemovalMetrics:
             self.metric_fns[MetricType.SAM] = partial(self._compute_sam, units=self.sam_units)
 
         if MetricType.R2 in metric_set:
-            self.metric_fns[MetricType.R2] = lambda p, t: r2_score(
-                y_true=t.flatten(), y_pred=p.flatten(), sample_weight=None, multioutput=None
-            )
+            # self.metric_fns[MetricType.R2] = lambda p, t: r2_score(
+            #     y_true=t.flatten(), y_pred=p.flatten(), sample_weight=None, multioutput=None
+            # )
+            self.metric_fns[MetricType.R2] = lambda p, t: self.r2_score_torch(y_pred=p, y_target=t)
 
     @staticmethod
     def _compute_sam(predicted: Tensor, target: Tensor, units: Literal["deg", "rad"] = "rad") -> Tensor:
@@ -210,42 +211,42 @@ class CloudRemovalMetrics:
 
         return metrics
 
-    # @staticmethod
-    # def r2_score_torch(y_pred: Tensor, y_target: Tensor, epsilon: float = 1e-6) -> Tensor:
-    #     """
-    #     Computes the R² (coefficient of determination) score using PyTorch.
+    @staticmethod
+    def r2_score_torch(y_pred: Tensor, y_target: Tensor, epsilon: float = 1e-6) -> Tensor:
+        """
+        Computes the R² (coefficient of determination) score using PyTorch.
 
-    #     The R² score is a statistical measure of how well the regression predictions
-    #     approximate the real data points. An R² of 1 indicates that the predictions
-    #     perfectly fit the data.
+        The R² score is a statistical measure of how well the regression predictions
+        approximate the real data points. An R² of 1 indicates that the predictions
+        perfectly fit the data.
 
-    #     The formula is: R² = 1 - (SS_res / SS_tot)
-    #     where:
-    #     - SS_res (Residual Sum of Squares) is the sum of squared differences: Σ(y_target - y_pred)²
-    #     - SS_tot (Total Sum of Squares) is the sum of squared differences from the mean: Σ(y_target - mean(y_target))²
+        The formula is: R² = 1 - (SS_res / SS_tot)
+        where:
+        - SS_res (Residual Sum of Squares) is the sum of squared differences: Σ(y_target - y_pred)²
+        - SS_tot (Total Sum of Squares) is the sum of squared differences from the mean: Σ(y_target - mean(y_target))²
 
-    #     Args:
-    #         y_pred (Tensor): The tensor containing the predicted values from the model.
-    #         y_target (Tensor): The tensor containing the ground truth (target) values.
-    #                         Must have the same shape as y_pred.
-    #         epsilon (float): A small value added to the denominator for numerical
-    #                         stability to prevent division by zero.
+        Args:
+            y_pred (Tensor): The tensor containing the predicted values from the model.
+            y_target (Tensor): The tensor containing the ground truth (target) values.
+                            Must have the same shape as y_pred.
+            epsilon (float): A small value added to the denominator for numerical
+                            stability to prevent division by zero.
 
-    #     Returns:
-    #         Tensor: A scalar tensor containing the R² score.
-    #     """
-    #     if y_pred.shape != y_target.shape:
-    #         raise ValueError(
-    #             f"Input tensor shapes must be the same. " f"Got y_pred={y_pred.shape} and y_target={y_target.shape}"
-    #         )
-    #     # R² is not defined for single-sample inputs
-    #     if y_pred.shape[0] <= 1:
-    #         return None
+        Returns:
+            Tensor: A scalar tensor containing the R² score.
+        """
+        if y_pred.shape != y_target.shape:
+            raise ValueError(
+                f"Input tensor shapes must be the same. " f"Got y_pred={y_pred.shape} and y_target={y_target.shape}"
+            )
+        # R² is not defined for single-sample inputs
+        if y_pred.shape[0] <= 1:
+            return None
 
-    #     ss_res = torch.sum((y_target - y_pred) ** 2)
-    #     ss_tot = torch.sum((y_target - torch.mean(y_target)) ** 2)
+        ss_res = torch.sum((y_target - y_pred) ** 2)
+        ss_tot = torch.sum((y_target - torch.mean(y_target)) ** 2)
 
-    #     return 1 - ss_res / (ss_tot + epsilon)
+        return torch.clamp(1 - ss_res / (ss_tot + epsilon), min=0, max=1)
 
     def _compute_imagewise_metrics(self, predicted: Tensor, target: Tensor, masks: Tensor) -> Dict[str, float]:
         """

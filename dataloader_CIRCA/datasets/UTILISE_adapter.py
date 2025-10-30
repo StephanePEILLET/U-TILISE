@@ -98,7 +98,7 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
                     A.Normalize(
                         mean=self.stats["means"],
                         std=self.stats["stds"],
-                        max_pixel_value=255.0,
+                        max_pixel_value=np.iinfo(np.uint16).max,
                     ),
                     A.pytorch.transforms.ToTensorV2(),
                 ]
