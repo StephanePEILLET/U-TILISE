@@ -1,6 +1,6 @@
 data:
     dataset: circa         # Name of the dataset, ['earthnet2021', 'sen12mscrts']
-    hdf5_file: /lustre/fsn1/projects/rech/tel/uug84ql/cloud_reconstruction/CIRCA_CR_merged.hdf5
+    hdf5_file: /lustre/fsn1/projects/rech/tel/uug84ql/datasets/CIRCA_CR_merged.hdf5
     max_seq_length: 10
     channels: all
     use_sar: asc+desc # asc / desc / mix_closest / asc+desc

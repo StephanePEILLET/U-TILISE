@@ -1,5 +1,10 @@
 # TODO LIST
+
+**U-TILISE** (en attente)
+- Lancer un training avec seulement un gpu ( tr)
+- Mettre au propre le notebook permettant de visualiser les inférences faites dans le code
 - Tester le multi gpus et lancer des trainings
+
 - Ajouter la connexion avec ClearML
 - Remettre en place la data augmentation ? 
 - regarder le comportement des modules avec ligthning, est-ce que tout doit être à train ou certains doivent être à val

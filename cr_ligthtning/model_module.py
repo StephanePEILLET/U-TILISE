@@ -91,6 +91,14 @@ class CR_module(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         loss, y_pred, batch = self.inference_one_batch(batch)
+        return {
+            "loss": loss,
+            "y_pred": y_pred,
+            "batch": batch,
+        }
+
+    def on_train_batch_end(self, outputs, batch, batch_idx) -> None:
+        loss, y_pred, batch = outputs["loss"], outputs["y_pred"], outputs["batch"]
         self.train_loss.update(loss)
         self.train_metrics.update(
             target=batch["y"],
@@ -109,6 +117,14 @@ class CR_module(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         loss, y_pred, batch = self.inference_full_sequence(batch)
+        return {
+            "loss": loss,
+            "y_pred": y_pred,
+            "batch": batch,
+        }
+
+    def on_validation_batch_end(self, outputs, batch, batch_idx) -> None:
+        loss, y_pred, batch = outputs["loss"], outputs["y_pred"], outputs["batch"]
         self.val_loss.update(loss)
         self.val_metrics.update(
             target=batch["y"],

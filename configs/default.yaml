@@ -103,6 +103,8 @@ misc:
     plot_every_n_epochs: 15                # Plot interval in epochs.
     plot_val_sample: []                    # List of int, indices of the validation samples to be visualized during training using Weights & Biases.
     num_workers: 8                         # Number of dataloader worker processes.
+    devices: 1
+    num_nodes: 1
     random_seed: 0                         # Random seed.
     pin_memory: false                      # Pin memory (dataloader settings).
     run_mode: train                        # Run mode. ['train', 'val', 'test']

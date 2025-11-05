@@ -137,8 +137,8 @@ def main(args: argparse.Namespace) -> None:
 
     trainer = Trainer(
         accelerator="gpu" if torch.cuda.is_available() else "cpu",
-        devices=1 if torch.cuda.is_available() else None,
-        num_nodes=1,
+        devices=config.misc.devices if torch.cuda.is_available() else None,
+        num_nodes=config.misc.num_nodes,
         callbacks=configure_callbacks(config),
         logger=configure_loggers(config),
         max_epochs=config.training_settings.num_epochs,

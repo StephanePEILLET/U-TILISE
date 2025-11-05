@@ -265,132 +265,132 @@ class CloudRemovalMetrics:
         return metrics
 
 
-if __name__ == "__main__":
-    # Définition du dataset
-    SUBSET_LENGTH = 20
-    batch_size_inference = 1
+# if __name__ == "__main__":
+#     # Définition du dataset
+#     SUBSET_LENGTH = 20
+#     batch_size_inference = 1
 
-    filter_settings = {
-        "type": "cloud-free",  # Strategy for removing observations with data gaps.
-        # ['cloud-free', 'cloud-free_consecutive']
-        "min_length": 5,  # Minimum sequence length.
-        "return_valid_obs_only": True,  # True to return the cloud-filtered sequences, False otherwise.
-        # "max_t_sampling": 10,            # Maximum temporal sampling frequency in days.
-    }
+#     filter_settings = {
+#         "type": "cloud-free",  # Strategy for removing observations with data gaps.
+#         # ['cloud-free', 'cloud-free_consecutive']
+#         "min_length": 5,  # Minimum sequence length.
+#         "return_valid_obs_only": True,  # True to return the cloud-filtered sequences, False otherwise.
+#         # "max_t_sampling": 10,            # Maximum temporal sampling frequency in days.
+#     }
 
-    mask_kwargs = {
-        "mask_type": "random_clouds",  # Mask the input time series with randomly sampled cloud masks or the actual cloud masks. ['random_clouds', 'real_clouds']
-        "ratio_masked_frames": 0.5,  # Ratio of partially/fully masked images per image time series (upper bound).
-        "ratio_fully_masked_frames": 0.0,  # Ratio of fully masked images per image time series (upper bound).
-        "fixed_masking_ratio": False,  # True to vary the masking ratio across different image time series, False otherwise.
-        "non_masked_frames": [
-            0
-        ],  # list of int, time steps to be excluded from masking. E.g., [0] never masks the first frame in a sequence.
-        "intersect_real_cloud_masks": False,  # True to intersect randomly sampled cloud masks with the actual cloud masks, False otherwise.
-        "dilate_cloud_masks": False,  # True to dilate the cloud masks before masking, False otherwise.
-        "fill_type": "fill_value",  # Strategy for initializing masked pixels. ['fill_value', 'white_noise', 'mean']
-        "fill_value": 1,  # Pixel value of masked pixels. Used if fill_type == 'fill_value'.
-        "p_filter": 0.1,
-    }
+#     mask_kwargs = {
+#         "mask_type": "random_clouds",  # Mask the input time series with randomly sampled cloud masks or the actual cloud masks. ['random_clouds', 'real_clouds']
+#         "ratio_masked_frames": 0.5,  # Ratio of partially/fully masked images per image time series (upper bound).
+#         "ratio_fully_masked_frames": 0.0,  # Ratio of fully masked images per image time series (upper bound).
+#         "fixed_masking_ratio": False,  # True to vary the masking ratio across different image time series, False otherwise.
+#         "non_masked_frames": [
+#             0
+#         ],  # list of int, time steps to be excluded from masking. E.g., [0] never masks the first frame in a sequence.
+#         "intersect_real_cloud_masks": False,  # True to intersect randomly sampled cloud masks with the actual cloud masks, False otherwise.
+#         "dilate_cloud_masks": False,  # True to dilate the cloud masks before masking, False otherwise.
+#         "fill_type": "fill_value",  # Strategy for initializing masked pixels. ['fill_value', 'white_noise', 'mean']
+#         "fill_value": 1,  # Pixel value of masked pixels. Used if fill_type == 'fill_value'.
+#         "p_filter": 0.1,
+#     }
 
-    params_dataset = {
-        "phase": "test",
-        "hdf5_file": "/DATA_10TB/data_rpg/circa/hdf5/CIRCA_CR_merged.hdf5",
-        "shuffle": False,
-        "use_sar": "mix_closest",
-        "channels": "all",
-        # U-TILISE specific parameters
-        "filter_settings": filter_settings,
-        "max_seq_length": 30,
-        "render_occluded_above_p": None,  # Set to None to keep original cloud masks. Minimum cloud cover to fully mask an input image (0.9 demo config)
-        "mask_kwargs": mask_kwargs,
-        "pe_strategy": "day-within-sequence",
-        "augment": False,
-        "process_data": True,
-        "seed": 42,
-        # Récupération de vieux arguments du repo
-        "crop_settings": None,
-        "return_cloud_mask": True,
-    }
+#     params_dataset = {
+#         "phase": "test",
+#         "hdf5_file": "/DATA_10TB/data_rpg/circa/hdf5/CIRCA_CR_merged.hdf5",
+#         "shuffle": False,
+#         "use_sar": "mix_closest",
+#         "channels": "all",
+#         # U-TILISE specific parameters
+#         "filter_settings": filter_settings,
+#         "max_seq_length": 30,
+#         "render_occluded_above_p": None,  # Set to None to keep original cloud masks. Minimum cloud cover to fully mask an input image (0.9 demo config)
+#         "mask_kwargs": mask_kwargs,
+#         "pe_strategy": "day-within-sequence",
+#         "augment": False,
+#         "process_data": True,
+#         "seed": 42,
+#         # Récupération de vieux arguments du repo
+#         "crop_settings": None,
+#         "return_cloud_mask": True,
+#     }
 
-    dset = CIRCA_ADAPTED2UTILISE_Dataset(**params_dataset)
+#     dset = CIRCA_ADAPTED2UTILISE_Dataset(**params_dataset)
 
-    from lib import config_utils
-    from lib.data_utils import pad_collate
-    from lib.data_utils import seed_worker
+#     from lib import config_utils
+#     from lib.data_utils import pad_collate
+#     from lib.data_utils import seed_worker
 
-    # dset = torch.utils.data.Subset(dset, range(SUBSET_LENGTH))
-    dataloader = torch.utils.data.DataLoader(
-        dataset=dset,
-        batch_size=batch_size_inference,
-        shuffle=False,
-        num_workers=0,
-        collate_fn=None,
-        pin_memory=False,
-        drop_last=False,
-    )
+#     # dset = torch.utils.data.Subset(dset, range(SUBSET_LENGTH))
+#     dataloader = torch.utils.data.DataLoader(
+#         dataset=dset,
+#         batch_size=batch_size_inference,
+#         shuffle=False,
+#         num_workers=0,
+#         collate_fn=None,
+#         pin_memory=False,
+#         drop_last=False,
+#     )
 
-    from lib import data_utils
-    from lib.eval_tools import impute_sequence
-    from lib.models.utilise import UTILISE
+#     from lib import data_utils
+#     from lib.eval_tools import impute_sequence
+#     from lib.models.utilise import UTILISE
 
-    temporal_window = dset.max_seq_length
-    num_channels = dset.num_channels
-    device = torch.device("cuda:0")
-    path_trainings_results = Path("/DATA_10TB/data_rpg/outputs/U-TILISE/results/ALL_SAR_120_epochs_2025-07-11_16-56")
-    path_ckpt = path_trainings_results / "checkpoints" / "Model_best.pth"
-    path_config_training = path_trainings_results / "config.yaml"
-    assert path_ckpt.exists()
-    assert path_config_training.exists()
-    config_training = config_utils.read_config(path_config_training)
-    config_training.utilise.input_dim = num_channels
-    config_training.utilise.output_dim = 10  # num_channels - 4 if use_sar
-    model = UTILISE(**config_training.utilise)
-    checkpoint = torch.load(path_ckpt)
-    model.load_state_dict(checkpoint["model_state_dict"])
-    model.to(device).eval()
-    del checkpoint
+#     temporal_window = dset.max_seq_length
+#     num_channels = dset.num_channels
+#     device = torch.device("cuda:0")
+#     path_trainings_results = Path("/DATA_10TB/data_rpg/outputs/U-TILISE/results/ALL_SAR_120_epochs_2025-07-11_16-56")
+#     path_ckpt = path_trainings_results / "checkpoints" / "Model_best.pth"
+#     path_config_training = path_trainings_results / "config.yaml"
+#     assert path_ckpt.exists()
+#     assert path_config_training.exists()
+#     config_training = config_utils.read_config(path_config_training)
+#     config_training.utilise.input_dim = num_channels
+#     config_training.utilise.output_dim = 10  # num_channels - 4 if use_sar
+#     model = UTILISE(**config_training.utilise)
+#     checkpoint = torch.load(path_ckpt)
+#     model.load_state_dict(checkpoint["model_state_dict"])
+#     model.to(device).eval()
+#     del checkpoint
 
-    def infer_one_batch(batch, model, temporal_window, device, t_start=None, t_end=None):
-        if t_start is not None and t_end is not None:
-            # Choose a subsequence
-            batch["x"] = batch["x"][:, t_start:t_end, ...]
+#     def infer_one_batch(batch, model, temporal_window, device, t_start=None, t_end=None):
+#         if t_start is not None and t_end is not None:
+#             # Choose a subsequence
+#             batch["x"] = batch["x"][:, t_start:t_end, ...]
 
-            for key in ["y", "masks", "cloud_mask", "masks_valid_obs"]:
-                if key in batch:
-                    batch[key] = batch[key][:, t_start:t_end, ...]
+#             for key in ["y", "masks", "cloud_mask", "masks_valid_obs"]:
+#                 if key in batch:
+#                     batch[key] = batch[key][:, t_start:t_end, ...]
 
-            for key in ["days", "position_days"]:
-                if key in batch:
-                    batch[key] = batch[key][:, t_start:t_end]
+#             for key in ["days", "position_days"]:
+#                 if key in batch:
+#                     batch[key] = batch[key][:, t_start:t_end]
 
-        batch = data_utils.to_device(batch, device)
-        y_pred = impute_sequence(model, batch, temporal_window, return_att=False)
-        batch = data_utils.to_device(batch, "cpu")
-        y_pred = y_pred.cpu()
-        return batch, y_pred
+#         batch = data_utils.to_device(batch, device)
+#         y_pred = impute_sequence(model, batch, temporal_window, return_att=False)
+#         batch = data_utils.to_device(batch, "cpu")
+#         y_pred = y_pred.cpu()
+#         return batch, y_pred
 
-    batch = next(iter(dataloader))
+#     batch = next(iter(dataloader))
 
-    batch_processed, y_pred = infer_one_batch(
-        batch=batch,
-        model=model,
-        temporal_window=temporal_window,
-        device=device,
-        t_start=0,
-        t_end=10,
-    )
+#     batch_processed, y_pred = infer_one_batch(
+#         batch=batch,
+#         model=model,
+#         temporal_window=temporal_window,
+#         device=device,
+#         t_start=0,
+#         t_end=10,
+#     )
 
-    compute_metrics = CloudRemovalMetrics()
-    metrics_on_sample = compute_metrics(
-        target=batch["y"],
-        masks=batch["masks"],
-        predicted=y_pred,
-        cloud_masks=batch["cloud_mask"],
-    )
-    print("**Metrics on the sample:**")
-    for k, v in metrics_on_sample.items():
-        if v is None:
-            print(f"{k}: {v}")
-        else:
-            print(f"{k}: {v:.4f}")
+#     compute_metrics = CloudRemovalMetrics()
+#     metrics_on_sample = compute_metrics(
+#         target=batch["y"],
+#         masks=batch["masks"],
+#         predicted=y_pred,
+#         cloud_masks=batch["cloud_mask"],
+#     )
+#     print("**Metrics on the sample:**")
+#     for k, v in metrics_on_sample.items():
+#         if v is None:
+#             print(f"{k}: {v}")
+#         else:
+#             print(f"{k}: {v:.4f}")
