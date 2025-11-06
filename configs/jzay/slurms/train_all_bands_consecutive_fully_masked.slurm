@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=utilise_all_sar       # nom du job
+#SBATCH --job-name=utilise_consecutive_fully_masked       # nom du job
 #SBATCH --nodes=1                    # on demande 2 noeuds
 #SBATCH --ntasks-per-node=1          # avec 2 tache par noeud (= nombre de GPU ici)
 #SBATCH --gres=gpu:1                 # nombre de GPU (1/4 des GPU)
