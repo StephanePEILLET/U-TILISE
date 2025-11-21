@@ -151,6 +151,7 @@ def main(args: argparse.Namespace) -> None:
         datamodule=data_module,
     )
 
+    # Faire en sorte que le datamodule soit fait pour les différents cas de masques random_clouds, random_fully_masked, consecutive_fully_masked
     trainer.test(
         cr_module,
         datamodule=data_module,

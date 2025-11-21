@@ -1,18 +1,31 @@
 # TODO LIST
+- [ ] Récupération et lancement de calcul de métriques sur jzellou
+    - [X] training random_fully_masked => inference random_clouds
+    - [X] training random_fully_masked => inferenced consecutive_fully_masked
+  
+    - [X] training consecutive_fully_masked => inference random_clouds
+    - [X] training consecutive_fully_masked => inference random_fully_masked
+    - [X] training consecutive_fully_masked => inf consecutive_fully_masked
+  
+    - [X] training loss occluded => inference random_clouds
+    - [X] training loss_occluded => inference random_fully_masked
+    - [X] training loss_occluded => infernce consecutive_fully_masked
 
-**U-TILISE** (en attente)
-- Lancer un training avec seulement un gpu ( tr)
-- Mettre au propre le notebook permettant de visualiser les inférences faites dans le code
-- Tester le multi gpus et lancer des trainings
+- [ ] Training sur Jzay à faire:
+    - [ ] Entrainement fait que sur les bandes RGB-NIR
+    - [ ] Entrainement SAR ASC + DESC 
+    - [ ] Réparer la partie test dans le code / vérifier pourquoi elle ne fonctionne pas sur jzay (automatiser pour faire le test sur les 3 cas de masking: random cloud / random_fully_masked / consecutive_fully_masked)
 
-- Ajouter la connexion avec ClearML
-- Remettre en place la data augmentation ? 
-- regarder le comportement des modules avec ligthning, est-ce que tout doit être à train ou certains doivent être à val
-- regarder si le csv logger a bien fonctionner 
+- [ ] Faire un notebook permettant de visualiser les attentions dans un notebook:
+    - [ ] comprendre pourquoi je n’ai pas de matrices d’attention en sortie du modèle
 
-### Aujourd'hui:
-- [ ] Lancer des trainings avec les cas de masquage sur complets des dates random et/ou consécutives.
+- [ ] Coder les métriques par bandes pour voir quels sont les bandes les mieux reconstruites
 
+- [ ] Commencer la rédaction du document permettant de justifier la non prise en compte des modèles U-TILISE et UnCRtainTS:
+	- [ ] Partie U-TILISE:
+        - [ ] Explication du modèle
+        - [ ] Inférence et premiers résultats
+	- [ ] Partie UnCRtainTS:
+        - [ ] Explication du modèle
+        - [ ] Inférence et premiers résultats
 
-### Annexe si temps
-- [ ] Potentiellement refaire les fichiers hdf5 avec les TS de moins de 10 dates? 
