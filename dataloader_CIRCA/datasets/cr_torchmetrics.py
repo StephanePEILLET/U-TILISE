@@ -12,7 +12,7 @@ import torch
 from torch import Tensor
 from torchmetrics.aggregation import MeanMetric
 
-from dataloader_CIRCA.datasets.cr_metrics import CloudRemovalMetrics
+from dataloader_CIRCA.datasets.cr_metrics_nina import CloudRemovalMetrics
 
 
 class CloudRemovalDatasetMetrics:
@@ -48,7 +48,6 @@ class CloudRemovalDatasetMetrics:
             metrics=metrics,
             eval_occluded_observed=eval_occluded_observed,
             clean_gt_cloudy_pixels=clean_gt_cloudy_pixels,
-            max_pixel_intensity=max_pixel_intensity,
             sam_units=sam_units,
             window_size=window_size,
         )

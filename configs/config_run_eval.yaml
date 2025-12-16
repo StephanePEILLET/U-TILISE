@@ -5,7 +5,7 @@ data:
     channels: all
     use_sar: mix_closest # asc /desc/ mix_closest / asc+desc
     subset: False   
-    max_seq_length: 14                     # Maximum temporal sequence length. Set to None to skip temporal trimming.
+    max_seq_length: 5                     # Maximum temporal sequence length. Set to None to skip temporal trimming.
     filter_settings:
         type: cloud-free
         min_length: 5

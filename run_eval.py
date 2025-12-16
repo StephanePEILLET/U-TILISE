@@ -88,7 +88,7 @@ class Evaluator:
             "sam": True,
         }
 
-        from dataloader_CIRCA.datasets.cr_metrics import CloudRemovalMetrics
+        from dataloader_CIRCA.datasets.cr_metrics_nina import CloudRemovalMetrics
         from dataloader_CIRCA.datasets.cr_torchmetrics import CloudRemovalDatasetMetrics
 
         list_available_metrics = [l.value for l in CloudRemovalMetrics.MetricType]
@@ -102,7 +102,7 @@ class Evaluator:
             metrics=metrics,
             eval_occluded_observed=True,
             clean_gt_cloudy_pixels=True,
-            max_pixel_intensity=10_000,
+            max_pixel_intensity=MAX_PIXEL_INTENSITY_USED_FOR_REVERSE,
         )
 
         self.cr_metrics = CloudRemovalMetrics(
