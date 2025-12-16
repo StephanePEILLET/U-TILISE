@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=metrics_utilise_random_fully_masked       # nom du job
+#SBATCH --job-name=metrics_utilise_metrics_per_bands       # nom du job
 #SBATCH --nodes=1                    # on demande 2 noeuds
 #SBATCH --ntasks-per-node=1          # avec 2 tache par noeud (= nombre de GPU ici)
 #SBATCH --gres=gpu:1                 # nombre de GPU (1/4 des GPU)
@@ -26,5 +26,5 @@ eval "$(conda shell.bash hook)"
 conda deactivate
 conda activate cloud_reconstruction
 
-srun python /mnt/common/hdd/home/SPeillet/U-TILISE/run_eval.py /mnt/common/hdd/home/SPeillet/U-TILISE/configs/jzellou/configs/config_run_eval_random_fully_masked_metrics_per_bands.yaml utilise
+srun python /mnt/common/hdd/home/SPeillet/U-TILISE/run_eval.py /mnt/common/hdd/home/SPeillet/U-TILISE/configs/jzellou/configs/config_run_eval_random_clouds_metrics_per_bands utilise
 echo "Job complete"

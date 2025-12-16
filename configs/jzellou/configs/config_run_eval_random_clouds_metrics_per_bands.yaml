@@ -12,8 +12,8 @@ data:
         return_valid_obs_only: true
 
 test_data:
-    checkpoint: /mnt/stores/store-DAI/tmp/speillet/cloud_reconstruction/ALL_BANDS_SAR_RANDOM_FULLY_MASKED_2025-11-12_17-10/checkpoints/Model_best.pth
-    test_config: /mnt/stores/store-DAI/tmp/speillet/cloud_reconstruction/ALL_BANDS_SAR_RANDOM_FULLY_MASKED_2025-11-12_17-10/config.yaml
+    checkpoint: /mnt/stores/store-DAI/tmp/speillet/cloud_reconstruction_results/U-TILISE/ALL_SAR_120_epochs_2025-07-11_16-56/checkpoints/Model_best.pth
+    test_config: /mnt/stores/store-DAI/tmp/speillet/cloud_reconstruction_results/U-TILISE/ALL_SAR_120_epochs_2025-07-11_16-56/config.yaml
     hdf5_file: /var/data/datasets/CIRCA_CR_merged.hdf5
     mode: null
     split: test
