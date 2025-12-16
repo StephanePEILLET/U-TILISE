@@ -12,8 +12,8 @@ data:
         return_valid_obs_only: true
 
 test_data:
-    checkpoint: /mnt/stores/store-DAI/tmp/speillet/cloud_reconstruction_results/U-TILISE/ALL_SAR_120_epochs_2025-07-11_16-56/checkpoints/Model_best.pth
-    test_config: /mnt/stores/store-DAI/tmp/speillet/cloud_reconstruction_results/U-TILISE/ALL_SAR_120_epochs_2025-07-11_16-56/config.yaml
+    checkpoint: /mnt/stores/store-DAI/tmp/speillet/cloud_reconstruction_results/U-TILISE/ALL_BANDS_SAR_CONSECUTIVE_FULLY_MASKED_2025-11-12_17-09/checkpoints/Model_best.pth
+    test_config: /mnt/stores/store-DAI/tmp/speillet/cloud_reconstruction_results/U-TILISE/ALL_BANDS_SAR_CONSECUTIVE_FULLY_MASKED_2025-11-12_17-09/config.yaml
     hdf5_file: /var/data/datasets/CIRCA_CR_merged.hdf5
     mode: null
     split: test
@@ -21,7 +21,7 @@ test_data:
     # predictions_save_path: /DATA_10TB/data_rpg/outputs/U-TILISE/inference/CIRCA_CR_inference
  
 mask:
-    mask_type: consecutive_fully_masked    # Mask the input time series with randomly sampled cloud masks or the actual cloud masks. ['random_clouds', 'real_clouds', "random_fully_masked", "consecutive_fully_masked"]
+    mask_type: random_clouds    # Mask the input time series with randomly sampled cloud masks or the actual cloud masks. ['random_clouds', 'real_clouds', "random_fully_masked", "consecutive_fully_masked"]
     ratio_masked_frames: 0.5               # Ratio of partially/fully masked images per image time series (upper bound).
     ratio_fully_masked_frames: 0.0         # Ratio of fully masked images per image time series (upper bound).
     fixed_masking_ratio: false             # True to vary the masking ratio across different image time series, False otherwise.
@@ -104,6 +104,6 @@ misc:
     run_mode: test                        # Run mode. ['train', 'val', 'test']
 
 output:
-    save_dir: /mnt/common/hdd/home/SPeillet/outputs/U-TILISE/metrics/U-TILISE_trained_ALL_BANDS_SAR_random_clouds/consecutive_fully_masked
+    save_dir: /mnt/common/hdd/home/SPeillet/outputs/U-TILISE/metrics/U-TILISE_trained_ALL_BANDS_SAR_consecutive_fully_masked/random_clouds
     suffix:                                # Suffix appended to the name of the experiment directory.
     plot_model_txt: true                   # True to dump the model architecture to a txt file, False otherwise.
