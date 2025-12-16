@@ -26,5 +26,5 @@ eval "$(conda shell.bash hook)"
 conda deactivate
 conda activate cloud_reconstruction
 
-srun python /mnt/common/hdd/home/SPeillet/U-TILISE/run_eval.py /mnt/common/hdd/home/SPeillet/U-TILISE/configs/jzellou/configs/config_run_eval_random_clouds_metrics_per_bands utilise
+srun python /mnt/common/hdd/home/SPeillet/U-TILISE/run_eval.py /mnt/common/hdd/home/SPeillet/U-TILISE/configs/jzellou/configs/config_run_eval_random_clouds_metrics_per_bands.yaml utilise
 echo "Job complete"
