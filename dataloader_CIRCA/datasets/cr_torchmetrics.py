@@ -50,6 +50,7 @@ class CloudRemovalDatasetMetrics:
             clean_gt_cloudy_pixels=clean_gt_cloudy_pixels,
             sam_units=sam_units,
             window_size=window_size,
+            max_pixel_intensity=max_pixel_intensity,
         )
         self.skip_nan = skip_nan
         self._aggregators: Dict[str, MeanMetric] = {}
