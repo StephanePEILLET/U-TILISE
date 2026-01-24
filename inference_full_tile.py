@@ -526,6 +526,13 @@ def main(
 
     image_size = [256, 256]
     OVERLAP = 0
+
+    # CONFIGURATION CRITIQUE pour les workers sur stockage réseau :
+    # 1. Empêche GDAL d'essayer d'écrire des fichiers de métadonnées (.aux.xml)
+    os.environ["GDAL_PAM_ENABLED"] = "NO"
+    # 2. Empêche GDAL de scanner tout le dossier à chaque ouverture
+    os.environ["GDAL_DISABLE_READDIR_ON_OPEN"] = "EMPTY_DIR"
+
     # AMÉLIORATION : Plus de workers pour charger les données en parallèle pendant le calcul GPU
     num_workers = config.misc.num_workers  # Essayez 4 ou 8 selon votre CPU
     pin_memory = torch.cuda.is_available()  # Accélère le transfert vers le GPU
@@ -544,6 +551,15 @@ def main(
 
     load_dataset = config.output.get("tiles_window_file", None)
     for mgrs25 in tqdm(test_mgrs25, desc="MGRS-C areas"):
+        output_folder = Path(config.output.save_dir)
+        output_folder.mkdir(parents=True, exist_ok=True)
+        out_filename = output_folder / f"pred_mgrsc_{mgrs25}.tif"
+        if out_filename.exists():
+            print(f"Predictions for MGRS-C area {mgrs25} already exist. Skipping...")
+            continue
+        else:
+            print(f"Writing predictions incrementally to {out_filename}")
+
         ds = Dataset_from_files(
             mgrsc=mgrs25,
             data_optique=data_optique,
@@ -552,19 +568,9 @@ def main(
             overlap=OVERLAP,
             load_dataset=load_dataset,
         )
-        # with mgrs25_dataset as ds:
         meta = ds.s2_meta.copy()
-
         T, H, W = meta["count"] // 12, meta["height"], meta["width"]
-        # Prepare output metadata
         output_type = meta["dtype"]
-        # meta.update({"count": T * 12, "dtype": output_type, "height": H, "width": W})  # Flattened channels
-
-        output_folder = Path(config.output.save_dir)
-        output_folder.mkdir(parents=True, exist_ok=True)
-        out_filename = output_folder / f"pred_mgrsc_{mgrs25}.tif"
-        print(f"Writing predictions incrementally to {out_filename}")
-
         mgrs25_dataloader = DataLoader(ds, batch_size=1, shuffle=False, pin_memory=pin_memory, num_workers=num_workers)
 
         from rasterio.windows import Window
