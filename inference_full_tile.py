@@ -518,6 +518,7 @@ def main(
     config.data.max_seq_length = None
     # Define paths
     store_dai = Path(config.output.store_dai)
+    print(store_dai.as_posix())
     path_dataset_circa = store_dai / "projets/pac/3str/EXP_2/Data_Raster"
     data_optique = path_dataset_circa / "optique_dataset"
     data_radar = path_dataset_circa / "radar_dataset_v4"
