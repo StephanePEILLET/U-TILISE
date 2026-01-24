@@ -1,4 +1,3 @@
-# sys.path.append(str(Path(__file__).parents[2]))
 import argparse
 import ast
 import datetime as dt
@@ -30,7 +29,6 @@ from dataloader_CIRCA.tools.data_processor import SentinelDataProcessor
 from dataloader_CIRCA.tools.positional_encoding import get_position_for_positional_encoding  # NOQA
 from lib import config_utils
 from lib.arguments import eval_parser
-from lib.data_utils import get_dataset
 from lib.eval_tools import Imputation
 
 ChannelType = Literal["all", "bgr-nir"]
@@ -245,54 +243,6 @@ class Dataset_from_files(Dataset):
             dates_S1_asc=self.dates_s1_asc,
             dates_S1_desc=self.dates_s1_desc,
         )
-
-    # def setup_s2_data(self) -> None:
-    #     self.s2_tile, self.s2_meta = SentinelDataProcessor.read_MS(
-    #         self.s2_file, window=None, return_meta=True
-    #     )  # T x 12 x H x W
-    #     self.s2_tile = torch.from_numpy(self.s2_tile.astype(np.float32))
-
-    # def open_tiles(self) -> None:
-    #     """
-    #     Opens the full tiles for Sentinel-2 and Sentinel-1 data.
-    #     """
-    #     print("Loading full tiles into memory...")
-    #     if self.use_sar:
-    #         self.setup_s1_data()
-    #     print(f"Opening Sentinel-2 tile: {self.s2_file}")
-    #     self.setup_s2_data()
-    #     print("Tiles loaded successfully.")
-
-    # def close_tiles(self) -> None:
-    #     """
-    #     Closes the full tiles for Sentinel-2 and Sentinel-1 data.
-    #     """
-    #     del self.s2_tile
-    #     if self.use_sar:
-    #         del self.s1_asc_tile
-    #         del self.s1_desc_tile
-
-    # def __enter__(self) -> "Dataset_from_files":
-    #     """
-    #     Opens tiles when entering the context.
-
-    #     Returns:
-    #     - Dataset_from_files: The dataset instance.
-    #     """
-    #     print("Opening tiles...")
-    #     self.open_tiles()
-    #     return self
-
-    # def __exit__(self, exc_type, exc_value, traceback) -> None:
-    #     """
-    #     Ensures that tiles are closed when exiting the context.
-
-    #     Parameters:
-    #     - exc_type: Exception type.
-    #     - exc_value: Exception value.
-    #     - traceback: Traceback object.
-    #     """
-    #     self.close_tiles()
 
     def load_exported_data(self, path_data: Union[str, Path]) -> None:
         """

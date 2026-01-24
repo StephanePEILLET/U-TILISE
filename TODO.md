@@ -11,3 +11,4 @@ modif dans le dataloader de l'inference
 => Verifier à nouveau comment faire pour séparer le mask synthétique et la mask réelle 
 => vérification des tailles passées en entrées dans les fonctions de process
 
+=> verification des predictions pour voir si cela s'est bien passé
