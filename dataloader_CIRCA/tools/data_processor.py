@@ -1,4 +1,5 @@
 import datetime
+import datetime as dt
 import itertools
 from pathlib import Path
 from typing import List
@@ -24,7 +25,7 @@ class SentinelDataProcessor:
     """
 
     @staticmethod
-    def read_MS(path_raster: str, window: Window) -> np.ndarray:
+    def read_MS(path_raster: str, window: Window, return_meta: bool = False) -> np.ndarray:
         """
         Reads and processes multispectral (MS) data from a raster file.
 
@@ -42,6 +43,8 @@ class SentinelDataProcessor:
         with rasterio.open(path_raster) as src_S2:
             patch_S2_array = src_S2.read(window=window)
             patch_S2_array = SentinelDataProcessor.reshape_sentinel(patch_S2_array, chunk_size=S2_N_CHANNELS)
+            if return_meta:
+                return patch_S2_array, src_S2.meta
             return patch_S2_array
 
     @staticmethod
@@ -62,7 +65,7 @@ class SentinelDataProcessor:
             return meta
 
     @staticmethod
-    def read_SAR(path_raster: str, window: Window) -> np.ndarray:
+    def read_SAR(path_raster: str, window: Window, return_meta: bool = False) -> np.ndarray:
         """
         Reads and processes SAR data from a raster file.
 
@@ -82,6 +85,8 @@ class SentinelDataProcessor:
             patch_S1_array = SentinelDataProcessor.reshape_sentinel(
                 patch_S1_array, chunk_size=S1_N_CHANNELS
             )  # (T * C, H, W) => (T, C, H, W)
+            if return_meta:
+                return patch_S1_array, src_S1.meta
             return patch_S1_array
 
     @staticmethod
@@ -166,21 +171,22 @@ class SentinelDataProcessor:
         - List[Tuple[int, int, int, int]]: List of coordinates (col_off, row_off, width, height).
         """
         height, width = img_shape
-        stride_col = tile_size[0] - overlap  # Calculate stride based on overlap
-        stride_row = tile_size[1] - overlap
+        tile_h, tile_w = tile_size
+        stride_col = tile_w - overlap  # Calculate stride based on overlap
+        stride_row = tile_h - overlap
 
         # Calculate the starting points for rows and columns
-        col_steps = list(range(0, width - tile_size[0] + 1, stride_col))
-        row_steps = list(range(0, height - tile_size[1] + 1, stride_row))
+        col_steps = list(range(0, width - tile_w + 1, stride_col))
+        row_steps = list(range(0, height - tile_h + 1, stride_row))
 
         # Ensure the last patch covers the edge of the image
-        if (width - tile_size[0]) % stride_col != 0:
-            col_steps.append(width - tile_size[0])
-        if (height - tile_size[1]) % stride_row != 0:
-            row_steps.append(height - tile_size[1])
+        if (width - tile_w) % stride_col != 0:
+            col_steps.append(width - tile_w)
+        if (height - tile_h) % stride_row != 0:
+            row_steps.append(height - tile_h)
 
         # Generate all combinations of row and column steps
-        windows_list = [(col, row, tile_size[0], tile_size[1]) for col, row in itertools.product(col_steps, row_steps)]
+        windows_list = [(col, row, tile_w, tile_h) for col, row in itertools.product(col_steps, row_steps)]
 
         return windows_list
 
@@ -415,3 +421,57 @@ class SentinelDataProcessor:
         img = SentinelDataProcessor.reverse_rescale(img, intensity_min, intensity_max)
         img = torch.clamp(img, min=intensity_min, max=intensity_max)
         return img
+
+    @staticmethod
+    def get_datetime_or_format(dates: List[Union[str, dt.datetime]]) -> bool:
+        """
+        Checks if a date string is in the 'YYYYMMDD' format.
+
+        Parameters:
+        - date_string (str): Date string to check.
+
+        Returns:
+        - bool: True if the date string is in the correct format, False otherwise.
+        """
+        if isinstance(dates[0], dt.datetime):
+            return dates
+        else:
+            return [SentinelDataProcessor.get_datetime(date) for date in dates]
+
+    @staticmethod
+    def get_pairedS1_closest_matches(
+        dates_S2: List[str],
+        dates_S1_asc: List[str],
+        dates_S1_desc: List[str],
+    ) -> Tuple[List[str], List[int], str]:
+        """
+        Pairs Sentinel-1 data with Sentinel-2 data based on the closest dates.
+
+        Parameters:
+        - dates_S2 (List[str]): List of Sentinel-2 dates.
+        - dates_S1_asc (List[str]): List of Sentinel-1 ascendant dates.
+        - dates_S1_desc (List[str]): List of Sentinel-1 descendant dates.
+
+        Returns:
+        - Tuple[List[str], List[int], str]: A tuple containing the curated dates, indices, and the orbit type of the radar file.
+        """
+        dts_s2 = SentinelDataProcessor.get_datetime_or_format(dates_S2)
+        dts_s1_asc = SentinelDataProcessor.get_datetime_or_format(dates_S1_asc)
+        dts_s1_desc = SentinelDataProcessor.get_datetime_or_format(dates_S1_desc)
+
+        closest_matches = []
+        for i, dt_s2 in enumerate(dts_s2):
+            deltas_asc = [(dt_s2 - dt_s1_asc).days for dt_s1_asc in dts_s1_asc]
+            deltas_desc = [(dt_s2 - dt_s1_desc).days for dt_s1_desc in dts_s1_desc]
+
+            min_delta_asc = np.min(np.abs(deltas_asc))
+            min_delta_desc = np.min(np.abs(deltas_desc))
+
+            if min_delta_asc < min_delta_desc:
+                argmin_idx = np.argmin(np.abs(deltas_asc))
+                closest_matches.append((dates_S2[i], dates_S1_asc[argmin_idx], argmin_idx, "ASC"))
+            else:
+                argmin_idx = np.argmin(np.abs(deltas_desc))
+                closest_matches.append((dates_S2[i], dates_S1_desc[argmin_idx], argmin_idx, "DESC"))
+
+        return closest_matches

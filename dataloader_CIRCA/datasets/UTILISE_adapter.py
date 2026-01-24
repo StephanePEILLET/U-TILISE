@@ -71,6 +71,7 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
         # Récupération de vieux arguments du repo
         crop_settings: Optional[DictConfig] = None,
         return_cloud_mask: bool = True,
+        return_windows: bool = False,
         image_size: tuple[int, int] = IMAGE_SIZE,
     ):
         # Initialize the random seed for reproducibility
@@ -90,6 +91,7 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
         self.return_cloud_mask = return_cloud_mask
         self.transform = None
         self.process_data = process_data
+        self.return_windows = return_windows
 
         if stats is not None and isinstance(stats, DictConfig):
             self.stats = stats
@@ -489,6 +491,10 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
             out["idx_syn_consecutif"] = patch_data["idx_syn_consecutif"]
         if "idx_syn_aleatoire" in patch_data:
             out["idx_syn_aleatoire"] = patch_data["idx_syn_aleatoire"]
+
+        if self.return_windows:
+            out["window"] = patch_data["info"]["window"]
+
         return out
 
     # FONCTION POUR LA GENERATION DE MASKS
@@ -587,7 +593,6 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
                     dilate_cloud_masks=self.dilate_cloud_masks,
                 )
             else:
-
                 # Use the real cloud masks for masking
                 frames_input, masks = masks_init_filling(
                     frames_input,
