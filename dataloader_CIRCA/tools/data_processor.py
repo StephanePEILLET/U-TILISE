@@ -413,7 +413,7 @@ class SentinelDataProcessor:
         """Reverse the rescaling operation to get back to original intensity range."""
         old_range = old_max - old_min
         img = img * old_range + old_min
-        return img.type(torch.int16)
+        return img
 
     @staticmethod
     def reverse_process_MS(img: Tensor, intensity_min: int = 0, intensity_max: int = 10000) -> Tensor:

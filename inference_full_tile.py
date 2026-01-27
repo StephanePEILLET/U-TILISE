@@ -26,6 +26,7 @@ from tqdm import tqdm
 from tqdm.auto import tqdm
 
 from dataloader_CIRCA.tools.data_processor import SentinelDataProcessor
+from dataloader_CIRCA.tools.mask_generation import masks_init_filling
 from dataloader_CIRCA.tools.positional_encoding import get_position_for_positional_encoding  # NOQA
 from lib import config_utils
 from lib.arguments import eval_parser
@@ -432,12 +433,13 @@ class Dataset_from_files(Dataset):
         # patch_S2_array = self.s2_tile[:, :, y : y + h, x : x + w]  # Extraction données S2
         # Pas de filtrage sur les dates sur les données s2
         data_s2 = patch_S2_array[:, 0:10, ...]
-        patch_S2_array[:, 10, ...] = patch_S2_array[:, 10, ...] - 150  # cloud mask synthetic data
+        patch_S2_array[:, 10, ...] = patch_S2_array[:, 10, ...]  # cloud mask synthetic data
 
         data_S2 = SentinelDataProcessor.process_MS(data_s2)
         # faire une récupération des données synthétiques
         original_masks = patch_S2_array[:, 10:, ...]
-        cloud_masks = original_masks[:, 0, ...].clone().unsqueeze(axis=1)
+        cloud_probs = original_masks[:, 0, ...].clone().unsqueeze(axis=1)
+        cloud_masks = (cloud_probs > 0).float()  # Binarization of cloud masks
 
         if self.use_sar:
             s1_tile_asc = SentinelDataProcessor.read_SAR(
@@ -463,17 +465,30 @@ class Dataset_from_files(Dataset):
             s1_tile = torch.from_numpy(s1_tile.astype(np.float32))
             dates_s1 = np.array([self.str2date(date) for date in s1_dates])
             data_S1 = SentinelDataProcessor.process_SAR(s1_tile)
+
+        # Ajout des masques de nuages originaux dans l'input
+        # Image time series with overlaid cloud masks filled with value `fill_value`
+        images_masked, masks = masks_init_filling(
+            seq=data_s2.clone(),
+            masks=cloud_masks,
+            fill_type="fill_value",
+            fill_value=config.mask.fill_value,
+            dilate_cloud_masks=False,
+        )
+
         if self.use_sar:
-            frames_input = torch.cat((data_s2, data_S1), dim=1)
+            frames_input = torch.cat((images_masked, data_S1), dim=1)
         else:
-            frames_input = data_s2
+            frames_input = images_masked
+
         frames_target = data_S2
+
         masks_valid_obs = torch.ones(frames_input.shape[0], dtype=torch.uint8)
 
         out = {
             "x": frames_input,  # (synthetically masked) S2 TS, (T x C x H x W), optionally including S1.
             "y": frames_target,  # observed/target satellite image time series, (T x C x H x W)
-            "masks": cloud_masks,  # masks applied to `x`, (T x 1 x H x W); pixel with value 1 is masked, 0 otherwise
+            "masks": masks,  # masks applied to `x`, (T x 1 x H x W); pixel with value 1 is masked, 0 otherwise
             "masks_valid_obs": masks_valid_obs,  # flag to indicate valid time steps, (T, ); 1 if valid, 0 if invalid
             "position_days": self.position_days,
             "days": self.days,  # temporal sampling, number of days since the first observation in the sequence, (T, )
@@ -549,7 +564,7 @@ def main(
         device=device,
     )
 
-    load_dataset = config.output.get("tiles_window_file", None)
+    # load_dataset = config.output.get("tiles_window_file", None)
     for mgrs25 in tqdm(test_mgrs25, desc="MGRS-C areas"):
         output_folder = Path(config.output.save_dir)
         output_folder.mkdir(parents=True, exist_ok=True)
@@ -566,7 +581,7 @@ def main(
             data_radar=data_radar,
             image_size=image_size,
             overlap=OVERLAP,
-            load_dataset=load_dataset,
+            # load_dataset=load_dataset,
         )
         meta = ds.s2_meta.copy()
         T, H, W = meta["count"] // 12, meta["height"], meta["width"]
