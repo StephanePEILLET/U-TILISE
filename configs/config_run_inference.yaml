@@ -106,7 +106,6 @@ misc:
 
 output:
     store_dai: /mnt/stores/store-dai
-    tiles_window_file: /home/SPeillet/cloud_reconstruction/U-TILISE/tiles_windows.csv     
     save_dir: /DATA_10TB/data_rpg/outputs/U-TILISE/inference
     suffix:                                # Suffix appended to the name of the experiment directory.
     plot_model_txt: true                   # True to dump the model architecture to a txt file, False otherwise.
