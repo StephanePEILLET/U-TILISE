@@ -435,7 +435,7 @@ class Dataset_from_files(Dataset):
         data_s2 = patch_S2_array[:, 0:10, ...]
         patch_S2_array[:, 10, ...] = patch_S2_array[:, 10, ...]  # cloud mask synthetic data
 
-        data_S2 = SentinelDataProcessor.process_MS(data_s2)
+        data_s2 = SentinelDataProcessor.process_MS(data_s2)
         # faire une récupération des données synthétiques
         original_masks = patch_S2_array[:, 10:, ...]
         cloud_probs = original_masks[:, 0, ...].clone().unsqueeze(axis=1)
@@ -464,7 +464,7 @@ class Dataset_from_files(Dataset):
             s1_tile = np.stack(s1_tile, axis=0)
             s1_tile = torch.from_numpy(s1_tile.astype(np.float32))
             dates_s1 = np.array([self.str2date(date) for date in s1_dates])
-            data_S1 = SentinelDataProcessor.process_SAR(s1_tile)
+            data_s1 = SentinelDataProcessor.process_SAR(s1_tile)
 
         # Ajout des masques de nuages originaux dans l'input
         # Image time series with overlaid cloud masks filled with value `fill_value`
@@ -475,13 +475,12 @@ class Dataset_from_files(Dataset):
             fill_value=config.mask.fill_value,
             dilate_cloud_masks=False,
         )
-
         if self.use_sar:
-            frames_input = torch.cat((images_masked, data_S1), dim=1)
+            frames_input = torch.cat((images_masked, data_s1), dim=1)
         else:
             frames_input = images_masked
 
-        frames_target = data_S2
+        frames_target = data_s2
 
         masks_valid_obs = torch.ones(frames_input.shape[0], dtype=torch.uint8)
 
