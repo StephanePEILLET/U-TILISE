@@ -101,7 +101,7 @@ metrics:
 
 misc:
     num_workers: 0                        # Number of dataloader worker processes.
-    pin_memory: true                      # Pin memory (dataloader settings).
+    pin_memory: false                      # Pin memory (dataloader settings).
     run_mode: test                        # Run mode. ['train', 'val', 'test']
 
 output:

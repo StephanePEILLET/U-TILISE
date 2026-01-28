@@ -470,7 +470,7 @@ class Dataset_from_files(Dataset):
         # Image time series with overlaid cloud masks filled with value `fill_value`
         images_masked, masks = masks_init_filling(
             seq=data_s2.clone(),
-            masks=cloud_masks,
+            masks=cloud_masks.clone(),
             fill_type="fill_value",
             fill_value=config.mask.fill_value,
             dilate_cloud_masks=False,
@@ -480,7 +480,7 @@ class Dataset_from_files(Dataset):
         else:
             frames_input = images_masked
 
-        frames_target = data_s2
+        frames_target = data_s2.clone()
 
         masks_valid_obs = torch.ones(frames_input.shape[0], dtype=torch.uint8)
 
