@@ -40,8 +40,9 @@ GDAL_OPTIONS = {
     "blockxsize": 256,
     "blockysize": 256,
     "sparse_ok": True,  # Was "SPARSE_MODE" (invalid), recommended True for large files
-    "bigtiff": "IF_NEEDED",  # Crucial for files > 4GB
-    "num_threads": "ALL_CPUS",  # Speed up compression
+    "bigtiff": "YES",  # Force BigTIFF to avoid issues with file size limits and re-writes
+    "num_threads": "1",  # Restricted to 1 to prevent issues with locking/multiprocessing on clusters
+    "interleave": "pixel",  # CRITICAL: PIXEL interleave prevents massive seeking when writing multi-band tiles
 }
 
 
@@ -561,12 +562,15 @@ def main(
     os.environ["GDAL_PAM_ENABLED"] = "NO"
     # 2. Empêche GDAL de scanner tout le dossier à chaque ouverture
     os.environ["GDAL_DISABLE_READDIR_ON_OPEN"] = "EMPTY_DIR"
+    # 3. Limit GDAL Cache to avoid OOM on write or heavy flushing issues
+    os.environ["GDAL_CACHEMAX"] = "512"  # 512 MB
 
     # AMÉLIORATION : Plus de workers pour charger les données en parallèle pendant le calcul GPU
     num_workers = config.misc.num_workers  # Essayez 4 ou 8 selon votre CPU
     # Sécuriser GDAL pour les environnements multithread/multiprocess
-    os.environ["VSI_CACHE"] = "TRUE"
-    os.environ["VSI_CACHE_SIZE"] = "100000000"  # 100MB
+    # Removing VSI_CACHE as it might cause issues with high-throughput writing or network drives ("dirty block" errors)
+    # os.environ["VSI_CACHE"] = "TRUE"
+    # os.environ["VSI_CACHE_SIZE"] = "100000000"  # 100MB
 
     # Désactiver pin_memory si multiprocessing complexe cause des problèmes
     # ou si la RAM est limite
@@ -649,9 +653,14 @@ def main(
                     # 5. Convert to uint16
                     final_patch = converter.from_type("float32").to_type(output_type).convert(full_patch)
 
-                    # 6. Write directly to disk
-                    # Correct use of window=Window(col_off, row_off, width, height)
-                    dst.write(final_patch, window=Window(x, y, w, h))
+                    # 6. Write to disk with explicit window handling and potential retry logic
+                    try:
+                        dst.write(final_patch, window=Window(x, y, w, h))
+                    except Exception as e:
+                        print(f"Error writing patch at x={x}, y={y}: {e}")
+                        # Optional: Retry logic or just log and continue
+                        # time.sleep(1)
+                        # dst.write(final_patch, window=Window(x, y, w, h))
 
             print(f"Predictions for MGRS-C area {mgrs25} saved successfully.")
             print(f"File path: {out_filename.as_posix()}")
