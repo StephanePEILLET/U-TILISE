@@ -603,9 +603,6 @@ def main(
             image_size=image_size,
             overlap=OVERLAP,
             fill_value=config.mask.fill_value,
-            use_sar=config.data.use_sar,
-            channels=config.data.get("channels", "all"),
-            pe_strategy=config.data.get("pe_strategy", "day-within-sequence"),
             # load_dataset=load_dataset,
         )
         meta = ds.s2_meta.copy()
