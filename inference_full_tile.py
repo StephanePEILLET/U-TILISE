@@ -39,7 +39,9 @@ GDAL_OPTIONS = {
     "tiled": True,
     "blockxsize": 256,
     "blockysize": 256,
-    "SPARSE_MODE": False,
+    "sparse_ok": True,  # Was "SPARSE_MODE" (invalid), recommended True for large files
+    "bigtiff": "IF_NEEDED",  # Crucial for files > 4GB
+    "num_threads": "ALL_CPUS",  # Speed up compression
 }
 
 
@@ -538,6 +540,17 @@ def main(
     data_radar = path_dataset_circa / "radar_dataset_v4"
     path_test_set_mgrs25 = store_dai / "projets/pac/3str/EXP_2/train_val_test/MGRSC_test.json"
 
+    # 3. Optimisation pour multiprocessing (num_workers > 0)
+    # Rasterio/GDAL est thread-safe mais peut avoir des problèmes avec fork()
+    # "spawn" est plus sûr mais plus lent au démarrage.
+    # Pour Unix "fork" est plus standard mais peut causer des verrous sur les fichiers ouverts par GDAL
+    import torch.multiprocessing as mp
+
+    try:
+        mp.set_start_method("spawn", force=True)
+    except RuntimeError:
+        pass
+
     image_size = [256, 256]
     OVERLAP = 0
 
@@ -549,7 +562,14 @@ def main(
 
     # AMÉLIORATION : Plus de workers pour charger les données en parallèle pendant le calcul GPU
     num_workers = config.misc.num_workers  # Essayez 4 ou 8 selon votre CPU
-    pin_memory = torch.cuda.is_available()  # Accélère le transfert vers le GPU
+    # Sécuriser GDAL pour les environnements multithread/multiprocess
+    os.environ["VSI_CACHE"] = "TRUE"
+    os.environ["VSI_CACHE_SIZE"] = "100000000"  # 100MB
+
+    # Désactiver pin_memory si multiprocessing complexe cause des problèmes
+    # ou si la RAM est limite
+    pin_memory = False if num_workers > 0 else torch.cuda.is_available()
+
     test_mgrs25 = json.load(open(path_test_set_mgrs25))
 
     # Get the imputation model
@@ -589,13 +609,16 @@ def main(
 
         from rasterio.windows import Window
 
+        print(meta)
+        print(GDAL_OPTIONS)
         with rasterio.open(out_filename, "w", **meta, **GDAL_OPTIONS) as dst:
             converter = TypeConverter()
 
             with torch.no_grad():  # Envelopper la boucle
                 for batch in tqdm(mgrs25_dataloader, leave=False, total=len(ds), desc="Patches"):
                     batch, y_pred = imputation.impute_sample(batch)
-                    x, y, h, w = (
+                    # Correct order: get x, y, WIDTH, HEIGHT
+                    x, y, w, h = (
                         batch["window"][0].item(),
                         batch["window"][1].item(),
                         batch["window"][2].item(),
@@ -624,6 +647,7 @@ def main(
                     final_patch = converter.from_type("float32").to_type(output_type).convert(full_patch)
 
                     # 6. Write directly to disk
+                    # Correct use of window=Window(col_off, row_off, width, height)
                     dst.write(final_patch, window=Window(x, y, w, h))
 
             print(f"Predictions for MGRS-C area {mgrs25} saved successfully.")
