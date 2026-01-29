@@ -98,6 +98,7 @@ class Dataset_from_files(Dataset):
         no_filter: bool = False,
         channels: ChannelType = "all",
         pe_strategy: str = "day-within-sequence",
+        fill_value: float = 1.0,
     ):
         """
         Initializes the dataset.
@@ -127,6 +128,7 @@ class Dataset_from_files(Dataset):
         self.s1_asc_tile = None
         self.s1_desc_tile = None
         self.pe_strategy = pe_strategy
+        self.fill_value = fill_value
         self.setup()
 
     def __len__(self) -> int:
@@ -474,7 +476,7 @@ class Dataset_from_files(Dataset):
             seq=data_s2.clone(),
             masks=cloud_masks.clone(),
             fill_type="fill_value",
-            fill_value=config.mask.fill_value,
+            fill_value=self.fill_value,
             dilate_cloud_masks=False,
         )
         if self.use_sar:
@@ -600,6 +602,10 @@ def main(
             data_radar=data_radar,
             image_size=image_size,
             overlap=OVERLAP,
+            fill_value=config.mask.fill_value,
+            use_sar=config.data.use_sar,
+            channels=config.data.get("channels", "all"),
+            pe_strategy=config.data.get("pe_strategy", "day-within-sequence"),
             # load_dataset=load_dataset,
         )
         meta = ds.s2_meta.copy()
