@@ -594,8 +594,13 @@ def main(
         output_folder = Path(config.output.save_dir)
         output_folder.mkdir(parents=True, exist_ok=True)
         out_filename = output_folder / f"pred_mgrsc_{mgrs25}.tif"
+        store_dai = Path("/mnt/stores/store-DAI")
+        filename_store = store_dai / "tmp/speillet/inferences" / f"pred_mgrsc_{mgrs25}.tif"
         if out_filename.exists():
             print(f"Predictions for MGRS-C area {mgrs25} already exist. Skipping...")
+            continue
+        elif filename_store.exists():
+            print(f"Found existing temporary file for MGRS-C area {mgrs25}. Skipping...")
             continue
         else:
             print(f"Writing predictions incrementally to {out_filename}")
