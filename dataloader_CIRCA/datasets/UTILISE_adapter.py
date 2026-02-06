@@ -2,44 +2,36 @@ import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parents[2]))
-from typing import Optional
-from typing import Union
 
 import numpy as np
-import pandas as pd
 import torch
 
 torch.multiprocessing.set_sharing_strategy("file_system")
 
 import albumentations as A
-import h5py
-from omegaconf import DictConfig
-from omegaconf import OmegaConf
+from omegaconf import DictConfig, OmegaConf
 from torch import Tensor
-from tqdm.auto import tqdm
 
 from dataloader_CIRCA.datasets import CIRCA_from_HDF5
 from dataloader_CIRCA.tools.data_processor import SentinelDataProcessor
-from dataloader_CIRCA.tools.mask_generation import masks_init_filling
-from dataloader_CIRCA.tools.mask_generation import overlay_seq_with_clouds
-from dataloader_CIRCA.tools.positional_encoding import get_pairwise_representative_dates
-from dataloader_CIRCA.tools.positional_encoding import get_position_for_positional_encoding  # NOQA
-from dataloader_CIRCA.tools.positional_encoding import str2date
-from dataloader_CIRCA.tools.sampling import sample_indices_masked_frames
-from dataloader_CIRCA.tools.sampling import sampling_consecutive_frames
+from dataloader_CIRCA.tools.mask_generation import masks_init_filling, overlay_seq_with_clouds
+from dataloader_CIRCA.tools.positional_encoding import (
+    get_pairwise_representative_dates,
+    get_position_for_positional_encoding,  # NOQA
+    str2date,
+)
+from dataloader_CIRCA.tools.sampling import sample_indices_masked_frames, sampling_consecutive_frames
 
 MAX_SEQ_LENGTH = 30
 IMAGE_SIZE = (256, 256)
 SEED = 42
 
 import datetime as dt
-from typing import Dict
-from typing import List
 from typing import Literal
 
 DateArray = np.ndarray[dt.date]
-TensorDict = Dict[str, Union[torch.Tensor, Dict[str, torch.Tensor]]]
-SampleDict = Dict[str, Union[np.ndarray, Dict[str, np.ndarray], List[str]]]
+TensorDict = dict[str, torch.Tensor | dict[str, torch.Tensor]]
+SampleDict = dict[str, np.ndarray | dict[str, np.ndarray] | list[str]]
 PhaseType = Literal["train", "val", "test", "train+val", "all"]
 ChannelType = Literal["all", "bgr-nir"]
 
@@ -53,23 +45,23 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
         self,
         # CIRCA_from_HDF5 parameters
         phase: PhaseType = "all",
-        hdf5_file: Optional[Union[str, Path]] = None,
+        hdf5_file: str | Path | None = None,
         shuffle: bool = False,
         use_sar: bool = "asc",
         channels: ChannelType = "all",
-        load_transforms: Optional[str] = None,
+        load_transforms: str | None = None,
         # U-TILISE specific parameters
         filter_settings: dict = None,
-        max_seq_length: Optional[int] = MAX_SEQ_LENGTH,
-        render_occluded_above_p: Optional[float] = None,
-        mask_kwargs: Optional[dict | DictConfig] = None,
+        max_seq_length: int | None = MAX_SEQ_LENGTH,
+        render_occluded_above_p: float | None = None,
+        mask_kwargs: dict | DictConfig | None = None,
         pe_strategy: str = "day-within-sequence",
-        augment: Optional[bool] = False,
-        process_data: Optional[bool] = True,
-        stats: Optional[DictConfig] = None,
+        augment: bool | None = False,
+        process_data: bool | None = True,
+        stats: DictConfig | None = None,
         seed: int = SEED,
         # Récupération de vieux arguments du repo
-        crop_settings: Optional[DictConfig] = None,
+        crop_settings: DictConfig | None = None,
         return_cloud_mask: bool = True,
         return_windows: bool = False,
         image_size: tuple[int, int] = IMAGE_SIZE,
@@ -130,8 +122,8 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
 
     def setup_filter_settings(
         self,
-        filter_settings: Optional[DictConfig] = None,
-        max_seq_length: Optional[int] = None,
+        filter_settings: DictConfig | None = None,
+        max_seq_length: int | None = None,
     ):
         if filter_settings is None:
             filter_settings = {
@@ -157,7 +149,7 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
         seq_length = MAX_SEQ_LENGTH if max_seq_length is None else max_seq_length
         return filter_settings, variable_seq_length, seq_length, max_seq_length
 
-    def setup_mask_kwargs(self, mask_kwargs: Optional[DictConfig] = None):
+    def setup_mask_kwargs(self, mask_kwargs: DictConfig | None = None):
         # Parameters used for creating synthetic data gaps
 
         if isinstance(mask_kwargs, dict):
@@ -312,8 +304,8 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
     def __getitem__(
         self,
         item: int,
-        t_sampled: Optional[torch.Tensor] = None,
-        t_masked: Optional[torch.Tensor] = None,
+        t_sampled: torch.Tensor | None = None,
+        t_masked: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
         """
         Returns a sample from the dataset.
@@ -386,13 +378,12 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
                 s1 = torch.cat((s1_asc, s1_desc), dim=1)
                 s1_dates = get_pairwise_representative_dates(asc_dates=s1_asc_dates, desc_dates=s1_desc_dates)
 
+            elif self.phase == "test":
+                s1 = patch_data["S1"]["S1"][patch_data["valid_obs"]][t_sampled]
+                s1_dates = patch_data["S1"]["S1_dates"][patch_data["valid_obs"]][t_sampled]
             else:
-                if self.phase == "test":
-                    s1 = patch_data["S1"]["S1"][patch_data["valid_obs"]][t_sampled]
-                    s1_dates = patch_data["S1"]["S1_dates"][patch_data["valid_obs"]][t_sampled]
-                else:
-                    s1 = patch_data["S1"]["S1"][t_sampled]
-                    s1_dates = patch_data["S1"]["S1_dates"][t_sampled]
+                s1 = patch_data["S1"]["S1"][t_sampled]
+                s1_dates = patch_data["S1"]["S1_dates"][t_sampled]
 
             if self.process_data:
                 s1 = SentinelDataProcessor.process_SAR(s1)
@@ -434,6 +425,9 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
             # Une fois les masques completement masqués, on va pouvoir appliquer le sampling avec valids obs
             # l'intersection entre valid_obs et idx_syn_aleatoire / idx_syn_consecutif est faite dans etl_item
             cloud_mask = cloud_mask[patch_data["valid_obs"]]
+
+        # Modification du masque en fonction des valeurs des pixels, si pixel == 0 alors cloud_mask = 1
+        cloud_mask[torch.all(frames_input == 0, dim=1, keepdim=True)] = 1
 
         # Sampling temporel
         cloud_mask = cloud_mask[t_sampled]  # T x C x H x W
@@ -862,8 +856,7 @@ if __name__ == "__main__":
     #     "return_cloud_mask": True,
     # }
 
-    from lib import config_utils
-    from lib import data_utils
+    from lib import config_utils, data_utils
     from run_train import setup_logging
 
     # Setup configuration
