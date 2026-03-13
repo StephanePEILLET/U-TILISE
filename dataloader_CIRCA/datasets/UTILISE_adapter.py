@@ -347,6 +347,10 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
         if self.phase in ["train", "val"]:
             if t_sampled is None:
                 t_sampled, masks_valid_obs = self.subsample_sequence(patch_data["valid_obs"])
+
+                # Correction: extraction de la bonne longueur pour pas crasher dans la loss
+                masks_valid_obs = patch_data["valid_obs"][t_sampled]
+
             # dans le cas des phases de test cela permet de ne prendre que les indices valides après le sampling temporel
             # cela n'est valable que dans le cas du test car dans le fichier hdf5 dans les phases de train et val les indices valides sont déjà filtrés avant le sampling temporel
         elif self.phase == "test":
@@ -364,6 +368,22 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
         if self.process_data:
             frames_input = SentinelDataProcessor.process_MS(frames_input)
             frames_target = SentinelDataProcessor.process_MS(frames_target)
+
+        # Data Augmentation (radiométrique) sur Sentinel-2 uniquement pour l'entraînement
+        # Effectué AVANT le masquage nuageux (pour ne pas bruiter la constante 'fill_value')
+        # et AVANT d'inclure le radar S1 (qui doit garder sa physique spatiale intacte).
+        if self.augment and self.phase == "train":
+            # 1. Random Brightness (Variation de luminosité globale de ±20%)
+            if torch.rand(1) < 0.15:
+                brightness_factor = 0.8 + 0.4 * torch.rand(1)
+                frames_input = torch.clamp(frames_input * brightness_factor, 0.0, 1.0)
+                frames_target = torch.clamp(frames_target * brightness_factor, 0.0, 1.0)
+
+            # 2. Random Gaussian Noise sur Sentinel-2 (simule le bruit atmosphérique/capteur)
+            if torch.rand(1) < 0.15:
+                # Ajout d'un très léger bruit gaussien (écart-type = 0.02)
+                noise = torch.randn_like(frames_input) * 0.02
+                frames_input = torch.clamp(frames_input + noise, 0.0, 1.0)
 
         if self.phase == "test":
             s2_dates = np.asarray(patch_data["S2"]["S2_dates"])[masks_valid_obs]
@@ -473,6 +493,41 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
         days = get_position_for_positional_encoding(s2_dates, "day-within-sequence")
         # Get positions for positional encoding
         position_days = get_position_for_positional_encoding(s2_dates, self.pe_strategy)
+
+        # Data Augmentation (geometrical) for training
+        if self.augment and self.phase == "train":
+            cloud_prob = patch_data["S2"]["cloud_prob"]
+
+            # Random horizontal flip
+            if torch.rand(1) < 0.5:
+                frames_input = torch.flip(frames_input, dims=[-1])
+                frames_target = torch.flip(frames_target, dims=[-1])
+                masks = torch.flip(masks, dims=[-1])
+                cloud_mask = torch.flip(cloud_mask, dims=[-1])
+                if cloud_prob is not None:
+                    cloud_prob = torch.flip(cloud_prob, dims=[-1])
+
+            # Random vertical flip
+            if torch.rand(1) < 0.5:
+                frames_input = torch.flip(frames_input, dims=[-2])
+                frames_target = torch.flip(frames_target, dims=[-2])
+                masks = torch.flip(masks, dims=[-2])
+                cloud_mask = torch.flip(cloud_mask, dims=[-2])
+                if cloud_prob is not None:
+                    cloud_prob = torch.flip(cloud_prob, dims=[-2])
+
+            # Random rotation (0, 90, 180, 270 degrees)
+            k = torch.randint(0, 4, (1,)).item()
+            if k > 0:
+                frames_input = torch.rot90(frames_input, k, dims=[-2, -1])
+                frames_target = torch.rot90(frames_target, k, dims=[-2, -1])
+                masks = torch.rot90(masks, k, dims=[-2, -1])
+                cloud_mask = torch.rot90(cloud_mask, k, dims=[-2, -1])
+                if cloud_prob is not None:
+                    cloud_prob = torch.rot90(cloud_prob, k, dims=[-2, -1])
+
+            patch_data["S2"]["cloud_prob"] = cloud_prob
+
         # Assemble output
         out = {
             "info": patch_data["info"],

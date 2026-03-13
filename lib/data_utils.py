@@ -200,19 +200,18 @@ def get_dataset(config: DictConfig, phase: str, logger: Optional[logging.Logger]
     elif Dataset == SEN12MSCRTSDataset:
         config.data.split = phase
 
-    augment = phase == "train"
+    augment = config.data.get("augment", phase == "train")
     if "hdf5_file" in config.data and isinstance(config.data.hdf5_file, DictConfig):
         # Choose the input hdf5 file depending on the phase
         dset = Dataset(
             hdf5_file=config.data.hdf5_file[phase],
-            **without_keys(config.data, ["dataset", "hdf5_file"]),
+            **without_keys(config.data, ["dataset", "hdf5_file", "augment"]),
             mask_kwargs=config.mask,
             augment=augment,
         )
     else:
-        augment = False
         dset = Dataset(
-            **without_keys(config.data, ["dataset", "subset", "mode", "root", "split"]),
+            **without_keys(config.data, ["dataset", "subset", "mode", "root", "split", "augment"]),
             mask_kwargs=config.mask,
             augment=augment,
             phase=phase,

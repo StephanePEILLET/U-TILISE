@@ -1,22 +1,25 @@
 data:
     dataset: circa         # Name of the dataset, ['earthnet2021', 'sen12mscrts']
-    hdf5_file: /mnt/DATA_10T/data_rpg/circa/hdf5/CIRCA_CR_merged.hdf5 #/mnt/DATA_10T/data_rpg/circa/hdf5/circa_cloud_removal.hdf5
-    max_seq_length: 5
+    hdf5_file: /var/data/datasets/CIRCA_CR_merged.hdf5
+    max_seq_length: 12
     channels: all
-    use_sar: asc+desc # asc / desc / mix_closest / asc+desc
+    use_sar: false # asc / desc / mix_closest / asc+desc
+    image_size: [256, 256]
     subset: false
+    augment: true
     filter_settings:
         type: cloud-free
-        min_length: 3
+        min_length: 5
         return_valid_obs_only: true
         # max_t_sampling: 28
+
 mask:
-    mask_type: random_fully_masked         # Mask the input time series with randomly sampled cloud masks or the actual cloud masks. ['random_clouds', 'real_clouds', random_fully_masked", "consecutive_fully_masked]
+    mask_type: random_clouds               # Mask the input time series with randomly sampled cloud masks or the actual cloud masks. ['random_clouds', 'real_clouds']
     ratio_masked_frames: 0.5               # Ratio of partially/fully masked images per image time series (upper bound).
     ratio_fully_masked_frames: 0.0         # Ratio of fully masked images per image time series (upper bound).
     fixed_masking_ratio: false             # True to vary the masking ratio across different image time series, False otherwise.
     non_masked_frames: [0]                 # list of int, time steps to be excluded from masking. E.g., [0] never masks the first frame in a sequence.
-    intersect_real_cloud_masks: false      # True to intersect randomly sampled cloud masks with the actual cloud masks, False otherwise.
+    intersect_real_cloud_masks: true      # True to intersect randomly sampled cloud masks with the actual cloud masks, False otherwise.
     dilate_cloud_masks: false              # True to dilate the cloud masks before masking, False otherwise.
     fill_type: fill_value                  # Strategy for initializing masked pixels. ['fill_value', 'white_noise', 'mean']
     fill_value: 1                          # Pixel value of masked pixels. Used if fill_type == 'fill_value'.
@@ -42,8 +45,8 @@ scheduler:
     gamma: 0.5
 
 training_settings:
-    batch_size: 2                          # Batch size.
-    num_epochs: 1                       # Number of training epochs.
+    batch_size: 6                          # Batch size.
+    num_epochs: 120                       # Number of training epochs.
     accum_iter: 1                          # Accumulate gradients for 'accum_iter` iterations.
     gradient_clip_norm: 0                  # If > 0, clips gradient norm to that value.
     gradient_clip_value: 0                 # If > 0, clips gradient at specified value.
@@ -57,9 +60,8 @@ misc:
     val_every_n_epochs: 1                  # Validation interval in epochs.
     plot_every_n_epochs: 15                # Plot interval in epochs.
     plot_val_sample: []                    # List of int, indices of the validation samples to be visualized during training using Weights & Biases.
-    num_workers: 8                          # Number of dataloader worker processes.
+    num_workers: 12                         # Number of dataloader worker processes.
     random_seed: 42                         # Random seed.
     pin_memory: false                      # Pin memory (dataloader settings).
     run_mode: train                        # Run mode. ['train', 'val', 'test']
-
 

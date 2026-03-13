@@ -8,9 +8,7 @@ from argparse import ArgumentParser
 import torch
 from omegaconf import OmegaConf
 
-from lib import config_utils
-from lib import data_utils
-from lib import utils
+from lib import config_utils, data_utils, utils
 from lib.formatter import RawFormatter
 from lib.logger import prepare_logger
 
@@ -55,6 +53,10 @@ def setup_configuration(args: argparse.Namespace) -> OmegaConf:
     cfg_default = config_utils.read_config(default_config_path)
     config = OmegaConf.merge(cfg_default, cfg_custom)
     config.output.output_directory = args.save_dir
+
+    # Création explicite du répertoire de sauvegarde au plus haut niveau pour éviter les problèmes d'export
+    os.makedirs(args.save_dir, exist_ok=True)
+
     return config
 
 
@@ -228,7 +230,6 @@ def main(args: argparse.Namespace) -> None:
 
     from tqdm.auto import tqdm
 
-    from dataloader_CIRCA.datasets.cr_metrics import CloudRemovalMetrics
     from dataloader_CIRCA.datasets.cr_torchmetrics import CloudRemovalDatasetMetrics
     from lib.eval_tools import Imputation
 
