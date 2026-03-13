@@ -22,7 +22,7 @@ test_data:
     # predictions_save_path: /mnt/DATA_10T/data_rpg/outputs/U-TILISE/inference/CIRCA_CR_inference
 
 mask:
-    mask_type: random_clouds    # Mask the input time series with randomly sampled cloud masks or the actual cloud masks. ['random_clouds', 'real_clouds', "random_fully_masked", "consecutive_fully_masked"]
+    mask_type: random_fully_masked    # Mask the input time series with randomly sampled cloud masks or the actual cloud masks. ['random_clouds', 'real_clouds', "random_fully_masked", "consecutive_fully_masked"]
     ratio_masked_frames: 0.5               # Ratio of partially/fully masked images per image time series (upper bound).
     ratio_fully_masked_frames: 0.0         # Ratio of fully masked images per image time series (upper bound).
     fixed_masking_ratio: false             # True to vary the masking ratio across different image time series, False otherwise.

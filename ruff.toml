@@ -2,23 +2,39 @@ line-length = 120
 
 [format]
 # https://docs.astral.sh/ruff/settings/#format
-line-ending = "lf"  # Use UNIX `\n` line endings for all files
+line-ending = "lf" # Use UNIX `\n` line endings for all files
 
 [lint]
 # https://docs.astral.sh/ruff/rules/
 select = [
-    "E",    # pycodestyle errors
-    "F",    # pyflakes
-    "I",    # isort
-    "NPY",  # numpy
-    "PL",   # pylint
-    "UP",   # pyupgrade
-    "W",    # pycodestyle warnings
+    # --- Règles de base ---
+    "E", # pycodestyle errors
+    "W", # pycodestyle warnings
+    "F", # pyflakes (variables/imports non utilisés)
+    "I", # isort (trie les imports automatiquement)
+
+    # --- Modernisation et Bonnes pratiques automatisables ---
+    "UP",  # pyupgrade (modernise la syntaxe Python automatiquement)
+    "B",   # flake8-bugbear (détecte des bugs fréquents et problèmes de conception)
+    "C4",  # flake8-comprehensions (optimise et réécrit les listes/dicts comprehensions)
+    "SIM", # flake8-simplify (simplifie le code : if/else inutiles, etc.)
+
+    # --- Spécifiques au projet et au linter ---
+    "NPY", # numpy (bonnes pratiques pour numpy)
+    "PL",  # pylint (règles de qualité générales très complètes)
+    "RUF", # règles spécifiques de Ruff
 ]
+
+ignore = [
+    "E501", # Ignorer l'avertissement 'Line too long' (laissé au formatteur)
+]
+
 exclude = ["tests/*"]
 
 [lint.per-file-ignores]
+# Note : D (pydocstyle), ANN (annotations) etc. ne sont pas activées dans `select`,
+# donc les ignorer ici est redondant, mais cela protège le jour où vous les activez.
 "*" = ["D102", "D107", "FA102", "ANN101", "FBT001", "FBT002"]
 
 [lint.pylint]
-max-args = 15
+max-args = 8 # Modifie la tolérance de pylint pour le nombre d'arguments

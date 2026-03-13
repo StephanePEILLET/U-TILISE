@@ -17,7 +17,7 @@ from dataloader_CIRCA.tools.data_processor import SentinelDataProcessor
 from dataloader_CIRCA.tools.mask_generation import masks_init_filling, overlay_seq_with_clouds
 from dataloader_CIRCA.tools.positional_encoding import (
     get_pairwise_representative_dates,
-    get_position_for_positional_encoding,  # NOQA
+    get_position_for_positional_encoding,
     str2date,
 )
 from dataloader_CIRCA.tools.sampling import sample_indices_masked_frames, sampling_consecutive_frames
@@ -344,9 +344,17 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
         if self.phase == "test":
             patch_data["S2"]["S2"] = patch_data["S2"]["S2"][patch_data["valid_obs"]]
 
-        if t_sampled is None:
-            t_sampled, masks_valid_obs = self.subsample_sequence(patch_data["valid_obs"])
-        masks_valid_obs = patch_data["valid_obs"][t_sampled]
+        if self.phase in ["train", "val"]:
+            if t_sampled is None:
+                t_sampled, masks_valid_obs = self.subsample_sequence(patch_data["valid_obs"])
+            # dans le cas des phases de test cela permet de ne prendre que les indices valides après le sampling temporel
+            # cela n'est valable que dans le cas du test car dans le fichier hdf5 dans les phases de train et val les indices valides sont déjà filtrés avant le sampling temporel
+        elif self.phase == "test":
+            if t_sampled is not None:
+                masks_valid_obs = t_sampled
+            else:
+                t_sampled, masks_valid_obs = self.subsample_sequence(patch_data["valid_obs"])
+                masks_valid_obs = patch_data["valid_obs"][t_sampled]
 
         frames_input, frames_target = (
             patch_data["S2"]["S2"][t_sampled].clone(),
@@ -358,38 +366,9 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
             frames_target = SentinelDataProcessor.process_MS(frames_target)
 
         if self.phase == "test":
-            s2_dates = np.asarray(patch_data["S2"]["S2_dates"])[patch_data["valid_obs"]][t_sampled]
+            s2_dates = np.asarray(patch_data["S2"]["S2_dates"])[masks_valid_obs]
         else:
             s2_dates = np.asarray(patch_data["S2"]["S2_dates"])[t_sampled]
-
-        if self.use_sar:
-            if self.use_sar == "asc+desc":
-                if self.phase == "test":
-                    s1_asc = patch_data["S1"]["S1_asc"][patch_data["valid_obs"]][t_sampled]
-                    s1_asc_dates = patch_data["S1"]["S1_dates_asc"][patch_data["valid_obs"]][t_sampled]
-                    s1_desc = patch_data["S1"]["S1_desc"][patch_data["valid_obs"]][t_sampled]
-                    s1_desc_dates = patch_data["S1"]["S1_dates_desc"][patch_data["valid_obs"]][t_sampled]
-                else:
-                    s1_asc = patch_data["S1"]["S1_asc"][t_sampled]
-                    s1_asc_dates = patch_data["S1"]["S1_dates_asc"][t_sampled]
-                    s1_desc = patch_data["S1"]["S1_desc"][t_sampled]
-                    s1_desc_dates = patch_data["S1"]["S1_dates_desc"][t_sampled]
-
-                s1 = torch.cat((s1_asc, s1_desc), dim=1)
-                s1_dates = get_pairwise_representative_dates(asc_dates=s1_asc_dates, desc_dates=s1_desc_dates)
-
-            elif self.phase == "test":
-                s1 = patch_data["S1"]["S1"][patch_data["valid_obs"]][t_sampled]
-                s1_dates = patch_data["S1"]["S1_dates"][patch_data["valid_obs"]][t_sampled]
-            else:
-                s1 = patch_data["S1"]["S1"][t_sampled]
-                s1_dates = patch_data["S1"]["S1_dates"][t_sampled]
-
-            if self.process_data:
-                s1 = SentinelDataProcessor.process_SAR(s1)
-
-            # Concatenate the (masked) S2 bands and the unmasked S1 bands
-            frames_input = torch.cat((frames_input, s1), dim=1)
 
         cloud_mask = patch_data["S2"]["cloud_mask"]
 
@@ -426,11 +405,12 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
             # l'intersection entre valid_obs et idx_syn_aleatoire / idx_syn_consecutif est faite dans etl_item
             cloud_mask = cloud_mask[patch_data["valid_obs"]]
 
-        # Modification du masque en fonction des valeurs des pixels, si pixel == 0 alors cloud_mask = 1
-        cloud_mask[torch.all(frames_input == 0, dim=1, keepdim=True)] = 1
-
         # Sampling temporel
         cloud_mask = cloud_mask[t_sampled]  # T x C x H x W
+
+        # Modification du masque en fonction des valeurs des pixels, si pixel == 0 alors cloud_mask = 1
+        cloud_mask[torch.all(frames_input[:, :10, :, :] == 0, dim=1, keepdim=True)] = 1
+        # cloud_mask[torch.all(frames_input == 0, dim=1, keepdim=True)] = 1
 
         # On pars du principe que l'argument render_occluded_above_p est jamais utilisé afin d'utiliser les masques d'origines
         if self.render_occluded_above_p and self.render_occluded_above_p > 0.0:
@@ -449,13 +429,43 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
             masks = torch.zeros((frames_input.shape[0], 1, *frames_input.shape[-2:]))  # T x C x H x W
 
         if retrieve_original_cloud_masks:
-            cloud_mask = patch_data["S2"]["cloud_mask"][patch_data["valid_obs"]][t_sampled]
+            cloud_mask = patch_data["S2"]["cloud_mask"][masks_valid_obs]
             if self.render_occluded_above_p and self.render_occluded_above_p > 0.0:
                 cloud_mask = self._mask_images_with_cloud_coverage_above_p(cloud_mask)
 
         # Cast des dates en datetime.datetime à datetime.date si besoin
         if isinstance(s2_dates[0], dt.datetime):
             s2_dates = [date.date() for date in s2_dates]
+
+        if self.use_sar:
+            if self.use_sar == "asc+desc":
+                if self.phase == "test":
+                    s1_asc = patch_data["S1"]["S1_asc"][masks_valid_obs]
+                    s1_asc_dates = patch_data["S1"]["S1_dates_asc"][masks_valid_obs]
+                    s1_desc = patch_data["S1"]["S1_desc"][masks_valid_obs]
+                    s1_desc_dates = patch_data["S1"]["S1_dates_desc"][masks_valid_obs]
+                else:
+                    s1_asc = patch_data["S1"]["S1_asc"][t_sampled]
+                    s1_asc_dates = patch_data["S1"]["S1_dates_asc"][t_sampled]
+                    s1_desc = patch_data["S1"]["S1_desc"][t_sampled]
+                    s1_desc_dates = patch_data["S1"]["S1_dates_desc"][t_sampled]
+
+                s1 = torch.cat((s1_asc, s1_desc), dim=1)
+                s1_dates = get_pairwise_representative_dates(asc_dates=s1_asc_dates, desc_dates=s1_desc_dates)
+
+            elif self.phase == "test":
+                s1 = patch_data["S1"]["S1"][masks_valid_obs]
+                s1_dates = patch_data["S1"]["S1_dates"][masks_valid_obs]
+            else:
+                s1 = patch_data["S1"]["S1"][t_sampled]
+                s1_dates = patch_data["S1"]["S1_dates"][t_sampled]
+
+            if self.process_data:
+                s1 = SentinelDataProcessor.process_SAR(s1)
+
+            # Concatenate the (masked) S2 bands and the unmasked S1 bands
+            frames_input = torch.cat((frames_input, s1), dim=1)
+
         if self.use_sar and isinstance(s1_dates[0], dt.datetime):
             s1_dates = [date.date() for date in s1_dates]
 
@@ -582,11 +592,14 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
                 frames_input, masks = overlay_seq_with_clouds(
                     frames_input,
                     masks,
-                    t_masked=None,
+                    t_masked=t_masked["indices_masked"] if t_masked is not None else None,
                     fill_value=self.fill_value,
                     dilate_cloud_masks=self.dilate_cloud_masks,
                 )
             else:
+                if t_masked is not None and t_masked["indices_masked"] is not None:
+                    cloud_mask_input[t_masked["indices_masked"], :, :, :] = 1.0
+
                 # Use the real cloud masks for masking
                 frames_input, masks = masks_init_filling(
                     frames_input,
@@ -614,13 +627,13 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
             masks:      torch.Tensor, (T x 1 x H x W), intersection of `masks` with `cloud_mask`.
         """
         assert masks[0].shape == cloud_mask[0].shape, (
-            "Cannot intersect two sequences of masks with unequal temporal " "shape."
+            "Cannot intersect two sequences of masks with unequal temporal shape."
         )
         assert masks[-2:].shape == cloud_mask[-2:].shape, (
-            "Cannot intersect two sequences of masks with unequal " "spatial shape."
+            "Cannot intersect two sequences of masks with unequal spatial shape."
         )
         assert masks[1].shape == cloud_mask[1].shape, (
-            "Cannot intersect two sequences of masks with unequal " "spectral shape."
+            "Cannot intersect two sequences of masks with unequal spectral shape."
         )
 
         masks[torch.logical_or(masks > 0.0, cloud_mask == 1)] = 1
@@ -893,5 +906,45 @@ if __name__ == "__main__":
     print(f"  - Number of channels: {sample['x'].shape[1]}")
     print(f"  - Height: {sample['x'].shape[2]}")
     print(f"  - Width: {sample['x'].shape[3]}")
+    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
+    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
+    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
+    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
+    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
+    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
+    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
+    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
+    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
+    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
+    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
+    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
+    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
+    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
+    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
+    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
+    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
+    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
+    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
+    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
+    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
+    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
+    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
+    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
+    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
+    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
+    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
+    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
+    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
+    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
+    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
+    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
+    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
+    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
+    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
+    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
+    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
+    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
+    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
+    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
     print(f"  - Number of masked time steps: {sample['masks'].sum()}")
     print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
