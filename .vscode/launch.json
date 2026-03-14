@@ -26,6 +26,19 @@
             ]
         },
         {
+            "name": "Train U-TILISE multistream",
+            "type": "debugpy",
+            "request": "launch",
+            "preLaunchTask": "clean_training",
+            "program": "run_train.py",
+            "console": "integratedTerminal",
+            "args": [
+                "./configs/config_run_train_multistream.yaml",
+                "--save_dir",
+                "/mnt/DATA_10T/data_rpg/outputs/train",
+            ]
+        },
+        {
             "name": "Eval U-TILISE",
             "type": "debugpy",
             "request": "launch",

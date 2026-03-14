@@ -1,0 +1,62 @@
+data:
+    dataset: circa
+    hdf5_file: /mnt/DATA_10T/data_rpg/circa/hdf5/CIRCA_CR_merged.hdf5
+    max_seq_length: 3
+    channels: all
+    use_sar: asc+desc
+    subset: false
+    filter_settings:
+        type: cloud-free
+        min_length: 3
+        return_valid_obs_only: true
+mask:
+    mask_type: random_fully_masked
+    ratio_masked_frames: 0.5
+    ratio_fully_masked_frames: 0.0
+    fixed_masking_ratio: false
+    non_masked_frames: [0]
+    intersect_real_cloud_masks: false
+    dilate_cloud_masks: false
+    fill_type: fill_value
+    fill_value: 1
+    p_filter: 0.1
+
+method:
+    model_type: utilise_multistream
+    pad_value: 0
+
+utilise_multistream:                                   
+    encoder_widths: [64,64,64,64,128]
+    decoder_widths: [64,64,64,64,128]
+
+optimizer:
+    name: Adam
+    learning_rate: 2.e-04
+    weight_decay: 1.0e-05
+
+scheduler:
+    name: MultiStepLR 
+    enabled: true
+    milestones: [40,60,80,100]
+    gamma: 0.5
+
+training_settings:
+    batch_size: 1
+    num_epochs: 1
+    accum_iter: 1
+    gradient_clip_norm: 0
+    gradient_clip_value: 0
+    resume: false
+    pretrained_path: ''
+                                                                              
+misc:
+    logstep_train: 100
+    checkpoint_every_n_epochs: 5
+    log_gradients: false
+    val_every_n_epochs: 1
+    plot_every_n_epochs: 15
+    plot_val_sample: []
+    num_workers: 8
+    random_seed: 42
+    pin_memory: false
+    run_mode: train

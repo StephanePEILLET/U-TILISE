@@ -69,6 +69,7 @@ utilise:
   output_activation: sigmoid
 
 training_settings:
+    early_stopping_patience: 30
     batch_size: 1                          # Batch size.
     num_epochs: 1000                       # Number of training epochs.
     accum_iter: 1                          # Accumulate gradients for 'accum_iter` iterations.
@@ -78,6 +79,7 @@ training_settings:
     pretrained_path: ''                    # Path to the pretrained model weights.
 
 training_settings:
+    early_stopping_patience: 30
     batch_size: 1                          # Batch size.
     num_epochs: 1                       # Number of training epochs.
     accum_iter: 1                          # Accumulate gradients for 'accum_iter` iterations.

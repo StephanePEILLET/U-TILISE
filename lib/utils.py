@@ -8,16 +8,11 @@ from copy import deepcopy
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Dict
-from typing import List
-from typing import Optional
-from typing import Tuple
 
 import numpy as np
 import torch
 import torchinfo
-from omegaconf import DictConfig
-from omegaconf import OmegaConf
+from omegaconf import DictConfig, OmegaConf
 
 from lib.models import MODELS
 from lib.models.weight_init import weight_init
@@ -117,7 +112,7 @@ def get_default_model_settings(model, args_model: DictConfig) -> None:
             args_model[param] = val.value if isinstance(val, Enum) else val
 
 
-def get_model(config: DictConfig, input_dim: int, logger: Optional[logging.Logger] = None):
+def get_model(config: DictConfig, input_dim: int, logger: logging.Logger | None = None):
     """
     Returns a model instance and its parameter settings.
 
@@ -141,7 +136,7 @@ def get_model(config: DictConfig, input_dim: int, logger: Optional[logging.Logge
 
     args_model = deepcopy(config[model_type]) if model_type in config else OmegaConf.create()
 
-    if model_type == "utilise":
+    if model_type in ["utilise", "utilise_multistream"]:
         args_model.input_dim = input_dim
         args_model.output_dim = input_dim
         args_model.pad_value = config.method.pad_value
@@ -164,7 +159,7 @@ def get_model(config: DictConfig, input_dim: int, logger: Optional[logging.Logge
     return model, args_model
 
 
-def get_optimizer(config: DictConfig, model, logger: Optional[logging.Logger] = None):
+def get_optimizer(config: DictConfig, model, logger: logging.Logger | None = None):
     """
     Returns an optimizer instance.
 
@@ -201,7 +196,7 @@ def get_optimizer(config: DictConfig, model, logger: Optional[logging.Logger] = 
     return optimizer
 
 
-def get_scheduler(config: DictConfig, optimizer, logger: Optional[logging.Logger] = None):
+def get_scheduler(config: DictConfig, optimizer, logger: logging.Logger | None = None):
     """
     Returns a learning rate scheduler instance.
 
@@ -231,6 +226,8 @@ def get_scheduler(config: DictConfig, optimizer, logger: Optional[logging.Logger
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
                 optimizer, verbose=False, T_max=config.training_settings.num_epochs
             )
+        elif name == "CosineAnnealingWarmRestarts":
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, **settings)
         elif logger:
             logger.error(f"{name} learning rate scheduler is not implemented.\n")
             sys.exit(1)
@@ -251,7 +248,7 @@ def get_trainer(
     model,
     optimizer,
     scheduler,
-    device: Optional[torch.device] = None,
+    device: torch.device | None = None,
 ) -> Trainer:
     """
     Returns a Trainer instance.
@@ -280,7 +277,7 @@ def get_trainer(
         args.scheduler.name = config.scheduler.name
         args.scheduler.enabled = config.scheduler.enabled
     else:
-        args.scheduler = deepcopy(getattr(config, "scheduler"))
+        args.scheduler = deepcopy(config.scheduler)
 
     for key in config.training_settings.keys():
         args[key] = getattr(config.training_settings, key)
@@ -355,7 +352,7 @@ def write_model_structure_to_file(
     batch_size: int,
     seq_length: int,
     in_channels: int,
-    image_size: Tuple[int, int],
+    image_size: tuple[int, int],
 ) -> None:
     """
     Writes the model architecture to a text file.
@@ -406,7 +403,7 @@ def write_model_structure_to_file(
     sys.stdout = original
 
 
-def without_keys(d: Dict | DictConfig, ignore_keys: List[str]) -> Dict | DictConfig:
+def without_keys(d: dict | DictConfig, ignore_keys: list[str]) -> dict | DictConfig:
     """
     Returns a copy of the dictionary `d` without the keys listed in `ignore_keys`.
     """

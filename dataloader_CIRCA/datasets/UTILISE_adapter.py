@@ -470,21 +470,24 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
                     s1_desc = patch_data["S1"]["S1_desc"][t_sampled]
                     s1_desc_dates = patch_data["S1"]["S1_dates_desc"][t_sampled]
 
-                s1 = torch.cat((s1_asc, s1_desc), dim=1)
                 s1_dates = get_pairwise_representative_dates(asc_dates=s1_asc_dates, desc_dates=s1_desc_dates)
 
-            elif self.phase == "test":
-                s1 = patch_data["S1"]["S1"][masks_valid_obs]
-                s1_dates = patch_data["S1"]["S1_dates"][masks_valid_obs]
+                if self.process_data:
+                    s1_asc = SentinelDataProcessor.process_SAR(s1_asc)
+                    s1_desc = SentinelDataProcessor.process_SAR(s1_desc)
             else:
-                s1 = patch_data["S1"]["S1"][t_sampled]
-                s1_dates = patch_data["S1"]["S1_dates"][t_sampled]
+                if self.phase == "test":
+                    s1 = patch_data["S1"]["S1"][masks_valid_obs]
+                    s1_dates = patch_data["S1"]["S1_dates"][masks_valid_obs]
+                else:
+                    s1 = patch_data["S1"]["S1"][t_sampled]
+                    s1_dates = patch_data["S1"]["S1_dates"][t_sampled]
 
-            if self.process_data:
-                s1 = SentinelDataProcessor.process_SAR(s1)
+                if self.process_data:
+                    s1 = SentinelDataProcessor.process_SAR(s1)
 
-            # Concatenate the (masked) S2 bands and the unmasked S1 bands
-            frames_input = torch.cat((frames_input, s1), dim=1)
+                s1_asc = s1
+                s1_desc = s1
 
         if self.use_sar and isinstance(s1_dates[0], dt.datetime):
             s1_dates = [date.date() for date in s1_dates]
@@ -504,6 +507,9 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
                 frames_target = torch.flip(frames_target, dims=[-1])
                 masks = torch.flip(masks, dims=[-1])
                 cloud_mask = torch.flip(cloud_mask, dims=[-1])
+                if self.use_sar:
+                    s1_asc = torch.flip(s1_asc, dims=[-1])
+                    s1_desc = torch.flip(s1_desc, dims=[-1])
                 if cloud_prob is not None:
                     cloud_prob = torch.flip(cloud_prob, dims=[-1])
 
@@ -513,6 +519,9 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
                 frames_target = torch.flip(frames_target, dims=[-2])
                 masks = torch.flip(masks, dims=[-2])
                 cloud_mask = torch.flip(cloud_mask, dims=[-2])
+                if self.use_sar:
+                    s1_asc = torch.flip(s1_asc, dims=[-2])
+                    s1_desc = torch.flip(s1_desc, dims=[-2])
                 if cloud_prob is not None:
                     cloud_prob = torch.flip(cloud_prob, dims=[-2])
 
@@ -523,15 +532,27 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
                 frames_target = torch.rot90(frames_target, k, dims=[-2, -1])
                 masks = torch.rot90(masks, k, dims=[-2, -1])
                 cloud_mask = torch.rot90(cloud_mask, k, dims=[-2, -1])
+                if self.use_sar:
+                    s1_asc = torch.rot90(s1_asc, k, dims=[-2, -1])
+                    s1_desc = torch.rot90(s1_desc, k, dims=[-2, -1])
                 if cloud_prob is not None:
                     cloud_prob = torch.rot90(cloud_prob, k, dims=[-2, -1])
 
             patch_data["S2"]["cloud_prob"] = cloud_prob
 
+        x_dict = {
+            "opt_hr": frames_input[:, :10, :, :],  # 10 channels for Sentinel-2 10m/20m
+        }
+
+        if self.use_sar:
+            x_dict["sar_asc"] = s1_asc
+            x_dict["sar_desc"] = s1_desc
+
         # Assemble output
         out = {
             "info": patch_data["info"],
-            "x": frames_input,  # (synthetically masked) S2 TS, (T x C x H x W), optionally including S1.
+            "x_dict": x_dict,  # Dictionary with explicit keys
+            "x": frames_input,  # Retro compatibility
             "y": frames_target,  # observed/target satellite image time series, (T x C x H x W)
             "masks": masks,  # masks applied to `x`, (T x 1 x H x W); pixel with value 1 is masked, 0 otherwise
             "masks_valid_obs": masks_valid_obs,  # flag to indicate valid time steps, (T, ); 1 if valid, 0 if invalid

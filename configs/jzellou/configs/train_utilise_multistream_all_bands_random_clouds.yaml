@@ -1,0 +1,67 @@
+data:
+    dataset: circa
+    hdf5_file: /var/data/datasets/CIRCA_CR_merged.hdf5
+    max_seq_length: 12
+    channels: all
+    use_sar: asc+desc
+    image_size: [256, 256]
+    subset: false
+    augment: false
+    filter_settings:
+        type: cloud-free
+        min_length: 5
+        return_valid_obs_only: true
+
+mask:
+    mask_type: random_clouds
+    ratio_masked_frames: 0.5
+    ratio_fully_masked_frames: 0.0
+    fixed_masking_ratio: false
+    non_masked_frames: [0]
+    intersect_real_cloud_masks: true
+    dilate_cloud_masks: false
+    fill_type: fill_value
+    fill_value: 1
+    p_filter: 0.1
+
+method:
+    model_type: utilise_multistream
+    pad_value: 0
+
+utilise_multistream:                                   
+    encoder_widths: [64,64,64,64,128]
+    decoder_widths: [64,64,64,64,128]
+
+optimizer:
+    name: Adam
+    learning_rate: 2.e-04
+    weight_decay: 1.0e-05
+
+scheduler:
+    name: CosineAnnealingWarmRestarts
+    enabled: true
+    T_0: 30
+    T_mult: 1
+    eta_min: !!float 1e-6
+
+training_settings:
+    early_stopping_patience: 30
+    batch_size: 5
+    num_epochs: 150
+    accum_iter: 1
+    gradient_clip_norm: 0
+    gradient_clip_value: 0
+    resume: false
+    pretrained_path: ''
+                                                                              
+misc:
+    logstep_train: 100
+    checkpoint_every_n_epochs: 5
+    log_gradients: false
+    val_every_n_epochs: 1
+    plot_every_n_epochs: 15
+    plot_val_sample: []
+    num_workers: 12
+    random_seed: 42
+    pin_memory: true
+    run_mode: train

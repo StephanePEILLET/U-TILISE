@@ -1,7 +1,7 @@
 import logging
-from typing import Optional
 
 import numpy as np
+import torch
 
 from lib.formatter import LeveledFormatter
 
@@ -24,8 +24,17 @@ class AverageMeter:
         self.count = 0
 
     def update(self, val, n=1):
+        if val is None:
+            return
+
+        if isinstance(val, torch.Tensor):
+            val = val.item()
+
+        if np.isnan(val):
+            return
+
         self.val = val
-        if self.count == 0:
+        if self.count == 0 or np.isnan(self.sum):
             self.sum = val * n
             self.count = n
         else:
@@ -38,7 +47,7 @@ def prepare_logger(
     logger_name: str,
     level: int = logging.INFO,
     log_to_console: bool = True,
-    log_file: Optional[str] = None,
+    log_file: str | None = None,
 ) -> logging.Logger:
     """
     Returns a logger.

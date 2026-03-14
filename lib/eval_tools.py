@@ -142,7 +142,7 @@ class Imputation:
             batch = data_utils.to_device(batch, "cpu")
             y_pred = y_pred.cpu()
         else:
-            y_pred = self.model(batch["x"], cloud_mask=batch["masks"], days=batch["days"])
+            y_pred = self.model(batch["x"], batch=batch, cloud_mask=batch["masks"], days=batch["days"])
 
         if return_att:
             return batch, y_pred, att
