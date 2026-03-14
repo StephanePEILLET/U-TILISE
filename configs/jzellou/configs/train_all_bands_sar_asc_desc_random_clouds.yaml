@@ -6,7 +6,7 @@ data:
     use_sar: asc+desc # asc / desc / mix_closest / asc+desc
     image_size: [256, 256]
     subset: false
-    augment: true
+    augment: false
     filter_settings:
         type: cloud-free
         min_length: 5

@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=inference_utilise       # nom du job
+#SBATCH --job-name=utilise_all_bands_sar_asc_desc_random_clouds       # nom du job
 #SBATCH --nodes=1                    # on demande 2 noeuds
 #SBATCH --ntasks-per-node=1          # avec 2 tache par noeud (= nombre de GPU ici)
 #SBATCH --gres=gpu:1                 # nombre de GPU (1/4 des GPU)
@@ -8,8 +8,8 @@
 #SBATCH --mem=100G       # Memory proportional to GPUs: 32000 Cedar, 64000 Graham.
 #SBATCH --partition=jean-zellou
 
-#SBATCH -e /mnt/stores/store-DAI/tmp/speillet/logs/inference_utilise-%j.out
-#SBATCH -o /mnt/stores/store-DAI/tmp/speillet/logs/inference_utilise-%j.out
+#SBATCH -e /mnt/stores/store-DAI/tmp/speillet/logs/utilise_all_bands_sar_asc_desc_random_clouds-%j.out
+#SBATCH -o /mnt/stores/store-DAI/tmp/speillet/logs/utilise_all_bands_sar_asc_desc_random_clouds-%j.out
 
 cat "$0"
 echo "========================================================================================"
@@ -26,5 +26,5 @@ eval "$(conda shell.bash hook)"
 conda deactivate
 conda activate cloud_reconstruction
 
-srun python /mnt/common/hdd/home/SPeillet/U-TILISE/inference_full_tile.py /mnt/common/hdd/home/SPeillet/U-TILISE/configs/jzellou/configs/config_run_inference.yaml utilise
+srun --cpu-bind=none python /mnt/common/hdd/home/SPeillet/U-TILISE/run_train.py /mnt/common/hdd/home/SPeillet/U-TILISE/configs/jzellou/configs/train_all_bands_sar_asc_desc_random_clouds.yaml --save_dir /mnt/common/hdd/home/SPeillet/outputs/U-TILISE/all_bands_sar_asc_desc_random_clouds
 echo "Job complete"
