@@ -216,21 +216,36 @@ def get_scheduler(config: DictConfig, optimizer, logger: logging.Logger | None =
 
     if config.scheduler.enabled:
         name = config.scheduler.name
-        settings = without_keys(config.scheduler, ["name", "enabled"])
 
         if name == "ReduceLROnPlateau":
-            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", verbose=True, **settings)
+            # Valid params: mode, factor, patience, threshold, threshold_mode, cooldown, min_lr, eps
+            valid_keys = ["mode", "factor", "patience", "threshold", "threshold_mode", "cooldown", "min_lr", "eps"]
+            settings = {k: v for k, v in config.scheduler.items() if k in valid_keys}
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, **settings)
         elif name == "StepLR":
-            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, verbose=False, **settings)
+            # Valid params: step_size, gamma, last_epoch
+            valid_keys = ["step_size", "gamma", "last_epoch"]
+            settings = {k: v for k, v in config.scheduler.items() if k in valid_keys}
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, **settings)
         elif name == "MultiStepLR":
+            # Valid params: milestones, gamma, last_epoch
+            valid_keys = ["milestones", "gamma", "last_epoch"]
+            settings = {k: v for k, v in config.scheduler.items() if k in valid_keys}
             scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, **settings)
         elif name == "ExponentialLR":
-            scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, verbose=False, **settings)
+            # Valid params: gamma, last_epoch
+            valid_keys = ["gamma", "last_epoch"]
+            settings = {k: v for k, v in config.scheduler.items() if k in valid_keys}
+            scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, **settings)
         elif name == "CosineAnnealingLR":
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-                optimizer, verbose=False, T_max=config.training_settings.num_epochs
-            )
+            # Valid params: T_max, eta_min, last_epoch
+            T_max = config.scheduler.get("T_max", config.training_settings.num_epochs)
+            eta_min = config.scheduler.get("eta_min", 0)
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=T_max, eta_min=eta_min)
         elif name == "CosineAnnealingWarmRestarts":
+            # Valid params: T_0, T_mult, eta_min, last_epoch
+            valid_keys = ["T_0", "T_mult", "eta_min", "last_epoch"]
+            settings = {k: v for k, v in config.scheduler.items() if k in valid_keys}
             scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, **settings)
         elif logger:
             logger.error(f"{name} learning rate scheduler is not implemented.\n")

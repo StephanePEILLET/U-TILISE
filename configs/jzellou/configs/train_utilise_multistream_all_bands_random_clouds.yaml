@@ -38,17 +38,16 @@ optimizer:
     weight_decay: 1.0e-05
 
 scheduler:
-    name: CosineAnnealingWarmRestarts
+    name: MultiStepLR 
     enabled: true
-    T_0: 30
-    T_mult: 1
-    eta_min: !!float 1e-6
+    milestones: [40,60,80,100]
+    gamma: 0.5
 
 training_settings:
     early_stopping_patience: 30
-    batch_size: 5
+    batch_size: 3
     num_epochs: 150
-    accum_iter: 1
+    accum_iter: 2
     gradient_clip_norm: 0
     gradient_clip_value: 0
     resume: false
