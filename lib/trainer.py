@@ -82,6 +82,10 @@ class Trainer:
         self.model.to(self.device)
         self.args.accum_iter = self.args.get("accum_iter", 1)  # accumulate gradients for `accum_iter` iterations
 
+        # Mixed Precision Training (AMP)
+        self.use_amp = self.args.get("use_amp", False)
+        self.scaler = torch.amp.GradScaler("cuda", enabled=self.use_amp)
+
         self.compute_losses = TrainLoss(self.args.loss)
         # Transform metrics
         list_available_metrics = [l.value for l in CloudRemovalMetrics.MetricType]
@@ -103,7 +107,7 @@ class Trainer:
         self.epoch_best_loss = np.nan
 
         self.epochs_no_improve = 0
-        self.early_stopping_patience = int(self.args.training_settings.get('early_stopping_patience', 30))
+        self.early_stopping_patience = int(self.args.get('early_stopping_patience', 30))
 
         os.makedirs(self.args.save_dir, exist_ok=True)
         os.makedirs(self.args.checkpoint_dir, exist_ok=True)
@@ -470,30 +474,38 @@ class Trainer:
 
             for i, batch in enumerate(tnr_train):
                 self._log_iter_epoch()  # Itération à l'epoch
-                loss_dict, metrics, loss = self.inference_one_batch(batch, phase="train")
+
+                # Mixed Precision Training with autocast
+                with torch.amp.autocast("cuda", enabled=self.use_amp):
+                    loss_dict, metrics, loss = self.inference_one_batch(batch, phase="train")
+
                 # Update to stats_meter
-                # self.train_stats.update(**loss_dict)
-                # self.train_metrics.update(**metrics)
                 for key, value in loss_dict.items():
                     self.train_stats[key].update(value)
                 for key, value in metrics.items():
                     self.train_metrics[key].update(value)
 
                 loss = loss / self.args.accum_iter
-                loss.backward()
+
+                # Backward pass with gradient scaling for AMP
+                self.scaler.scale(loss).backward()
 
                 if ((i + 1) % self.args.accum_iter == 0) or (i + 1 == len(self.dataloader["train"])):
+                    # Unscale gradients before clipping
+                    self.scaler.unscale_(self.optimizer)
+
                     # Gradient clipping
                     if getattr(self.args, "gradient_clip_norm", False) and self.args.gradient_clip_norm > 0.0:
                         torch.nn.utils.clip_grad_norm_(
                             self.model.parameters(),
                             self.args.gradient_clip_norm,
                         )
-
                     elif getattr(self.args, "gradient_clip_value", False) and self.args.gradient_clip_value > 0.0:
                         torch.nn.utils.clip_grad_value_(self.model.parameters(), self.args.gradient_clip_value)
 
-                    self.optimizer.step()
+                    # Optimizer step with scaler
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
 
                     # Clear gradients
                     for param in self.model.parameters():

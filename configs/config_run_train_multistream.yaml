@@ -48,6 +48,9 @@ training_settings:
     gradient_clip_value: 0
     resume: false
     pretrained_path: ''
+    # Memory optimization options
+    use_amp: true                    # Enable Mixed Precision Training (reduces memory ~40-50%)
+    use_gradient_checkpointing: true # Enable Gradient Checkpointing (reduces memory ~30-50%, slower training)
                                                                               
 misc:
     logstep_train: 100

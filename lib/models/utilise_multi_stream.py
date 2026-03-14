@@ -1,7 +1,8 @@
 import torch
 from torch import nn
+from torch.utils.checkpoint import checkpoint
 
-from lib.models.fusion_blocks import GatedSEFusion, HierarchicalCrossModalSkipConnection
+from lib.models.fusion_blocks import GatedSEFusion
 from lib.models.ltae_transformer import LTAEtransformer
 from lib.models.parameters import NormType, TemporalAggregationMode, UpConvType
 from lib.models.utilise import (
@@ -13,6 +14,15 @@ from lib.models.utilise import (
 )
 
 
+class SkipFusionWrapper(nn.Module):
+    def __init__(self, module):
+        super().__init__()
+        self.module = module
+
+    def forward(self, sar_asc, sar_desc, opt_hr, opt_lr):
+        return self.module(opt_hr, opt_lr, sar_asc, sar_desc)
+
+
 class UtiliseMultiStream(nn.Module):
     def __init__(
             self,
@@ -22,11 +32,13 @@ class UtiliseMultiStream(nn.Module):
             max_attention_size: int = 32,
             encoder_widths=[64, 64, 64, 128],
             decoder_widths=[32, 32, 64, 128],
+            use_gradient_checkpointing: bool = False,
             **kwargs):
         super().__init__()
 
         self.use_sar = use_sar
         self.max_attention_size = max_attention_size
+        self.use_gradient_checkpointing = use_gradient_checkpointing
 
         k, s, p = 3, 1, 1
         str_conv_k, str_conv_s, str_conv_p = 4, 2, 1
@@ -72,12 +84,13 @@ class UtiliseMultiStream(nn.Module):
         bottleneck_dim = encoder_widths[-1]
         self.bottleneck_fusion = GatedSEFusion(bottleneck_dim, 0, bottleneck_dim if self.use_sar in ['asc', 'both'] else 0, bottleneck_dim if self.use_sar in ['desc', 'both'] else 0)
 
-        # Cross Modal Skip Connections
+        # Cross Modal Skip Connections - All using GatedSEFusion for memory efficiency
         self.skip_fusions = nn.ModuleList()
         for i in range(len(encoder_widths)):
             dim = encoder_widths[i]
             sar_d = dim if self.use_sar in ['asc', 'both'] else 0
-            self.skip_fusions.append(HierarchicalCrossModalSkipConnection(sar_d, sar_d, dim, 0, dim))
+            # Using GatedSEFusion everywhere for memory optimization
+            self.skip_fusions.append(SkipFusionWrapper(GatedSEFusion(dim, 0, sar_d, sar_d)))
 
         self.up_blocks = nn.ModuleList()
         for i in range(len(encoder_widths) - 1):
@@ -113,6 +126,9 @@ class UtiliseMultiStream(nn.Module):
         )
 
     def forward(self, input, batch=None, batch_positions=None, **kwargs):
+        # Determine the device from input or model parameters
+        device = next(self.parameters()).device
+
         if type(input) is dict and 'x_dict' in input:
             x_dict = input['x_dict']
             cld = input.get('cloud_mask')
@@ -121,33 +137,75 @@ class UtiliseMultiStream(nn.Module):
             cld = batch.get('cloud_mask')
         else:
             x_dict = {"opt_hr": input[:, :, :10]}
-            cld = torch.zeros(input.shape[0], input.shape[1], 1, input.shape[3], input.shape[4]).to(input.device)
+            cld = torch.zeros(input.shape[0], input.shape[1], 1, input.shape[3], input.shape[4]).to(device)
 
+        # Ensure all tensors are on the correct device
         x_opt_hr = x_dict.get("opt_hr")
+        if x_opt_hr is not None:
+            x_opt_hr = x_opt_hr.to(device)
         x_sar_asc = x_dict.get("sar_asc")
+        if x_sar_asc is not None:
+            x_sar_asc = x_sar_asc.to(device)
         x_sar_desc = x_dict.get("sar_desc")
+        if x_sar_desc is not None:
+            x_sar_desc = x_sar_desc.to(device)
 
         B, T, C, H, W = x_opt_hr.shape
 
         if cld is None:
-            cld = torch.zeros(B, T, 1, H, W).to(x_opt_hr.device)
+            cld = torch.zeros(B, T, 1, H, W).to(device)
+        else:
+            cld = cld.to(device)
 
         # Optional pad mask logic
         pad_mask = (x_opt_hr == 0).all(dim=-1).all(dim=-1).all(dim=-1)  # simple fallback
         if batch_positions is not None:
-            pad_mask = torch.logical_and(pad_mask, batch_positions == 0)
+            batch_positions_device = batch_positions.to(x_opt_hr.device)
+            pad_mask = torch.logical_and(pad_mask, batch_positions_device == 0)
 
-        # Encoding
-        h_opt_hr = self.in_conv_opt_hr.smart_forward(x_opt_hr, pad_mask=pad_mask)
-        h_sar_asc = self.in_conv_sar_asc.smart_forward(x_sar_asc, pad_mask=pad_mask) if x_sar_asc is not None else None
-        h_sar_desc = self.in_conv_sar_desc.smart_forward(x_sar_desc, pad_mask=pad_mask) if x_sar_desc is not None else None
+        # Encoding with optional gradient checkpointing
+        if self.use_gradient_checkpointing and self.training:
+            h_opt_hr = checkpoint(
+                self.in_conv_opt_hr.smart_forward, x_opt_hr, pad_mask,
+                use_reentrant=False
+            )
+            h_sar_asc = checkpoint(
+                self.in_conv_sar_asc.smart_forward, x_sar_asc, pad_mask,
+                use_reentrant=False
+            ) if x_sar_asc is not None else None
+            h_sar_desc = checkpoint(
+                self.in_conv_sar_desc.smart_forward, x_sar_desc, pad_mask,
+                use_reentrant=False
+            ) if x_sar_desc is not None else None
+        else:
+            h_opt_hr = self.in_conv_opt_hr.smart_forward(x_opt_hr, pad_mask=pad_mask)
+            h_sar_asc = self.in_conv_sar_asc.smart_forward(x_sar_asc, pad_mask=pad_mask) if x_sar_asc is not None else None
+            h_sar_desc = self.in_conv_sar_desc.smart_forward(x_sar_desc, pad_mask=pad_mask) if x_sar_desc is not None else None
 
         saved_features = [{"opt_hr": h_opt_hr, "sar_asc": h_sar_asc, "sar_desc": h_sar_desc}]
 
         for i in range(len(self.down_blocks_opt_hr)):
-            h_opt_hr = self.down_blocks_opt_hr[i].smart_forward(h_opt_hr, pad_mask=pad_mask)
-            if self.down_blocks_sar_asc is not None and h_sar_asc is not None: h_sar_asc = self.down_blocks_sar_asc[i].smart_forward(h_sar_asc, pad_mask=pad_mask)
-            if self.down_blocks_sar_desc is not None and h_sar_desc is not None: h_sar_desc = self.down_blocks_sar_desc[i].smart_forward(h_sar_desc, pad_mask=pad_mask)
+            if self.use_gradient_checkpointing and self.training:
+                h_opt_hr = checkpoint(
+                    self.down_blocks_opt_hr[i].smart_forward, h_opt_hr, pad_mask,
+                    use_reentrant=False
+                )
+                if self.down_blocks_sar_asc is not None and h_sar_asc is not None:
+                    h_sar_asc = checkpoint(
+                        self.down_blocks_sar_asc[i].smart_forward, h_sar_asc, pad_mask,
+                        use_reentrant=False
+                    )
+                if self.down_blocks_sar_desc is not None and h_sar_desc is not None:
+                    h_sar_desc = checkpoint(
+                        self.down_blocks_sar_desc[i].smart_forward, h_sar_desc, pad_mask,
+                        use_reentrant=False
+                    )
+            else:
+                h_opt_hr = self.down_blocks_opt_hr[i].smart_forward(h_opt_hr, pad_mask=pad_mask)
+                if self.down_blocks_sar_asc is not None and h_sar_asc is not None:
+                    h_sar_asc = self.down_blocks_sar_asc[i].smart_forward(h_sar_asc, pad_mask=pad_mask)
+                if self.down_blocks_sar_desc is not None and h_sar_desc is not None:
+                    h_sar_desc = self.down_blocks_sar_desc[i].smart_forward(h_sar_desc, pad_mask=pad_mask)
             saved_features.append({"opt_hr": h_opt_hr, "sar_asc": h_sar_asc, "sar_desc": h_sar_desc})
 
         # Temporal LTAE Bottleneck

@@ -148,6 +148,10 @@ def get_model(config: DictConfig, input_dim: int, logger: logging.Logger | None 
             else:
                 args_model.output_dim -= 4
 
+        # Pass gradient checkpointing option from training_settings to model
+        if "training_settings" in config and config.training_settings.get("use_gradient_checkpointing", False):
+            args_model.use_gradient_checkpointing = True
+
         model = MODELS[model_type](**args_model)
         model.apply(weight_init)
     else:

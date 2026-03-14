@@ -1,0 +1,463 @@
+====================================================================================================
+Layer (type:depth-idx)                             Output Shape              Param #
+====================================================================================================
+UtiliseMultiStream                                 [1, 3, 10, 256, 256]      1,658,752
+├─ConvBlock: 1-1                                   --                        --
+│    └─ConvLayer: 2-1                              [3, 64, 256, 256]         --
+│    │    └─Sequential: 3-1                        [3, 64, 256, 256]         43,008
+├─ModuleList: 1-2                                  --                        --
+│    └─DownConvBlock: 2-2                          --                        --
+│    │    └─ConvLayer: 3-2                         [3, 64, 128, 128]         65,728
+│    │    └─ConvLayer: 3-3                         [3, 64, 128, 128]         37,056
+│    │    └─ConvLayer: 3-4                         [3, 64, 128, 128]         37,056
+│    └─DownConvBlock: 2-3                          --                        --
+│    │    └─ConvLayer: 3-5                         [3, 64, 64, 64]           65,728
+│    │    └─ConvLayer: 3-6                         [3, 64, 64, 64]           37,056
+│    │    └─ConvLayer: 3-7                         [3, 64, 64, 64]           37,056
+│    └─DownConvBlock: 2-4                          --                        --
+│    │    └─ConvLayer: 3-8                         [3, 64, 32, 32]           65,728
+│    │    └─ConvLayer: 3-9                         [3, 64, 32, 32]           37,056
+│    │    └─ConvLayer: 3-10                        [3, 64, 32, 32]           37,056
+│    └─DownConvBlock: 2-5                          --                        --
+│    │    └─ConvLayer: 3-11                        [3, 64, 16, 16]           65,728
+│    │    └─ConvLayer: 3-12                        [3, 128, 16, 16]          74,112
+│    │    └─ConvLayer: 3-13                        [3, 128, 16, 16]          147,840
+├─LTAEtransformer: 1-3                             [1, 3, 128, 16, 16]       --
+│    └─GroupNorm: 2-6                              [768, 128]                256
+│    └─MultiHeadAttention: 2-7                     [4, 256, 3, 32]           --
+│    │    └─Linear: 3-14                           [256, 3, 16]              2,048
+│    │    └─Linear: 3-15                           [256, 3, 16]              2,048
+│    │    └─ScaledDotProductAttention: 3-16        [1024, 3, 32]             --
+│    └─Dropout: 2-8                                [768, 128]                --
+│    └─GroupNorm: 2-9                              [768, 128]                256
+│    └─Sequential: 2-10                            [768, 128]                --
+│    │    └─Linear: 3-17                           [768, 128]                16,512
+│    │    └─ReLU: 3-18                             [768, 128]                --
+│    └─Dropout: 2-11                               [768, 128]                --
+├─TemporalAggregator: 1-4                          [1, 3, 128, 16, 16]       --
+├─GatedSEFusion: 1-5                               [3, 128, 16, 16]          --
+│    └─SE_Block: 2-12                              [3, 384, 16, 16]          --
+│    │    └─AdaptiveAvgPool2d: 3-19                [3, 384, 1, 1]            --
+│    │    └─Sequential: 3-20                       [3, 384]                  73,728
+│    └─Conv2d: 2-13                                [3, 128, 16, 16]          49,280
+├─ModuleList: 1-12                                 --                        (recursive)
+│    └─SkipFusionWrapper: 2-14                     [3, 64, 32, 32]           --
+│    │    └─GatedSEFusion: 3-21                    [3, 64, 32, 32]           30,784
+├─ModuleList: 1-13                                 --                        (recursive)
+│    └─UpConvBlock: 2-15                           [1, 3, 64, 32, 32]        --
+│    │    └─UpConvLayer: 3-22                      --                        32,960
+│    │    └─ConvBlock: 3-23                        --                        4,288
+│    │    └─ConvBlock: 3-24                        --                        73,920
+│    │    └─ConvBlock: 3-25                        --                        37,056
+├─ModuleList: 1-12                                 --                        (recursive)
+│    └─SkipFusionWrapper: 2-16                     [3, 64, 64, 64]           --
+│    │    └─GatedSEFusion: 3-26                    [3, 64, 64, 64]           30,784
+├─ModuleList: 1-13                                 --                        (recursive)
+│    └─UpConvBlock: 2-17                           [1, 3, 64, 64, 64]        --
+│    │    └─UpConvLayer: 3-27                      --                        16,576
+│    │    └─ConvBlock: 3-28                        --                        4,288
+│    │    └─ConvBlock: 3-29                        --                        73,920
+│    │    └─ConvBlock: 3-30                        --                        37,056
+├─ModuleList: 1-12                                 --                        (recursive)
+│    └─SkipFusionWrapper: 2-18                     [3, 64, 128, 128]         --
+│    │    └─GatedSEFusion: 3-31                    [3, 64, 128, 128]         30,784
+├─ModuleList: 1-13                                 --                        (recursive)
+│    └─UpConvBlock: 2-19                           [1, 3, 64, 128, 128]      --
+│    │    └─UpConvLayer: 3-32                      --                        16,576
+│    │    └─ConvBlock: 3-33                        --                        4,288
+│    │    └─ConvBlock: 3-34                        --                        73,920
+│    │    └─ConvBlock: 3-35                        --                        37,056
+├─ModuleList: 1-12                                 --                        (recursive)
+│    └─SkipFusionWrapper: 2-20                     [3, 64, 256, 256]         --
+│    │    └─GatedSEFusion: 3-36                    [3, 64, 256, 256]         30,784
+├─ModuleList: 1-13                                 --                        (recursive)
+│    └─UpConvBlock: 2-21                           [1, 3, 64, 256, 256]      --
+│    │    └─UpConvLayer: 3-37                      --                        16,576
+│    │    └─ConvBlock: 3-38                        --                        4,288
+│    │    └─ConvBlock: 3-39                        --                        73,920
+│    │    └─ConvBlock: 3-40                        --                        37,056
+├─ConvBlock: 1-14                                  --                        --
+│    └─ConvLayer: 2-22                             [3, 10, 256, 256]         --
+│    │    └─Sequential: 3-41                       [3, 10, 256, 256]         650
+====================================================================================================
+Total params: 3,220,618
+Trainable params: 3,220,618
+Non-trainable params: 0
+Total mult-adds (Units.GIGABYTES): 55.37
+====================================================================================================
+Input size (MB): 14.16
+Forward/backward pass size (MB): 1827.11
+Params size (MB): 6.25
+Estimated Total Size (MB): 1847.52
+====================================================================================================
+
+
+
+UtiliseMultiStream(
+  (in_conv_opt_hr): ConvBlock(
+    (conv): ConvLayer(
+      (conv): Sequential(
+        (0): Conv2d(10, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (2): ReLU()
+        (3): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (4): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (5): ReLU()
+      )
+    )
+  )
+  (in_conv_sar_asc): ConvBlock(
+    (conv): ConvLayer(
+      (conv): Sequential(
+        (0): Conv2d(4, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (2): ReLU()
+        (3): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (4): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (5): ReLU()
+      )
+    )
+  )
+  (in_conv_sar_desc): ConvBlock(
+    (conv): ConvLayer(
+      (conv): Sequential(
+        (0): Conv2d(4, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (2): ReLU()
+        (3): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (4): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (5): ReLU()
+      )
+    )
+  )
+  (down_blocks_opt_hr): ModuleList(
+    (0-2): 3 x DownConvBlock(
+      (down): ConvLayer(
+        (conv): Sequential(
+          (0): Conv2d(64, 64, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1))
+          (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (2): ReLU()
+        )
+      )
+      (conv1): ConvLayer(
+        (conv): Sequential(
+          (0): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+          (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (2): ReLU()
+        )
+      )
+      (conv2): ConvLayer(
+        (conv): Sequential(
+          (0): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+          (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (2): ReLU()
+        )
+      )
+    )
+    (3): DownConvBlock(
+      (down): ConvLayer(
+        (conv): Sequential(
+          (0): Conv2d(64, 64, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1))
+          (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (2): ReLU()
+        )
+      )
+      (conv1): ConvLayer(
+        (conv): Sequential(
+          (0): Conv2d(64, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+          (1): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (2): ReLU()
+        )
+      )
+      (conv2): ConvLayer(
+        (conv): Sequential(
+          (0): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+          (1): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (2): ReLU()
+        )
+      )
+    )
+  )
+  (down_blocks_sar_asc): ModuleList(
+    (0-2): 3 x DownConvBlock(
+      (down): ConvLayer(
+        (conv): Sequential(
+          (0): Conv2d(64, 64, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1))
+          (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (2): ReLU()
+        )
+      )
+      (conv1): ConvLayer(
+        (conv): Sequential(
+          (0): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+          (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (2): ReLU()
+        )
+      )
+      (conv2): ConvLayer(
+        (conv): Sequential(
+          (0): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+          (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (2): ReLU()
+        )
+      )
+    )
+    (3): DownConvBlock(
+      (down): ConvLayer(
+        (conv): Sequential(
+          (0): Conv2d(64, 64, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1))
+          (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (2): ReLU()
+        )
+      )
+      (conv1): ConvLayer(
+        (conv): Sequential(
+          (0): Conv2d(64, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+          (1): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (2): ReLU()
+        )
+      )
+      (conv2): ConvLayer(
+        (conv): Sequential(
+          (0): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+          (1): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (2): ReLU()
+        )
+      )
+    )
+  )
+  (down_blocks_sar_desc): ModuleList(
+    (0-2): 3 x DownConvBlock(
+      (down): ConvLayer(
+        (conv): Sequential(
+          (0): Conv2d(64, 64, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1))
+          (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (2): ReLU()
+        )
+      )
+      (conv1): ConvLayer(
+        (conv): Sequential(
+          (0): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+          (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (2): ReLU()
+        )
+      )
+      (conv2): ConvLayer(
+        (conv): Sequential(
+          (0): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+          (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (2): ReLU()
+        )
+      )
+    )
+    (3): DownConvBlock(
+      (down): ConvLayer(
+        (conv): Sequential(
+          (0): Conv2d(64, 64, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1))
+          (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (2): ReLU()
+        )
+      )
+      (conv1): ConvLayer(
+        (conv): Sequential(
+          (0): Conv2d(64, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+          (1): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (2): ReLU()
+        )
+      )
+      (conv2): ConvLayer(
+        (conv): Sequential(
+          (0): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+          (1): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (2): ReLU()
+        )
+      )
+    )
+  )
+  (ltae_opt): LTAEtransformer(
+    (activation): ReLU()
+    (positional_encoder): PositionalEncoder()
+    (attention_heads): MultiHeadAttention(
+      (fc_k): Linear(in_features=128, out_features=16, bias=False)
+      (fc_q): Linear(in_features=128, out_features=16, bias=False)
+      (attention): ScaledDotProductAttention(
+        (dropout): Dropout(p=0.1, inplace=False)
+        (softmax): Softmax(dim=-1)
+      )
+    )
+    (norm1): GroupNorm(4, 128, eps=1e-05, affine=True)
+    (norm2): GroupNorm(4, 128, eps=1e-05, affine=True)
+    (dropout1): Dropout(p=0.1, inplace=False)
+    (dropout2): Dropout(p=0.1, inplace=False)
+    (mlp): Sequential(
+      (0): Linear(in_features=128, out_features=128, bias=True)
+      (1): ReLU()
+    )
+  )
+  (agg_opt): TemporalAggregator()
+  (ltae_sar_asc): LTAEtransformer(
+    (activation): ReLU()
+    (positional_encoder): PositionalEncoder()
+    (attention_heads): MultiHeadAttention(
+      (fc_k): Linear(in_features=128, out_features=16, bias=False)
+      (fc_q): Linear(in_features=128, out_features=16, bias=False)
+      (attention): ScaledDotProductAttention(
+        (dropout): Dropout(p=0.1, inplace=False)
+        (softmax): Softmax(dim=-1)
+      )
+    )
+    (norm1): GroupNorm(4, 128, eps=1e-05, affine=True)
+    (norm2): GroupNorm(4, 128, eps=1e-05, affine=True)
+    (dropout1): Dropout(p=0.1, inplace=False)
+    (dropout2): Dropout(p=0.1, inplace=False)
+    (mlp): Sequential(
+      (0): Linear(in_features=128, out_features=128, bias=True)
+      (1): ReLU()
+    )
+  )
+  (agg_sar_asc): TemporalAggregator()
+  (ltae_sar_desc): LTAEtransformer(
+    (activation): ReLU()
+    (positional_encoder): PositionalEncoder()
+    (attention_heads): MultiHeadAttention(
+      (fc_k): Linear(in_features=128, out_features=16, bias=False)
+      (fc_q): Linear(in_features=128, out_features=16, bias=False)
+      (attention): ScaledDotProductAttention(
+        (dropout): Dropout(p=0.1, inplace=False)
+        (softmax): Softmax(dim=-1)
+      )
+    )
+    (norm1): GroupNorm(4, 128, eps=1e-05, affine=True)
+    (norm2): GroupNorm(4, 128, eps=1e-05, affine=True)
+    (dropout1): Dropout(p=0.1, inplace=False)
+    (dropout2): Dropout(p=0.1, inplace=False)
+    (mlp): Sequential(
+      (0): Linear(in_features=128, out_features=128, bias=True)
+      (1): ReLU()
+    )
+  )
+  (agg_sar_desc): TemporalAggregator()
+  (bottleneck_fusion): GatedSEFusion(
+    (se): SE_Block(
+      (squeeze): AdaptiveAvgPool2d(output_size=1)
+      (excitation): Sequential(
+        (0): Linear(in_features=384, out_features=96, bias=False)
+        (1): ReLU(inplace=True)
+        (2): Linear(in_features=96, out_features=384, bias=False)
+        (3): Sigmoid()
+      )
+    )
+    (proj): Conv2d(384, 128, kernel_size=(1, 1), stride=(1, 1))
+  )
+  (skip_fusions): ModuleList(
+    (0-3): 4 x SkipFusionWrapper(
+      (module): GatedSEFusion(
+        (se): SE_Block(
+          (squeeze): AdaptiveAvgPool2d(output_size=1)
+          (excitation): Sequential(
+            (0): Linear(in_features=192, out_features=48, bias=False)
+            (1): ReLU(inplace=True)
+            (2): Linear(in_features=48, out_features=192, bias=False)
+            (3): Sigmoid()
+          )
+        )
+        (proj): Conv2d(192, 64, kernel_size=(1, 1), stride=(1, 1))
+      )
+    )
+    (4): SkipFusionWrapper(
+      (module): GatedSEFusion(
+        (se): SE_Block(
+          (squeeze): AdaptiveAvgPool2d(output_size=1)
+          (excitation): Sequential(
+            (0): Linear(in_features=384, out_features=96, bias=False)
+            (1): ReLU(inplace=True)
+            (2): Linear(in_features=96, out_features=384, bias=False)
+            (3): Sigmoid()
+          )
+        )
+        (proj): Conv2d(384, 128, kernel_size=(1, 1), stride=(1, 1))
+      )
+    )
+  )
+  (up_blocks): ModuleList(
+    (0): UpConvBlock(
+      (skip_conv): ConvBlock(
+        (conv): ConvLayer(
+          (conv): Sequential(
+            (0): Conv2d(64, 64, kernel_size=(1, 1), stride=(1, 1), padding_mode=reflect)
+            (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (2): ReLU()
+          )
+        )
+      )
+      (up): UpConvLayer(
+        (convtrans): Sequential(
+          (0): ConvTranspose2d(128, 64, kernel_size=(2, 2), stride=(2, 2))
+          (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (2): ReLU()
+        )
+      )
+      (conv1): ConvBlock(
+        (conv): ConvLayer(
+          (conv): Sequential(
+            (0): Conv2d(128, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+            (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (2): ReLU()
+          )
+        )
+      )
+      (conv2): ConvBlock(
+        (conv): ConvLayer(
+          (conv): Sequential(
+            (0): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+            (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (2): ReLU()
+          )
+        )
+      )
+    )
+    (1-3): 3 x UpConvBlock(
+      (skip_conv): ConvBlock(
+        (conv): ConvLayer(
+          (conv): Sequential(
+            (0): Conv2d(64, 64, kernel_size=(1, 1), stride=(1, 1), padding_mode=reflect)
+            (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (2): ReLU()
+          )
+        )
+      )
+      (up): UpConvLayer(
+        (convtrans): Sequential(
+          (0): ConvTranspose2d(64, 64, kernel_size=(2, 2), stride=(2, 2))
+          (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (2): ReLU()
+        )
+      )
+      (conv1): ConvBlock(
+        (conv): ConvLayer(
+          (conv): Sequential(
+            (0): Conv2d(128, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+            (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (2): ReLU()
+          )
+        )
+      )
+      (conv2): ConvBlock(
+        (conv): ConvLayer(
+          (conv): Sequential(
+            (0): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+            (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (2): ReLU()
+          )
+        )
+      )
+    )
+  )
+  (out_conv): ConvBlock(
+    (conv): ConvLayer(
+      (conv): Sequential(
+        (0): Conv2d(64, 10, kernel_size=(1, 1), stride=(1, 1))
+      )
+    )
+  )
+)

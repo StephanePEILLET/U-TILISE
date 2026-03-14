@@ -85,13 +85,12 @@ class CrossAttentionBlock(nn.Module):
         B, C, H, W = q_input.shape
         # Flatten spatial dimensions
         q = self.to_q(q_input).view(B, self.num_heads, C // self.num_heads, H * W).transpose(-2, -1)
-        k = self.to_k(k_input).view(B, self.num_heads, C // self.num_heads, H * W)
+        k = self.to_k(k_input).view(B, self.num_heads, C // self.num_heads, H * W).transpose(-2, -1)
         v = self.to_v(v_input).view(B, self.num_heads, C // self.num_heads, H * W).transpose(-2, -1)
 
-        dots = (q @ k) * self.scale
-        attn = dots.softmax(dim=-1)
+        out = F.scaled_dot_product_attention(q, k, v)
 
-        out = (attn @ v).transpose(-2, -1).reshape(B, C, H, W)
+        out = out.transpose(-2, -1).reshape(B, C, H, W)
         out = self.proj(out)
         return out
 
@@ -233,11 +232,8 @@ class HierarchicalCrossModalSkipConnection(nn.Module):
         k = k.flatten(2).transpose(1, 2).reshape(B, -1, self.num_heads, self.head_dim).transpose(1, 2)
         v = v.flatten(2).transpose(1, 2).reshape(B, -1, self.num_heads, self.head_dim).transpose(1, 2)
 
-        # --- ETAPE 5 : La Cross-Attention ---
-        attn = (q @ k.transpose(-2, -1)) * self.scale
-        attn = attn.softmax(dim=-1)
-
-        x_cross = (attn @ v)
+        # --- ETAPE 5 : La Cross-Attention (Flash Attention) ---
+        x_cross = F.scaled_dot_product_attention(q, k, v)
         x_cross = x_cross.transpose(1, 2).reshape(B, H, W, self.dim_out).permute(0, 3, 1, 2)
 
         # Projection finale et connexion résiduelle (on ajoute le SAR global de base)
