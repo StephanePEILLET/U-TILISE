@@ -100,7 +100,7 @@ metrics:
     sam: true                              # Spectral angle mapper (SAM).
 
 misc:
-    num_workers: 12                        # Number of dataloader worker processes.
+    num_workers: 0                        # Number of dataloader worker processes.
     pin_memory: false                      # Pin memory (dataloader settings).
     run_mode: test                        # Run mode. ['train', 'val', 'test']
 
