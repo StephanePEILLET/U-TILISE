@@ -109,6 +109,6 @@ misc:
 output:
     store_dai: /mnt/stores/store-DAI
     # tiles_window_file: /mnt/common/hdd/home/SPeillet/U-TILISE/tiles_windows.csv                # Size of the output tiles to be saved.
-    save_dir: /mnt/common/hdd/home/SPeillet/outputs/U-TILISE/inference
+    save_dir: /mnt/stores/store-DAI/tmp/speillet/inferences
     suffix:                                # Suffix appended to the name of the experiment directory.
     plot_model_txt: true                   # True to dump the model architecture to a txt file, False otherwise.

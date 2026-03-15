@@ -1,7 +1,7 @@
 data:
     dataset: circa
     hdf5_file: /mnt/DATA_10T/data_rpg/circa/hdf5/CIRCA_CR_merged.hdf5
-    max_seq_length: 3
+    max_seq_length: 
     channels: all
     use_sar: asc+desc
     subset: false
