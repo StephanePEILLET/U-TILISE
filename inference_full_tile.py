@@ -638,13 +638,14 @@ def main(
     except RuntimeError:
         pass
 
-    # ==============================================================================
-    # FIX POUR L'ERREUR "Bus error / out of shared memory" SUR SLURM
-    # ==============================================================================
-    # Force PyTorch à utiliser le système de fichiers plutôt que /dev/shm
-    # pour le transfert des tenseurs entre les workers du DataLoader
-    mp.set_sharing_strategy('file_system')
-    # ==============================================================================
+    # # ==============================================================================
+    # # FIX POUR L'ERREUR "Bus error / out of shared memory" SUR SLURM
+    # # ==============================================================================
+    # # Force PyTorch à utiliser le système de fichiers plutôt que /dev/shm
+    # # pour le transfert des tenseurs entre les workers du DataLoader
+    # mp.set_sharing_strategy('file_system')
+    # slurm ne permet pas l'utilisation de /dev/shm pour les workers du DataLoader, ce qui peut entraîner des erreurs de mémoire partagée. En utilisant 'file_system', PyTorch utilisera des fichiers temporaires pour le partage de données, ce qui est plus compatible avec les environnements SLURM.
+    # # ==============================================================================
 
     image_size = [256, 256]
     OVERLAP = 0
