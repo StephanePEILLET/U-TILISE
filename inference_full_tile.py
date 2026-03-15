@@ -637,6 +637,14 @@ def main(
     except RuntimeError:
         pass
 
+    # ==============================================================================
+    # FIX POUR L'ERREUR "Bus error / out of shared memory" SUR SLURM
+    # ==============================================================================
+    # Force PyTorch à utiliser le système de fichiers plutôt que /dev/shm
+    # pour le transfert des tenseurs entre les workers du DataLoader
+    mp.set_sharing_strategy('file_system')
+    # ==============================================================================
+
     image_size = [256, 256]
     OVERLAP = 0
 

@@ -20,11 +20,25 @@ export PYTHONFAULTHANDLER=1
 export TORCH_DISTRIBUTED_DEBUG=INFO
 export TORCH_SHOW_CPP_STACKTRACES=1
 
+# ==============================================================================
+# NOUVELLES VARIABLES D'ENVIRONNEMENT POUR RASTERIO / DATALOADER
+# ==============================================================================
+# Empêche chaque worker PyTorch d'utiliser ses propres threads internes, 
+# ce qui crée des blocages et des fuites mémoire avec Rasterio/GDAL
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+
+# Limite la mémoire cache interne de GDAL pour éviter de saturer la RAM
+export GDAL_CACHEMAX=512
+# ==============================================================================
+
 set -x
 
 eval "$(conda shell.bash hook)"
 conda deactivate
 conda activate cloud_reconstruction
 
-srun python /mnt/common/hdd/home/SPeillet/U-TILISE/inference_full_tile.py /mnt/common/hdd/home/SPeillet/U-TILISE/configs/jzellou/configs/config_run_inference.yaml utilise
+srun --cpu-bind=none python /mnt/common/hdd/home/SPeillet/U-TILISE/inference_full_tile.py /mnt/common/hdd/home/SPeillet/U-TILISE/configs/jzellou/configs/config_run_inference.yaml utilise
 echo "Job complete"
