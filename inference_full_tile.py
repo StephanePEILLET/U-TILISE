@@ -1,6 +1,7 @@
 import argparse
 import ast
 import datetime as dt
+import gc
 import json
 import os
 import sys
@@ -760,6 +761,13 @@ def main(
             print(f"Predictions for MGRS-C area {mgrs25} saved successfully.")
             print(f"File path: {out_filename.as_posix()}")
             print("-----------------------------------------------------")
+
+        # ==========================================
+        # NOUVEAU : Nettoyage explicite des workers
+        # ==========================================
+        del mgrs25_dataloader
+        del ds
+        gc.collect()
 
     print("Inference completed.")
 

@@ -40,5 +40,13 @@ eval "$(conda shell.bash hook)"
 conda deactivate
 conda activate cloud_reconstruction
 
+# Créer un dossier temporaire dans votre espace personnel
+export TMPDIR=/mnt/stores/store-DAI/tmp/speillet/torch_tmp
+mkdir -p $TMPDIR
+
+# Forcer Python et PyTorch à utiliser ce dossier
+export TEMP=$TMPDIR
+export TMP=$TMPDIR
+
 srun --cpu-bind=none python /mnt/common/hdd/home/SPeillet/U-TILISE/inference_full_tile.py /mnt/common/hdd/home/SPeillet/U-TILISE/configs/jzellou/configs/config_run_inference.yaml utilise
 echo "Job complete"
