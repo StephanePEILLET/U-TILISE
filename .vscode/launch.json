@@ -60,6 +60,17 @@
             ]
         },
         {
+            "name": "Eval U-TILISE multistream",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "run_eval.py",
+            "console": "integratedTerminal",
+            "args": [
+                "./configs/config_run_eval_multi_stream.yaml",
+                "utilise",
+            ]
+        },
+        {
             "name": "Inference U-TILISE",
             "type": "debugpy",
             "request": "launch",
