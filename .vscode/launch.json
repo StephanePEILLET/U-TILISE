@@ -47,6 +47,17 @@
             ]
         },
         {
+            "name": "Eval U-TILISE best",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "run_eval.py",
+            "console": "integratedTerminal",
+            "args": [
+                "./configs/config_run_eval_best.yaml",
+                "utilise",
+            ]
+        },
+        {
             "name": "Inference U-TILISE",
             "type": "debugpy",
             "request": "launch",

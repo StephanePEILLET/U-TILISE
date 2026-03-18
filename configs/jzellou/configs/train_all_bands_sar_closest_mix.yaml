@@ -44,8 +44,8 @@ scheduler:
     gamma: 0.5
 
 training_settings:
-    batch_size: 6                          # Batch size.
-    num_epochs: 120                       # Number of training epochs.
+    batch_size: 5                          # Batch size.
+    num_epochs: 150                       # Number of training epochs.
     accum_iter: 1                          # Accumulate gradients for 'accum_iter` iterations.
     gradient_clip_norm: 0                  # If > 0, clips gradient norm to that value.
     gradient_clip_value: 0                 # If > 0, clips gradient at specified value.
