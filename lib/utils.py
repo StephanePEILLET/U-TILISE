@@ -148,10 +148,12 @@ def get_model(config: DictConfig, input_dim: int, logger: Optional[logging.Logge
         if "-mask" in config.data.channels:
             args_model.output_dim -= 1
         if config.data.get("use_sar", False):
-            if config.data.use_sar == "asc+desc":
-                args_model.output_dim -= 8
+            s1_bands = 2 if isinstance(config.data.use_sar, str) and "_only_coherence" in config.data.use_sar else 4
+            use_sar_base = config.data.use_sar.replace("_only_coherence", "") if isinstance(config.data.use_sar, str) else config.data.use_sar
+            if use_sar_base == "asc+desc":
+                args_model.output_dim -= 2 * s1_bands
             else:
-                args_model.output_dim -= 4
+                args_model.output_dim -= s1_bands
 
         model = MODELS[model_type](**args_model)
         model.apply(weight_init)

@@ -86,6 +86,11 @@ class CIRCA_from_HDF5(Dataset):
         self.image_size: Tuple[int] = image_size
         self.shuffle: bool = shuffle
         self.use_sar: Union[bool | SarPairingType] = use_sar
+        self.only_coherence = False
+        if isinstance(self.use_sar, str) and "_only_coherence" in self.use_sar:
+            self.only_coherence = True
+            self.use_sar = self.use_sar.replace("_only_coherence", "")
+
         self.rng: np.random.Generator = np.random.default_rng(seed=SEED)
         self.hdf5_file: h5py.File
         self.patches_dataset: pd.DataFrame
@@ -201,10 +206,11 @@ class CIRCA_from_HDF5(Dataset):
             raise ValueError(f"Channels {channels} not recognized. Use 'all' or 'bgr-nir'.")
 
         if self.use_sar:
+            s1_bands = 2 if getattr(self, "only_coherence", False) else 4
             if self.use_sar == "asc+desc":
-                num_channels += 8
+                num_channels += s1_bands * 2
             elif self.use_sar == "asc" or self.use_sar == "desc" or self.use_sar == "mix_closest":
-                num_channels += 4
+                num_channels += s1_bands
             else:
                 raise ValueError(
                     f"SAR pairing {self.use_sar} not recognized. Use 'asc+desc', 'asc', 'desc' or 'mix_closest'."

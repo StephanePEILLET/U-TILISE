@@ -3,7 +3,7 @@ data:
     hdf5_file: /mnt/DATA_10T/data_rpg/circa/hdf5/CIRCA_CR_merged.hdf5 #/mnt/DATA_10T/data_rpg/circa/hdf5/circa_cloud_removal.hdf5
     max_seq_length: 5
     channels: all
-    use_sar: mix_closest  # asc / desc / mix_closest / asc+desc
+    use_sar: mix_closest_only_coherence  # asc / desc / mix_closest / asc+desc / *_only_coherence
     subset: false
     filter_settings:
         type: cloud-free

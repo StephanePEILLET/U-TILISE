@@ -74,7 +74,7 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
             phase=phase,
             hdf5_file=hdf5_file,
             shuffle=shuffle,
-            use_sar=use_sar,
+            use_sar=self.use_sar, # Use potentially modified self.use_sar
             channels=channels,
             image_size=image_size,
             load_transforms=load_transforms,
@@ -470,14 +470,22 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
                     s1_desc = patch_data["S1"]["S1_desc"][t_sampled]
                     s1_desc_dates = patch_data["S1"]["S1_dates_desc"][t_sampled]
 
+                if self.only_coherence:
+                    s1_asc = s1_asc[:, :2, :, :]
+                    s1_desc = s1_desc[:, :2, :, :]
+
                 s1 = torch.cat((s1_asc, s1_desc), dim=1)
                 s1_dates = get_pairwise_representative_dates(asc_dates=s1_asc_dates, desc_dates=s1_desc_dates)
 
             elif self.phase == "test":
                 s1 = patch_data["S1"]["S1"][masks_valid_obs]
+                if self.only_coherence:
+                    s1 = s1[:, :2, :, :]
                 s1_dates = patch_data["S1"]["S1_dates"][masks_valid_obs]
             else:
                 s1 = patch_data["S1"]["S1"][t_sampled]
+                if self.only_coherence:
+                    s1 = s1[:, :2, :, :]
                 s1_dates = patch_data["S1"]["S1_dates"][t_sampled]
 
             if self.process_data:
