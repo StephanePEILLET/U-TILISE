@@ -74,7 +74,7 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
             phase=phase,
             hdf5_file=hdf5_file,
             shuffle=shuffle,
-            use_sar=self.use_sar, # Use potentially modified self.use_sar
+            use_sar=use_sar,  # Use potentially modified self.use_sar
             channels=channels,
             image_size=image_size,
             load_transforms=load_transforms,
