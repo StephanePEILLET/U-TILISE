@@ -17,6 +17,7 @@ test_data:
     test_config: /lustre/fsn1/worksf/projects/rech/tel/uug84ql/cloud_reconstruction/results/ALL_SAR_120_epochs_2025-07-11_16-56/config.yaml
     data_optique: /lustre/fsn1/projects/rech/tel/commun/Circa/optique_dataset
     data_radar: /lustre/fsn1/projects/rech/tel/commun/Circa/radar_dataset_v4
+    hdf5_file: /mnt/DATA_10T/data_rpg/circa/hdf5/CIRCA_CR_merged.hdf5
     test_tiles: "./data/MGRSC_test.json"
     mode: null
     split: test
