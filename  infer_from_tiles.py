@@ -46,10 +46,10 @@ def _handle_folders(config: DictConfig):
     # Répertoires de sortie
     output_folder = Path(config.output.save_dir)
     output_folder.mkdir(parents=True, exist_ok=True)
-    if config.output.get("return_predictions", False):
-        output_folder_inferences = output_folder / "inferences"
-        output_folder_inferences.mkdir(parents=True, exist_ok=True)
-        print(f"Predictions will be saved to: {output_folder_inferences.as_posix()}")
+    name_experiment = Path(config.test_data.test_config).parent.name
+    output_folder_inferences = output_folder / "inferences" / name_experiment
+    output_folder_inferences.mkdir(parents=True, exist_ok=True)
+    print(f"Predictions will be saved to: {output_folder_inferences.as_posix()}")
     return {"data_optique": data_optique, "data_radar": data_radar, "output_folder_inferences": output_folder_inferences}
 
 
