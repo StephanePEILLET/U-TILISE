@@ -68,5 +68,16 @@
                 "utilise",
             ]
         },
+        {
+            "name": "Inference from tiles",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "infer_from_tiles.py",
+            "console": "integratedTerminal",
+            "args": [
+                "./configs/config_run_infer_from_tiles.yaml",
+                "utilise",
+            ]
+        },
     ]
 }

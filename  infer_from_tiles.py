@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 import rasterio
 import torch
+import torch.multiprocessing as mp
 from omegaconf import DictConfig, OmegaConf
 from rasterio.windows import Window
 from torch.utils.data import DataLoader
@@ -33,6 +34,117 @@ GDAL_OPTIONS = {
 }
 
 
+def _handle_folders(config: DictConfig):
+    """
+    Handle folders paths and output directories based on the provided configuration.
+    """
+    # Recupération chemins depuis la patie test_data de la config
+    data_optique = Path(config.test_data.get("data_optique", None))
+    assert data_optique is not None, "Le chemin vers les données optiques doit être spécifié dans la configuration de test."
+    data_radar = Path(config.test_data.get("data_radar", None))
+    assert data_radar is not None, "Le chemin vers les données radar doit être spécifié dans la configuration de test."
+    # Répertoires de sortie
+    output_folder = Path(config.output.save_dir)
+    output_folder.mkdir(parents=True, exist_ok=True)
+    if config.output.get("return_predictions", False):
+        output_folder_inferences = output_folder / "inferences"
+        output_folder_inferences.mkdir(parents=True, exist_ok=True)
+        print(f"Predictions will be saved to: {output_folder_inferences.as_posix()}")
+    return {"data_optique": data_optique, "data_radar": data_radar, "output_folder_inferences": output_folder_inferences}
+
+
+def _prepare_patch_for_writing(y_pred, batch, converter, output_type):
+    """Effectue la dénormalisation, la concaténation et le formatage du patch."""
+    # Reverse normalization
+    denorm_pred = SentinelDataProcessor.reverse_process_MS(
+        y_pred, intensity_max=MAX_PIXEL_INTENSITY_USED_FOR_REVERSE
+    )
+
+    # 1. Get prediction (T, 10, h, w) on CPU
+    pred_patch = denorm_pred.squeeze(axis=0).cpu().numpy()
+
+    # 2. Get original bands 11 & 12 (T, 2, h, w) from the batch
+    original_bands = batch["original_masks"].squeeze(axis=0).cpu().numpy()
+
+    # 3. Concatenate (T, 12, h, w)
+    full_patch = np.concatenate([pred_patch, original_bands], axis=1)
+
+    # 4. Reshape to flattened channels (T*12, h, w)
+    full_patch = full_patch.reshape(
+        full_patch.shape[0] * full_patch.shape[1], full_patch.shape[2], full_patch.shape[3]
+    )
+
+    # 5. Convert to output type (e.g., uint16)
+    return converter.from_type("float32").to_type(output_type).convert(full_patch)
+
+
+def inference_one_tile(
+    mgrs25: str,
+    config: DictConfig,
+    image_size: list,
+    imputation: Imputation,
+    pin_memory: bool,
+    num_workers: int,
+    overlap: int = 0,
+):
+    """
+    Perform inference on a single MGRS-C tile using the provided imputation model and configuration.
+    """
+    # 1. Vérifier si on doit faire l'inférence AVANT de charger les données
+    if not config.output.get("return_predictions", False):
+        print("return_predictions is False. Skipping inference.")
+        return
+
+    data_optique, data_radar, output_folder_inferences = _handle_folders(config)
+    out_filename = output_folder_inferences / f"pred_mgrsc_{mgrs25}.tif"
+
+    if out_filename.exists():
+        print(f"Predictions for MGRS-C area {mgrs25} already exist. Skipping...")
+        return
+    print(f"Writing predictions incrementally to {out_filename}")
+
+    # 2. Charger les données uniquement si nécessaire
+    ds = Dataset_from_files(
+        mgrsc=mgrs25,
+        data_optique=data_optique,
+        data_radar=data_radar,
+        image_size=image_size,
+        overlap=overlap,
+        fill_value=config.mask.fill_value,
+    )
+    meta = ds.s2_meta.copy()
+    output_type = meta["dtype"]
+    mgrs25_dataloader = DataLoader(ds, batch_size=1, shuffle=False, pin_memory=pin_memory, num_workers=num_workers)
+    converter = TypeConverter()
+
+    # 3. Boucle d'inférence allégée
+    with rasterio.open(out_filename, "w", **meta, **GDAL_OPTIONS) as dst:
+        with torch.no_grad():
+            for batch_in in tqdm(mgrs25_dataloader, leave=False, total=len(ds), desc="Patches"):
+                batch, y_pred = imputation.impute_sample(batch_in)
+
+                # Unpacking direct de la fenêtre pour gagner des variables
+                x, y, w, h = batch["window"][0].item(), batch["window"][1].item(), batch["window"][2].item(), batch["window"][3].item()
+
+                # Appel de la fonction utilitaire
+                final_patch = _prepare_patch_for_writing(y_pred, batch, converter, output_type)
+
+                # 6. Écriture
+                try:
+                    dst.write(final_patch, window=Window(x, y, w, h))
+                except Exception as e:
+                    print(f"Error writing patch at x={x}, y={y}: {e}")
+
+        print(f"Predictions for MGRS-C area {mgrs25} saved successfully.")
+        print(f"File path: {out_filename.as_posix()}")
+        print("-----------------------------------------------------")
+
+    # 4. Nettoyage
+    del mgrs25_dataloader
+    del ds
+    gc.collect()
+
+
 def main(
     args: argparse.Namespace,
     args_test_data: DictConfig,
@@ -43,12 +155,6 @@ def main(
         raise FileNotFoundError(f"Cannot find the configuration file used during training: {args.config_file}\n")
     # Read config file used during training
     config = config_utils.read_config(args.config_file)
-    # Merge generic data settings (used during training) with test-specific data settings
-    if config.data.get("hdf5_file", False):
-        for key in ["hdf5_file", "hdf5_file_read"]:
-            if key in args_test_data:
-                args_test_data.pop(key)
-        args_test_data.hdf5_file = config.data.hdf5_file
     # Manage old config settings
     if "include_S1" in args_test_data:
         if args_test_data.include_S1 is True:
@@ -56,25 +162,14 @@ def main(
         else:
             config.data.use_sar = False
         args_test_data.pop("include_S1")
-
     config.data.update(args_test_data)
     # Evaluate the entire image sequence (dans le cas de l'evaluation)
     config.data.max_seq_length = None
-    # Define paths
-    store_dai = Path(config.output.store_dai)
-    print(store_dai.as_posix())
-    path_dataset_circa = store_dai / "projets/pac/3str/EXP_2/Data_Raster"
-    data_optique = path_dataset_circa / "optique_dataset"
-    data_radar = path_dataset_circa / "radar_dataset_v4"
-
-    path_test_set_mgrs25 = "./data/MGRSC_test.json"
 
     # 3. Optimisation pour multiprocessing (num_workers > 0)
     # Rasterio/GDAL est thread-safe mais peut avoir des problèmes avec fork()
     # "spawn" est plus sûr mais plus lent au démarrage.
     # Pour Unix "fork" est plus standard mais peut causer des verrous sur les fichiers ouverts par GDAL
-    import torch.multiprocessing as mp
-
     try:
         mp.set_start_method("spawn", force=True)
     except RuntimeError:
@@ -90,7 +185,7 @@ def main(
     # # ==============================================================================
 
     image_size = [256, 256]
-    OVERLAP = 0
+    overlap = 0
 
     # CONFIGURATION CRITIQUE pour les workers sur stockage réseau :
     # 1. Empêche GDAL d'essayer d'écrire des fichiers de métadonnées (.aux.xml)
@@ -111,9 +206,6 @@ def main(
     # ou si la RAM est limite
     pin_memory = False if num_workers > 0 else torch.cuda.is_available()
 
-    with open(path_test_set_mgrs25, encoding="utf-8") as f:
-        test_mgrs25 = json.load(f)
-
     # Get the imputation model
     imputation = Imputation(
         config_file_train=args.config_file,
@@ -124,94 +216,23 @@ def main(
         # temporal_window=MAX_SAMPLES_ON_GPU,
         device=device,
     )
+    test_tiles_file = Path(config.test_data.get("test_tiles_file", None))  # JSON file containing the list of MGRS-C tiles to evaluate on
+    assert test_tiles_file is not None, "Le chemin vers le fichier JSON contenant les MGRS-C à évaluer doit être spécifié dans la configuration de test."
+    with open(test_tiles_file, encoding="utf-8") as f:
+        test_tiles = json.load(f)
 
     # load_dataset = config.output.get("tiles_window_file", None)
-    for mgrs25 in tqdm(test_mgrs25, desc="MGRS-C areas"):
-        output_folder = Path(config.output.save_dir)
-        output_folder.mkdir(parents=True, exist_ok=True)
-        out_filename = output_folder / f"pred_mgrsc_{mgrs25}.tif"
-        store_dai = Path("/mnt/stores/store-DAI")
-        filename_store = store_dai / "tmp/speillet/inferences" / f"pred_mgrsc_{mgrs25}.tif"
-        if out_filename.exists():
-            print(f"Predictions for MGRS-C area {mgrs25} already exist. Skipping...")
-            continue
-        elif filename_store.exists():
-            print(f"Found existing temporary file for MGRS-C area {mgrs25}. Skipping...")
-            continue
-        else:
-            print(f"Writing predictions incrementally to {out_filename}")
-
-        ds = Dataset_from_files(
-            mgrsc=mgrs25,
-            data_optique=data_optique,
-            data_radar=data_radar,
+    for mgrs25 in tqdm(test_tiles, desc="MGRS-C areas"):
+        inference_one_tile(
+            mgrs25=mgrs25,
             image_size=image_size,
-            overlap=OVERLAP,
-            fill_value=config.mask.fill_value,
-            # load_dataset=load_dataset,
+            config=config,
+            imputation=imputation,
+            pin_memory=pin_memory,
+            num_workers=num_workers,
+            overlap=overlap,
         )
-        meta = ds.s2_meta.copy()
-        output_type = meta["dtype"]
-        mgrs25_dataloader = DataLoader(ds, batch_size=1, shuffle=False, pin_memory=pin_memory, num_workers=num_workers)
-
-        print(meta)
-        print(GDAL_OPTIONS)
-        with rasterio.open(out_filename, "w", **meta, **GDAL_OPTIONS) as dst:
-            converter = TypeConverter()
-
-            with torch.no_grad():  # Envelopper la boucle
-                for batch_in in tqdm(mgrs25_dataloader, leave=False, total=len(ds), desc="Patches"):
-                    batch, y_pred = imputation.impute_sample(batch_in)
-                    # Correct order: get x, y, WIDTH, HEIGHT
-                    x, y, w, h = (
-                        batch["window"][0].item(),
-                        batch["window"][1].item(),
-                        batch["window"][2].item(),
-                        batch["window"][3].item(),
-                    )
-                    # Reverse normalization
-                    denorm_pred = SentinelDataProcessor.reverse_process_MS(
-                        y_pred, intensity_max=MAX_PIXEL_INTENSITY_USED_FOR_REVERSE
-                    )
-
-                    # 1. Get prediction (T, 10, h, w) on CPU
-                    pred_patch = denorm_pred.squeeze(axis=0).cpu().numpy()
-
-                    # 2. Get original bands 11 & 12 (T, 2, h, w) from the batch
-                    original_bands = batch["original_masks"].squeeze(axis=0).cpu().numpy()  # (T, 2, h, w)
-
-                    # 3. Concatenate (T, 12, h, w)
-                    full_patch = np.concatenate([pred_patch, original_bands], axis=1)
-
-                    # 4. Reshape to flattened channels (T*12, h, w)
-                    full_patch = full_patch.reshape(
-                        full_patch.shape[0] * full_patch.shape[1], full_patch.shape[2], full_patch.shape[3]
-                    )
-
-                    # 5. Convert to uint16
-                    final_patch = converter.from_type("float32").to_type(output_type).convert(full_patch)
-
-                    # 6. Write to disk with explicit window handling and potential retry logic
-                    try:
-                        dst.write(final_patch, window=Window(x, y, w, h))
-                    except Exception as e:
-                        print(f"Error writing patch at x={x}, y={y}: {e}")
-                        # Optional: Retry logic or just log and continue
-                        # time.sleep(1)
-                        # dst.write(final_patch, window=Window(x, y, w, h))
-
-            print(f"Predictions for MGRS-C area {mgrs25} saved successfully.")
-            print(f"File path: {out_filename.as_posix()}")
-            print("-----------------------------------------------------")
-
-        # ==========================================
-        # NOUVEAU : Nettoyage explicite des workers
-        # ==========================================
-        del mgrs25_dataloader
-        del ds
-        gc.collect()
-
-    print("Inference completed.")
+    print("Evaluation completed.")
 
 
 if __name__ == "__main__":
@@ -232,12 +253,6 @@ if __name__ == "__main__":
         if "checkpoint" in temp.test_data:
             temp.checkpoint = config.test_data.checkpoint
             del temp.test_data.checkpoint
-        if "return_predictions" in temp.test_data:
-            temp.return_predictions = config.test_data.return_predictions
-            del temp.test_data.return_predictions
-        if "predictions_save_path" in temp.test_data:
-            temp.predictions_save_path = config.test_data.predictions_save_path
-            del temp.test_data.predictions_save_path
         args = temp
 
     # Extract settings w.r.t. test data

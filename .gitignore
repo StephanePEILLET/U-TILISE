@@ -12,4 +12,4 @@ lightning_logs/*
 **/.ipynb_checkpoints/
 **/checkpoints/
 .data/CIRCA_patches_datasets_with_transforms.csv
-.data/CIRCA_patches_datasets_with_transforms.json
+.data/CIRCA_patches_datasets_with_transforms.json.DS_Store

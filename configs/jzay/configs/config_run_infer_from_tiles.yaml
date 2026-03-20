@@ -15,11 +15,11 @@ data:
 test_data:
     checkpoint: /home/SPeillet/data_rpg/outputs/U-TILISE/results/all_bands_sar_closest_mix_da/checkpoints/Model_best.pth
     test_config: /home/SPeillet/data_rpg/outputs/U-TILISE/results/all_bands_sar_closest_mix_da/config.yaml
-    hdf5_file: /mnt/DATA_10T/data_rpg/circa/hdf5/CIRCA_CR_merged.hdf5
+    data_optique: /mnt/stores/store_dai/projets/pac/3str/EXP_2/Data_Raster
+    data_radar: /mnt/stores/store_dai/projets/pac/3str/EXP_2/radar_dataset_v4"
+    test_tiles: "./data/MGRSC_test.json"
     mode: null
     split: test
-    # return_predictions: true
-    # predictions_save_path: /mnt/DATA_10T/data_rpg/outputs/U-TILISE/inference/CIRCA_CR_inference
 
 mask:
     mask_type: random_fully_masked    # Mask the input time series with randomly sampled cloud masks or the actual cloud masks. ['random_clouds', 'real_clouds', "random_fully_masked", "consecutive_fully_masked"]
@@ -106,5 +106,6 @@ misc:
 
 output:
     save_dir: /mnt/DATA_10T/data_rpg/outputs/U-TILISE/best_model_eval
+    return_predictions: true                # True to write the model predictions to disk, False otherwise.
     suffix:                                # Suffix appended to the name of the experiment directory.
     plot_model_txt: true                   # True to dump the model architecture to a txt file, False otherwise.
