@@ -41,6 +41,7 @@ class Dataset_from_files(Dataset):
         pe_strategy: str = "day-within-sequence",
         fill_value: float = 1.0,
         mask_type: str = "orignal_masks",  # orignal_masks, fully_masked
+        data_masks: str | Path | None = None,
     ):
         """
         Initializes the dataset.
@@ -72,6 +73,7 @@ class Dataset_from_files(Dataset):
         self.pe_strategy = pe_strategy
         self.fill_value = fill_value
         self.mask_type = mask_type
+        self.data_masks = Path(data_masks) if data_masks is not None else None
         self.setup()
 
     def __len__(self) -> int:
@@ -175,6 +177,15 @@ class Dataset_from_files(Dataset):
         if self.use_sar:
             self.s1_asc_file = [f for f in files if "ASC" in f][0]
             self.s1_desc_file = [f for f in files if "DESC" in f][0]
+        # Setup mask file if data_masks directory is provided
+        self.mask_file = None
+        if self.data_masks is not None:
+            mgrs_name = self.mgrsc_dataset.iloc[0]["mgrs"]
+            mgrs25_name = self.mgrsc_dataset.iloc[0]["mgrs25"]
+            mask_zone = self.data_masks / mgrs_name / ("MGRS25-" + mgrs25_name)
+            mask_tifs = sorted(mask_zone.rglob("*.tif"))
+            if mask_tifs:
+                self.mask_file = mask_tifs[0].as_posix()
         with rasterio.open(self.s2_file) as src:
             self.s2_meta = src.meta.copy()
         if self.use_sar:
@@ -390,14 +401,31 @@ class Dataset_from_files(Dataset):
 
         patch_S2_array = torch.from_numpy(patch_S2_array.astype(np.float32))
 
-        # patch_S2_array = self.s2_tile[:, :, y : y + h, x : x + w]  # Extraction données S2
-        # Pas de filtrage sur les dates sur les données s2 -> filtering has already been applied if t_sampled!
+        # Extraction données S2 (10 bandes spectrales)
         data_s2 = patch_S2_array[:, 0:10, ...]
-        patch_S2_array[:, 10, ...] = patch_S2_array[:, 10, ...]  # cloud mask synthetic data
-
         data_s2 = SentinelDataProcessor.process_MS(data_s2)
-        # faire une récupération des données synthétiques
-        original_masks = patch_S2_array[:, 10:, ...]
+
+        # Récupération des masques : depuis data_masks si fourni, sinon depuis le raster S2 optique
+        if self.mask_file is not None:
+            S2_N_CHANNELS_MASK = 12
+            if t_sampled is not None:
+                bands_mask = []
+                for t in t_sampled:
+                    bands_mask.extend([t * S2_N_CHANNELS_MASK + c + 1 for c in range(10, 12)])
+                with rasterio.open(self.mask_file) as src_mask:
+                    mask_array = src_mask.read(bands_mask, window=Window(*patch_data.window))
+                mask_array = mask_array.reshape(len(t_sampled), 2, mask_array.shape[-2], mask_array.shape[-1])
+            else:
+                mask_bands = []
+                T_mask = patch_S2_array.shape[0]
+                for t in range(T_mask):
+                    mask_bands.extend([t * S2_N_CHANNELS_MASK + c + 1 for c in range(10, 12)])
+                with rasterio.open(self.mask_file) as src_mask:
+                    mask_array = src_mask.read(mask_bands, window=Window(*patch_data.window))
+                mask_array = mask_array.reshape(T_mask, 2, mask_array.shape[-2], mask_array.shape[-1])
+            original_masks = torch.from_numpy(mask_array.astype(np.float32))
+        else:
+            original_masks = patch_S2_array[:, 10:, ...]
 
         cloud_probs = original_masks[:, 0, ...].clone().unsqueeze(axis=1)
 
@@ -459,23 +487,71 @@ class Dataset_from_files(Dataset):
             s1_tile = torch.from_numpy(s1_tile.astype(np.float32))
             dates_s1_sampled = np.array([self.str2date(date) for date in s1_dates])
             data_s1 = SentinelDataProcessor.process_SAR(s1_tile)
+
+        # Variable pour tracker la sous-sélection temporelle (masques synthétiques)
+        idx_kept = None
+
         if self.mask_type == "fully_masked":
-            # Couverture complète
             cloud_probs = original_masks[:, 0, ...].clone().unsqueeze(axis=1)
             snow_probs = original_masks[:, 1, ...].clone().unsqueeze(axis=1)
-            masks_to_filter = np.concatenate([snow_probs.numpy(), cloud_probs.numpy()], axis=1)
-            masks_to_filter = masks_to_filter.transpose(0, 2, 3, 1)  # T * H * W * 2
-            # Filter dates according to cloud masks
-            idx_good_frames = SentinelDataProcessor.filter_dates(masks_to_filter)  # T * H * W * 2
-            if t_sampled is not None:
-                idx_cloudy_frames = np.asarray([d for d in range(len(t_sampled)) if d not in idx_good_frames])
+
+            if self.mask_file is not None:
+                # === Masques synthétiques : convention +150 ===
+                # Bande cloud : 0-100 = proba originale, 150-250 = date masquée synthétiquement
+                # On doit :
+                #   1. Identifier les dates synthétiques (+150)
+                #   2. Retrouver les probas originales (retirer +150) pour filter_dates
+                #   3. Exclure les dates réellement nuageuses (> 5% couverture)
+                #   4. Garder les dates clean (contexte) + synthétiques (à reconstruire)
+                SYNTHETIC_THRESHOLD = 100
+
+                # 1. Identifier dates synthétiquement masquées (moyenne cloud > 100 par date)
+                is_synthetic = cloud_probs.squeeze(1).mean(dim=(1, 2)) > SYNTHETIC_THRESHOLD  # [T]
+                idx_synthetic = np.where(is_synthetic.numpy())[0]
+
+                # 2. Retrouver les probabilités originales en retirant le +150
+                cloud_orig = cloud_probs.clone()
+                snow_orig = snow_probs.clone()
+                cloud_orig[is_synthetic] -= 150
+                snow_orig[is_synthetic] -= 150
+                cloud_orig.clamp_(min=0)
+                snow_orig.clamp_(min=0)
+
+                # 3. filter_dates sur probas originales → indices des dates clean
+                masks_to_filter = np.concatenate([snow_orig.numpy(), cloud_orig.numpy()], axis=1)
+                masks_to_filter = masks_to_filter.transpose(0, 2, 3, 1)  # T x H x W x 2
+                idx_clean = SentinelDataProcessor.filter_dates(masks_to_filter)
+
+                # 4. Garder = dates clean (contexte) ∪ dates synthétiques (à reconstruire)
+                #    Exclues = dates réellement nuageuses (ni clean ni synthétiques)
+                idx_kept = np.sort(np.union1d(idx_clean, idx_synthetic))
+
+                # 5. Sous-sélection de toutes les données temporelles
+                data_s2 = data_s2[idx_kept]
+                original_masks = original_masks[idx_kept]
+                cloud_masks = cloud_masks[idx_kept]
+                if self.use_sar:
+                    data_s1 = data_s1[idx_kept]
+                    dates_s1_sampled = dates_s1_sampled[idx_kept]
+
+                # 6. Parmi les dates gardées, masquer les synthétiques en input
+                is_synth_in_kept = np.isin(idx_kept, idx_synthetic)
+                images_masked = data_s2.clone()
+                masks = torch.zeros(data_s2.shape[0], 1, data_s2.shape[2], data_s2.shape[3])
+                for i in np.where(is_synth_in_kept)[0]:
+                    images_masked[i] = self.fill_value
+                    masks[i] = self.fill_value
             else:
-                idx_cloudy_frames = np.asarray([d for d in range(len(self.dates_s2)) if d not in idx_good_frames])
-            images_masked = data_s2.clone()
-            masks = torch.zeros_like(cloud_masks)  # Dummy masks (not used in fully masked mode)
-            for idx in idx_cloudy_frames:
-                images_masked[idx] = self.fill_value  # Set cloudy frames to fill value
-                masks[idx] = self.fill_value  # Mark these frames as cloudy in the masks (if needed for analysis)
+                # Mode produit (pas de données externes) : pas de filtrage,
+                # on garde toutes les dates y compris nuageuses.
+                # Les masques de nuages originaux sont appliqués en input (pixels nuageux → fill_value).
+                images_masked, masks = masks_init_filling(
+                    seq=data_s2.clone(),
+                    masks=cloud_masks.clone(),
+                    fill_type="fill_value",
+                    fill_value=self.fill_value,
+                    dilate_cloud_masks=False,
+                )
         else:
             # Ajout des masques de nuages originaux dans l'input
             # Image time series with overlaid cloud masks filled with value `fill_value`
@@ -498,24 +574,36 @@ class Dataset_from_files(Dataset):
 
         masks_valid_obs = torch.ones(frames_input.shape[0], dtype=torch.uint8)
 
-        if t_sampled is not None:
+        # Déterminer les indices effectifs pour l'output
+        # idx_kept : sous-sélection issue des masques synthétiques (peut être None)
+        # t_sampled : sous-sélection externe (peut être None)
+        if idx_kept is not None:
+            # Masques synthétiques : on a sous-sélectionné les dates
+            # t_effective contient les indices dans la série originale (self.dates_s2, etc.)
+            t_effective = idx_kept if t_sampled is None else np.array([t_sampled[i] for i in idx_kept])
+        elif t_sampled is not None:
+            t_effective = np.array(t_sampled)
+        else:
+            t_effective = None
+
+        if t_effective is not None:
             out = {
-                "x": frames_input,  # already filtered
+                "x": frames_input,
                 "y": frames_target,
                 "masks": masks,
                 "masks_valid_obs": masks_valid_obs,
-                "position_days": self.position_days[t_sampled],
-                "days": self.days[t_sampled] - self.days[t_sampled][0],
+                "position_days": self.position_days[t_effective],
+                "days": self.days[t_effective] - self.days[t_effective][0],
                 "sample_index": item,
                 "c_index_rgb": self.c_index_rgb,
                 "c_index_nir": self.c_index_nir,
-                "S2_dates": [self.dates_s2[i].strftime("%Y-%m-%d") for i in t_sampled],
+                "S2_dates": [self.dates_s2[i].strftime("%Y-%m-%d") for i in t_effective],
                 "original_masks": original_masks,
                 "cloud_mask": cloud_masks,
                 "window": patch_data["window"],
             }
             if self.use_sar:
-                out["S1_dates"] = [dates_s1_sampled[i].strftime("%Y-%m-%d") for i in range(len(t_sampled))]
+                out["S1_dates"] = [date.strftime("%Y-%m-%d") for date in dates_s1_sampled]
         else:
             out = {
                 "x": frames_input,

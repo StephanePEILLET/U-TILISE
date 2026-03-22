@@ -7,10 +7,7 @@ from pathlib import Path
 import numpy as np
 import rasterio
 import torch
-from omegaconf import DictConfig
-from omegaconf import OmegaConf
-from prodict import Prodict
-from rasterio import Affine
+from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
 from dataloader_CIRCA.tools.data_processor import SentinelDataProcessor

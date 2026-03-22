@@ -43,14 +43,16 @@ def _handle_folders(config: DictConfig):
     assert data_optique is not None, "Le chemin vers les données optiques doit être spécifié dans la configuration de test."
     data_radar = Path(config.test_data.get("data_radar", None))
     assert data_radar is not None, "Le chemin vers les données radar doit être spécifié dans la configuration de test."
+    # Répertoire optionnel contenant les masques synthétiques (aléatoire/consécutif)
+    data_masks_val = config.test_data.get("data_masks", None)
+    data_masks = Path(data_masks_val) if data_masks_val is not None else None
     # Répertoires de sortie
     output_folder = Path(config.output.save_dir)
     output_folder.mkdir(parents=True, exist_ok=True)
     name_experiment = Path(config.test_data.test_config).parent.name
     output_folder_inferences = output_folder / name_experiment
     output_folder_inferences.mkdir(parents=True, exist_ok=True)
-    print(f"Predictions will be saved to: {output_folder_inferences.as_posix()}")
-    return Path(data_optique), Path(data_radar), Path(output_folder_inferences)
+    return Path(data_optique), Path(data_radar), data_masks, Path(output_folder_inferences)
 
 
 def _prepare_patch_for_writing(y_pred, batch, converter, output_type):
@@ -92,13 +94,14 @@ def inference_one_tile(
     """
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    data_optique, data_radar, output_folder_inferences = _handle_folders(config)
+    data_optique, data_radar, data_masks, output_folder_inferences = _handle_folders(config)
     out_filename = output_folder_inferences / f"pred_mgrsc_{mgrs25}.tif"
 
     if out_filename.exists():
         print(f"Predictions for MGRS-C area {mgrs25} already exist. Skipping...")
         return
-    print(f"Writing predictions incrementally to {out_filename}")
+
+    mask_type = config.test_data.get("mask_type", "orignal_masks")
 
     ds = Dataset_from_files(
         mgrsc=mgrs25,
@@ -107,6 +110,8 @@ def inference_one_tile(
         image_size=image_size,
         overlap=overlap,
         fill_value=config.mask.fill_value,
+        mask_type=mask_type,
+        data_masks=data_masks,
     )
     meta = ds.s2_meta.copy()
     output_type = meta["dtype"]
