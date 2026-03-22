@@ -202,6 +202,7 @@ class Evaluator:
             checkpoint=self.args.checkpoint,
             config_file_test=self.args.test_data.test_config,
             # temporal_window=MAX_SAMPLES_ON_GPU,
+            num_channels=self.dset.num_channels,
             device=device,
         )
         # Case with return of predictions
