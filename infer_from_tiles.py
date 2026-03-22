@@ -50,7 +50,7 @@ def _handle_folders(config: DictConfig):
     output_folder_inferences = output_folder / name_experiment
     output_folder_inferences.mkdir(parents=True, exist_ok=True)
     print(f"Predictions will be saved to: {output_folder_inferences.as_posix()}")
-    return {"data_optique": data_optique, "data_radar": data_radar, "output_folder_inferences": output_folder_inferences}
+    return Path(data_optique), Path(data_radar), Path(output_folder_inferences)
 
 
 def _prepare_patch_for_writing(y_pred, batch, converter, output_type):
@@ -79,10 +79,10 @@ def _prepare_patch_for_writing(y_pred, batch, converter, output_type):
 
 
 def inference_one_tile(
+    args: argparse.Namespace,
     mgrs25: str,
     config: DictConfig,
     image_size: list,
-    imputation: Imputation,
     pin_memory: bool,
     num_workers: int,
     overlap: int = 0,
@@ -90,10 +90,7 @@ def inference_one_tile(
     """
     Perform inference on a single MGRS-C tile using the provided imputation model and configuration.
     """
-    # 1. Vérifier si on doit faire l'inférence AVANT de charger les données
-    if not config.output.get("return_predictions", False):
-        print("return_predictions is False. Skipping inference.")
-        return
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     data_optique, data_radar, output_folder_inferences = _handle_folders(config)
     out_filename = output_folder_inferences / f"pred_mgrsc_{mgrs25}.tif"
@@ -103,7 +100,6 @@ def inference_one_tile(
         return
     print(f"Writing predictions incrementally to {out_filename}")
 
-    # 2. Charger les données uniquement si nécessaire
     ds = Dataset_from_files(
         mgrsc=mgrs25,
         data_optique=data_optique,
@@ -115,9 +111,20 @@ def inference_one_tile(
     meta = ds.s2_meta.copy()
     output_type = meta["dtype"]
     mgrs25_dataloader = DataLoader(ds, batch_size=1, shuffle=False, pin_memory=pin_memory, num_workers=num_workers)
+
+    # Get the imputation model
+    imputation = Imputation(
+        config_file_train=args.config_file,
+        method=args.method,
+        mode=args.mode,
+        checkpoint=args.checkpoint,
+        config_file_test=args.test_data.test_config,
+        # temporal_window=MAX_SAMPLES_ON_GPU,
+        num_channels=ds.num_channels,
+        device=device,
+    )
     converter = TypeConverter()
 
-    # 3. Boucle d'inférence allégée
     with rasterio.open(out_filename, "w", **meta, **GDAL_OPTIONS) as dst:
         with torch.no_grad():
             for batch_in in tqdm(mgrs25_dataloader, leave=False, total=len(ds), desc="Patches"):
@@ -129,7 +136,6 @@ def inference_one_tile(
                 # Appel de la fonction utilitaire
                 final_patch = _prepare_patch_for_writing(y_pred, batch, converter, output_type)
 
-                # 6. Écriture
                 try:
                     dst.write(final_patch, window=Window(x, y, w, h))
                 except Exception as e:
@@ -139,7 +145,6 @@ def inference_one_tile(
         print(f"File path: {out_filename.as_posix()}")
         print("-----------------------------------------------------")
 
-    # 4. Nettoyage
     del mgrs25_dataloader
     del ds
     gc.collect()
@@ -149,11 +154,18 @@ def main(
     args: argparse.Namespace,
     args_test_data: DictConfig,
 ):
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    """
+    Flux des configurations :
+    - args.config_file     : chemin vers le fichier de config d'inférence (config_run_infer_from_tiles.yaml)
+                             Il est aussi passé comme 'config_file_train' à Imputation (convention héritée de run_eval).
+    - args.test_data       : section test_data de la config d'inférence (data_optique, data_radar, test_tiles, etc.)
+    - args.test_data.test_config : chemin vers la config d'entraînement du modèle.
+    - args_test_data       : section 'data' de la config d'entraînement (channels, use_sar, etc.)
+    """
     _ = torch.set_grad_enabled(False)
     if not os.path.isfile(args.config_file):
         raise FileNotFoundError(f"Cannot find the configuration file used during training: {args.config_file}\n")
-    # Read config file used during training
+    # Read config file (inference config) — contient test_data, mask, output, misc, etc.
     config = config_utils.read_config(args.config_file)
     # Manage old config settings
     if "include_S1" in args_test_data:
@@ -162,9 +174,19 @@ def main(
         else:
             config.data.use_sar = False
         args_test_data.pop("include_S1")
+    # Merge les paramètres 'data' de la config d'entraînement dans la config d'inférence
     config.data.update(args_test_data)
     # Evaluate the entire image sequence (dans le cas de l'evaluation)
     config.data.max_seq_length = None
+
+    # --- Valeurs par défaut pour les sections optionnelles ---
+    if "misc" not in config:
+        config.misc = OmegaConf.create({"num_workers": 0, "pin_memory": False})
+    if "output" not in config:
+        raise ValueError(
+            "La section 'output' avec 'save_dir' doit être spécifiée dans la configuration d'inférence.\n"
+            "Ajoutez :\n  output:\n    save_dir: /chemin/vers/repertoire/sortie"
+        )
 
     # 3. Optimisation pour multiprocessing (num_workers > 0)
     # Rasterio/GDAL est thread-safe mais peut avoir des problèmes avec fork()
@@ -206,17 +228,7 @@ def main(
     # ou si la RAM est limite
     pin_memory = False if num_workers > 0 else torch.cuda.is_available()
 
-    # Get the imputation model
-    imputation = Imputation(
-        config_file_train=args.config_file,
-        method=args.method,
-        mode=args.mode,
-        checkpoint=args.checkpoint,
-        config_file_test=args.test_data.test_config,
-        # temporal_window=MAX_SAMPLES_ON_GPU,
-        device=device,
-    )
-    test_tiles_file = Path(config.test_data.get("test_tiles_file", None))  # JSON file containing the list of MGRS-C tiles to evaluate on
+    test_tiles_file = Path(config.test_data.get("test_tiles", None))  # JSON file containing the list of MGRS-C tiles to evaluate on
     assert test_tiles_file is not None, "Le chemin vers le fichier JSON contenant les MGRS-C à évaluer doit être spécifié dans la configuration de test."
     with open(test_tiles_file, encoding="utf-8") as f:
         test_tiles = json.load(f)
@@ -224,10 +236,10 @@ def main(
     # load_dataset = config.output.get("tiles_window_file", None)
     for mgrs25 in tqdm(test_tiles, desc="MGRS-C areas"):
         inference_one_tile(
+            args=args,
             mgrs25=mgrs25,
             image_size=image_size,
             config=config,
-            imputation=imputation,
             pin_memory=pin_memory,
             num_workers=num_workers,
             overlap=overlap,
@@ -264,8 +276,6 @@ if __name__ == "__main__":
     else:
         args_test_data = OmegaConf.create()
 
-    if args.test_data.hdf5_file is not None:
-        args_test_data.hdf5_file = args.test_data.hdf5_file
     if args.test_data.split is not None:
         args_test_data.split = args.test_data.split
     if args.test_data.mode is not None:

@@ -6,23 +6,14 @@ sys.path.append(str(Path(__file__).parents[1]))
 import math
 import os
 from enum import Enum
-from typing import Any
-from typing import Dict
-from typing import List
-from typing import Literal
-from typing import Optional
-from typing import Tuple
+from typing import Any, Literal
 
 import matplotlib
 import torch
 from matplotlib import pyplot as plt
-from torch import Tensor
-from torch import nn
+from torch import Tensor, nn
 
-from lib import config_utils
-from lib import data_utils
-from lib import utils
-from lib import visutils
+from lib import config_utils, data_utils, utils, visutils
 from lib.models import MODELS
 from lib.visutils import COLORMAPS
 
@@ -48,8 +39,9 @@ class Imputation:
         mode: Literal["last", "next", "closest", "linear_interpolation"] | None = None,
         checkpoint: str | None = None,
         config_file_test: str | None = None,
-        temporal_window: Optional[int] = None,
-        device: Optional[torch.device] = None,
+        temporal_window: int | None = None,
+        device: torch.device | None = None,
+        num_channels: int = 10,
     ):
         self.method = Method(method)
         self.mode = Mode(mode)
@@ -93,7 +85,7 @@ class Imputation:
                 self.temporal_window = temporal_window
             else:
                 self.temporal_window = self.config.data.max_seq_length
-            self.num_channels = data_utils.get_dataset(self.config, phase=self.config.misc.run_mode).num_channels
+            self.num_channels = num_channels
 
         if device is not None:
             self.device = device
@@ -112,11 +104,11 @@ class Imputation:
 
     def impute_sample(
         self,
-        batch: Dict[str, Any],
-        t_start: Optional[int] = None,
-        t_end: Optional[int] = None,
-        return_att: Optional[bool] = False,
-    ) -> Tuple[Dict[str, Any], Tensor, Tensor] | Tuple[Dict[str, Any], Tensor]:
+        batch: dict[str, Any],
+        t_start: int | None = None,
+        t_end: int | None = None,
+        return_att: bool | None = False,
+    ) -> tuple[dict[str, Any], Tensor, Tensor] | tuple[dict[str, Any], Tensor]:
 
         if t_start is not None and t_end is not None:
             # Choose a subsequence
@@ -157,8 +149,8 @@ class Imputation:
 
 
 def impute_sequence(
-    model, batch: Dict[str, Any], temporal_window: int, return_att: bool = False
-) -> Tensor | Tuple[Tensor, Tensor]:
+    model, batch: dict[str, Any], temporal_window: int, return_att: bool = False
+) -> Tensor | tuple[Tensor, Tensor]:
     """
     Sliding-window imputation of satellite image time series.
 
@@ -223,7 +215,7 @@ def impute_sequence(
                     dim=(0, 2, 3, 4),
                 )
                 t_switch = error.argmin().item() + t_start
-                y_pred[:, t_switch:t_end] = y_pred_chunk[:, (t_switch - t_start) : :]
+                y_pred[:, t_switch:t_end] = y_pred_chunk[:, (t_switch - t_start) :]
 
                 if t_end == t_max:
                     reached_end = True
@@ -238,7 +230,7 @@ def impute_sequence(
     return y_pred
 
 
-def move_temporal_window_end(t_max: int, temporal_window: int) -> Tuple[int, int]:
+def move_temporal_window_end(t_max: int, temporal_window: int) -> tuple[int, int]:
     """
     Moves the temporal window for evaluation such that the last frame of the temporal window coincides with the
     last frame of the image sequence.
@@ -260,7 +252,7 @@ def move_temporal_window_end(t_max: int, temporal_window: int) -> Tuple[int, int
 
 def move_temporal_window_next(
     t_start: int, t_max: int, temporal_window: int, cloud_coverage: Tensor
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     """
     Moves the temporal window for evaluation by half of the temporal window size (= stride).
     If the first frame within the new temporal window is cloudy (cloud coverage above 10%), the temporal window is
@@ -310,7 +302,7 @@ def move_temporal_window_next(
     return t_start, t_end
 
 
-def upsample_att_maps(att: Tensor, target_shape: Tuple[int, int]) -> Tensor:
+def upsample_att_maps(att: Tensor, target_shape: tuple[int, int]) -> Tensor:
     """Upsamples the attention masks `att` to the spatial resolution `target_shape`."""
 
     n_heads, b, t_out, t_in, h, w = att.shape
@@ -327,7 +319,7 @@ def visualize_att_for_one_head_across_time(
     head: int,
     batch: int = 0,
     upsample_att: bool = True,
-    indices_rgb: List[int] | List[float] | Tensor | None = None,
+    indices_rgb: list[int] | list[float] | Tensor | None = None,
     brightness_factor: float = 1,
     fontsize: int = 10,
     scale_individually: bool = False,
@@ -394,9 +386,9 @@ def visualize_att_for_target_t_across_heads(
     t_target: int,
     batch: int = 0,
     upsample_att: bool = True,
-    indices_rgb: List[int] | List[float] | Tensor | None = None,
+    indices_rgb: list[int] | list[float] | Tensor | None = None,
     brightness_factor: float = 1,
-    figsize: Tuple[float, float] = (10, 7),
+    figsize: tuple[float, float] = (10, 7),
     dpi: int = 200,
     fontsize: int = 10,
     scale_individually: bool = False,
@@ -450,7 +442,7 @@ def visualize_att_for_target_t_across_heads(
             t_target = seq.shape[1] - abs(t_target)
 
         grid[0 : (2 * border_thickness + 1), t_target * W : (t_target + 1) * W, :] = frame_color
-        grid[-2 * border_thickness : :, t_target * W : (t_target + 1) * W, :3] = frame_color
+        grid[-2 * border_thickness :, t_target * W : (t_target + 1) * W, :3] = frame_color
         grid[:, t_target * W - border_thickness : t_target * W + border_thickness, :] = frame_color
         grid[
             :,
