@@ -36,7 +36,12 @@ GDAL_OPTIONS = {
 
 def _handle_folders(config: DictConfig):
     """
-    Handle folders paths and output directories based on the provided configuration.
+    Handle folders paths and output    # 1. Commit et push les changements locaux
+    git add infer_from_tiles.py dataloader_CIRCA/datasets/dataset_from_files.py
+    git commit -m "fix: keep_all_dates=True pour inférence tuiles + validation bandes + use_sar + shared memory"
+    git push origin jzay
+    
+    # 2. Sur jzay, faire un git pull puis supprimer les fichiers corrompus et relancer directories based on the provided configuration.
     """
     # Recupération chemins depuis la patie test_data de la config
     data_optique = Path(config.test_data.get("data_optique", None))

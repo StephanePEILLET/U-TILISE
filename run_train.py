@@ -2,7 +2,6 @@ import argparse
 import logging
 import os
 import sys
-import warnings
 from argparse import ArgumentParser
 
 import torch
@@ -12,8 +11,7 @@ from lib import config_utils, data_utils, utils
 from lib.formatter import RawFormatter
 from lib.logger import prepare_logger
 
-# Ignore spécifiquement ce warning de PyTorch
-warnings.filterwarnings("ignore", message="TypedStorage is deprecated", category=UserWarning)
+# Ignore spécifiquement ce warning de PyTorch concernant les optimizers et schedulers pour éviter de polluer les logs
 
 # Constants
 SEED = 42
