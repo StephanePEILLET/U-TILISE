@@ -74,6 +74,7 @@ class Dataset_from_files(Dataset):
         self.fill_value = fill_value
         self.mask_type = mask_type
         self.data_masks = Path(data_masks) if data_masks is not None else None
+        self.keep_all_dates = False  # Mode inférence : ne pas filtrer les dates nuageuses
         self.setup()
 
     def __len__(self) -> int:
@@ -501,7 +502,7 @@ class Dataset_from_files(Dataset):
                 # On doit :
                 #   1. Identifier les dates synthétiques (+150)
                 #   2. Retrouver les probas originales (retirer +150) pour filter_dates
-                #   3. Exclure les dates réellement nuageuses (> 5% couverture)
+                #   3. Exclure les dates réellement nuageuses (> 5% couverture) [sauf keep_all_dates]
                 #   4. Garder les dates clean (contexte) + synthétiques (à reconstruire)
                 SYNTHETIC_THRESHOLD = 100
 
@@ -517,30 +518,47 @@ class Dataset_from_files(Dataset):
                 cloud_orig.clamp_(min=0)
                 snow_orig.clamp_(min=0)
 
-                # 3. filter_dates sur probas originales → indices des dates clean
-                masks_to_filter = np.concatenate([snow_orig.numpy(), cloud_orig.numpy()], axis=1)
-                masks_to_filter = masks_to_filter.transpose(0, 2, 3, 1)  # T x H x W x 2
-                idx_clean = SentinelDataProcessor.filter_dates(masks_to_filter)
+                if not self.keep_all_dates:
+                    # === Mode évaluation : filtrer les dates réellement nuageuses ===
+                    # 3. filter_dates sur probas originales → indices des dates clean
+                    masks_to_filter = np.concatenate([snow_orig.numpy(), cloud_orig.numpy()], axis=1)
+                    masks_to_filter = masks_to_filter.transpose(0, 2, 3, 1)  # T x H x W x 2
+                    idx_clean = SentinelDataProcessor.filter_dates(masks_to_filter)
 
-                # 4. Garder = dates clean (contexte) ∪ dates synthétiques (à reconstruire)
-                #    Exclues = dates réellement nuageuses (ni clean ni synthétiques)
-                idx_kept = np.sort(np.union1d(idx_clean, idx_synthetic))
+                    # 4. Garder = dates clean (contexte) ∪ dates synthétiques (à reconstruire)
+                    #    Exclues = dates réellement nuageuses (ni clean ni synthétiques)
+                    idx_kept = np.sort(np.union1d(idx_clean, idx_synthetic))
 
-                # 5. Sous-sélection de toutes les données temporelles
-                data_s2 = data_s2[idx_kept]
-                original_masks = original_masks[idx_kept]
-                cloud_masks = cloud_masks[idx_kept]
-                if self.use_sar:
-                    data_s1 = data_s1[idx_kept]
-                    dates_s1_sampled = dates_s1_sampled[idx_kept]
+                    # 5. Sous-sélection de toutes les données temporelles
+                    data_s2 = data_s2[idx_kept]
+                    original_masks = original_masks[idx_kept]
+                    cloud_masks = cloud_masks[idx_kept]
+                    if self.use_sar:
+                        data_s1 = data_s1[idx_kept]
+                        dates_s1_sampled = dates_s1_sampled[idx_kept]
 
-                # 6. Parmi les dates gardées, masquer les synthétiques en input
-                is_synth_in_kept = np.isin(idx_kept, idx_synthetic)
-                images_masked = data_s2.clone()
-                masks = torch.zeros(data_s2.shape[0], 1, data_s2.shape[2], data_s2.shape[3])
-                for i in np.where(is_synth_in_kept)[0]:
-                    images_masked[i] = self.fill_value
-                    masks[i] = self.fill_value
+                    # 6. Parmi les dates gardées, masquer les synthétiques en input
+                    is_synth_in_kept = np.isin(idx_kept, idx_synthetic)
+                    images_masked = data_s2.clone()
+                    masks = torch.zeros(data_s2.shape[0], 1, data_s2.shape[2], data_s2.shape[3])
+                    for i in np.where(is_synth_in_kept)[0]:
+                        images_masked[i] = self.fill_value
+                        masks[i] = self.fill_value
+                else:
+                    # === Mode inférence (keep_all_dates) : garder TOUTES les dates ===
+                    # On ne filtre pas les dates réellement nuageuses pour que T_output == T_original.
+                    # Masquer les dates synthétiques + les dates nuageuses originales en input.
+                    images_masked, masks = masks_init_filling(
+                        seq=data_s2.clone(),
+                        masks=cloud_masks.clone(),
+                        fill_type="fill_value",
+                        fill_value=self.fill_value,
+                        dilate_cloud_masks=False,
+                    )
+                    # En plus du masquage par nuages originaux, masquer entièrement les dates synthétiques
+                    for i in idx_synthetic:
+                        images_masked[i] = self.fill_value
+                        masks[i] = self.fill_value
             else:
                 # Mode produit (pas de données externes) : pas de filtrage,
                 # on garde toutes les dates y compris nuageuses.

@@ -98,8 +98,14 @@ def inference_one_tile(
     out_filename = output_folder_inferences / f"pred_mgrsc_{mgrs25}.tif"
 
     if out_filename.exists():
-        print(f"Predictions for MGRS-C area {mgrs25} already exist. Skipping...")
-        return
+        # Vérifier la taille du fichier : si < 10 KB, c'est probablement un fichier corrompu d'un run précédent
+        file_size_kb = out_filename.stat().st_size / 1024
+        if file_size_kb > 10:
+            print(f"Predictions for MGRS-C area {mgrs25} already exist ({file_size_kb:.0f} KB). Skipping...")
+            return
+        else:
+            print(f"Predictions for MGRS-C area {mgrs25} exist but are likely corrupted ({file_size_kb:.1f} KB). Re-processing...")
+            out_filename.unlink()
 
     mask_type = config.test_data.get("mask_type", "orignal_masks")
 
@@ -112,7 +118,11 @@ def inference_one_tile(
         fill_value=config.mask.fill_value,
         mask_type=mask_type,
         data_masks=data_masks,
+        use_sar=config.data.get("use_sar", "mix_closest"),
     )
+    # En mode inférence, ne pas filtrer les dates nuageuses (sinon T varie par patch
+    # et ne correspond plus au nombre de bandes du fichier de sortie)
+    ds.keep_all_dates = True
     meta = ds.s2_meta.copy()
     output_type = meta["dtype"]
     mgrs25_dataloader = DataLoader(ds, batch_size=1, shuffle=False, pin_memory=pin_memory, num_workers=num_workers)
@@ -129,6 +139,10 @@ def inference_one_tile(
         device=device,
     )
     converter = TypeConverter()
+    expected_bands = meta["count"]
+
+    write_errors = 0
+    patches_written = 0
 
     with rasterio.open(out_filename, "w", **meta, **GDAL_OPTIONS) as dst:
         with torch.no_grad():
@@ -141,13 +155,34 @@ def inference_one_tile(
                 # Appel de la fonction utilitaire
                 final_patch = _prepare_patch_for_writing(y_pred, batch, converter, output_type)
 
+                # Validation du nombre de bandes AVANT écriture
+                if final_patch.shape[0] != expected_bands:
+                    write_errors += 1
+                    if write_errors == 1:
+                        print(
+                            f"\n⚠ BAND COUNT MISMATCH pour {mgrs25} : patch a {final_patch.shape[0]} bandes "
+                            f"mais le fichier attend {expected_bands}. "
+                            f"Vérifiez que keep_all_dates=True est actif (T doit être constant par patch)."
+                        )
+                    continue
+
                 try:
                     dst.write(final_patch, window=Window(x, y, w, h))
+                    patches_written += 1
                 except Exception as e:
-                    print(f"Error writing patch at x={x}, y={y}: {e}")
+                    write_errors += 1
+                    if write_errors <= 3:
+                        print(f"Error writing patch at x={x}, y={y}: {e}")
 
-        print(f"Predictions for MGRS-C area {mgrs25} saved successfully.")
-        print(f"File path: {out_filename.as_posix()}")
+    if write_errors > 0:
+        print(f"\n✗ ÉCHEC pour {mgrs25} : {write_errors} patchs en erreur, {patches_written} écrits.")
+        if patches_written == 0:
+            print(f"  Fichier vide supprimé : {out_filename.as_posix()}")
+            out_filename.unlink(missing_ok=True)
+        print("-----------------------------------------------------")
+    else:
+        print(f"\n✓ Predictions for MGRS-C area {mgrs25} saved successfully ({patches_written} patches).")
+        print(f"  File path: {out_filename.as_posix()}")
         print("-----------------------------------------------------")
 
     del mgrs25_dataloader
@@ -202,14 +237,14 @@ def main(
     except RuntimeError:
         pass
 
-    # # ==============================================================================
-    # # FIX POUR L'ERREUR "Bus error / out of shared memory" SUR SLURM
-    # # ==============================================================================
-    # # Force PyTorch à utiliser le système de fichiers plutôt que /dev/shm
-    # # pour le transfert des tenseurs entre les workers du DataLoader
-    # mp.set_sharing_strategy('file_system')
+    # ==============================================================================
+    # FIX POUR L'ERREUR "Bus error / out of shared memory" SUR SLURM
+    # ==============================================================================
+    # Force PyTorch à utiliser le système de fichiers plutôt que /dev/shm
+    # pour le transfert des tenseurs entre les workers du DataLoader
+    mp.set_sharing_strategy('file_system')
     # slurm ne permet pas l'utilisation de /dev/shm pour les workers du DataLoader, ce qui peut entraîner des erreurs de mémoire partagée. En utilisant 'file_system', PyTorch utilisera des fichiers temporaires pour le partage de données, ce qui est plus compatible avec les environnements SLURM.
-    # # ==============================================================================
+    # ==============================================================================
 
     image_size = [256, 256]
     overlap = 0
