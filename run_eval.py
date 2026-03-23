@@ -345,5 +345,7 @@ if __name__ == "__main__":
     main_config = config_utils.read_config(args.config_file)
     if main_config.get("output", False) and main_config.output.get("save_dir", False):
         if stats is not None:
-            with open((Path(main_config.output.save_dir) / "test_stats.json"), "w") as f:
+            save_dir = Path(main_config.output.save_dir)
+            save_dir.mkdir(parents=True, exist_ok=True)
+            with open((save_dir / "test_stats.json"), "w") as f:
                 json.dump(stats, f)
