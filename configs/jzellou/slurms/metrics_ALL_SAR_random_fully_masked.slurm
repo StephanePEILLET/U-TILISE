@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=metrics_allsar_rfm       # nom du job
+#SBATCH --job-name=metrics_allsar_rfm_v2       # nom du job
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:1
@@ -8,8 +8,8 @@
 #SBATCH --mem=100G
 #SBATCH --partition=jean-zellou
 
-#SBATCH -e /mnt/stores/store-DAI/tmp/speillet/logs/metrics_allsar_rfm-%j.out
-#SBATCH -o /mnt/stores/store-DAI/tmp/speillet/logs/metrics_allsar_rfm-%j.out
+#SBATCH -e /mnt/stores/store-DAI/tmp/speillet/logs/metrics_allsar_rfm_v2-%j.out
+#SBATCH -o /mnt/stores/store-DAI/tmp/speillet/logs/metrics_allsar_rfm_v2-%j.out
 
 cat "$0"
 echo "========================================================================================"

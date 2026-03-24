@@ -40,7 +40,7 @@ def _handle_folders(config: DictConfig):
     git add infer_from_tiles.py dataloader_CIRCA/datasets/dataset_from_files.py
     git commit -m "fix: keep_all_dates=True pour inférence tuiles + validation bandes + use_sar + shared memory"
     git push origin jzay
-    
+
     # 2. Sur jzay, faire un git pull puis supprimer les fichiers corrompus et relancer directories based on the provided configuration.
     """
     # Recupération chemins depuis la patie test_data de la config

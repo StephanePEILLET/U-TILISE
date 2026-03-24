@@ -60,6 +60,7 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
         process_data: bool | None = True,
         stats: DictConfig | None = None,
         seed: int = SEED,
+        mask_sar: bool = False,
         # Récupération de vieux arguments du repo
         crop_settings: DictConfig | None = None,
         return_cloud_mask: bool = True,
@@ -119,6 +120,12 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
             self.intersect_real_cloud_masks,
             self.dilate_cloud_masks,
         ) = self.setup_mask_kwargs(mask_kwargs)
+
+        # Mode legacy (ALL_SAR) : masque aussi les canaux SAR en plus de l'optique.
+        # Le comportement correct (défaut, mask_sar=False) ne masque que les bandes S2.
+        # mask_sar=True est nécessaire uniquement pour évaluer le modèle ALL_SAR,
+        # entraîné avec un dataloader qui masquait les données SAR par erreur.
+        self.mask_sar = mask_sar
 
     def setup_filter_settings(
         self,
@@ -491,8 +498,14 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
             if self.process_data:
                 s1 = SentinelDataProcessor.process_SAR(s1)
 
-            # Concatenate the (masked) S2 bands and the unmasked S1 bands
+            # Comportement correct : concatène les bandes S2 (masquées) avec les bandes S1 (non masquées).
+            # Le SAR n'est PAS masqué car il fournit une information complémentaire indépendante des nuages.
             frames_input = torch.cat((frames_input, s1), dim=1)
+
+            # Mode legacy (ALL_SAR) : masque aussi les canaux SAR après concaténation.
+            # Reproduit le comportement erroné du dataloader d'entraînement du modèle ALL_SAR.
+            if self.mask_sar:
+                frames_input = frames_input.masked_fill(masks == 1.0, self.fill_value)
 
         if self.use_sar and isinstance(s1_dates[0], dt.datetime):
             s1_dates = [date.date() for date in s1_dates]

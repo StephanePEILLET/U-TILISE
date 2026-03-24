@@ -583,8 +583,10 @@ class Dataset_from_files(Dataset):
 
         frames_input = torch.cat((images_masked, data_s1), dim=1) if self.use_sar else images_masked
 
-        # CRITICAL FIX: Ensure SAR channels are also masked to self.fill_value when clouds are present.
-        # During training (in UTILISE_adapter), all 12 channels are masked.
+        # LEGACY (ALL_SAR) : masque aussi les canaux SAR quand des nuages sont présents.
+        # Ce comportement reproduit l'erreur du dataloader d'entraînement du modèle ALL_SAR.
+        # Pour les nouveaux modèles (comportement correct), le SAR ne doit PAS être masqué.
+        # TODO: ajouter un flag mask_sar pour contrôler ce comportement (cf. UTILISE_adapter.py)
         if self.use_sar and masks is not None:
             frames_input = frames_input.masked_fill(masks == 1.0, self.fill_value)
 

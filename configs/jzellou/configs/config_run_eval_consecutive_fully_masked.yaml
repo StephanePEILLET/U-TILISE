@@ -5,7 +5,8 @@ data:
     channels: all
     use_sar: mix_closest # asc /desc/ mix_closest / asc+desc
     subset: False   
-    max_seq_length: 14                     # Maximum temporal sequence length. Set to None to skip temporal trimming.
+    max_seq_length: 10                     # Maximum temporal sequence length. Set to None to skip temporal trimming.
+    mask_sar: true                         # Mode legacy ALL_SAR : le SAR est aussi masqué (erreur d'entraînement). Mettre false pour les nouveaux modèles.
     filter_settings:
         type: cloud-free
         min_length: 5
@@ -104,6 +105,6 @@ misc:
     run_mode: test                        # Run mode. ['train', 'val', 'test']
 
 output:
-    save_dir: /mnt/common/hdd/home/SPeillet/outputs/U-TILISE/metrics/ALL_SAR_120_epochs/consecutive_fully_masked
+    save_dir: /mnt/common/hdd/home/SPeillet/outputs/U-TILISE/metrics/ALL_SAR_120_epochs_v2/consecutive_fully_masked
     suffix:                                # Suffix appended to the name of the experiment directory.
     plot_model_txt: true                   # True to dump the model architecture to a txt file, False otherwise.

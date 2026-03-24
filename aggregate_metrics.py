@@ -27,6 +27,14 @@ DEFAULT_LOGS_DIR = Path("/mnt/stores/store_dai/tmp/speillet/logs")
 # Correspondance :  (nom_affichage, dossier_metrics, {mask_mode: job-name du log})
 EXPERIMENTS: list[tuple[str, str, dict[str, str]]] = [
     (
+        "**ALL_SAR_120_epochs** (mix_closest)",
+        "ALL_SAR_120_epochs",
+        {
+            "random_fully_masked": "metrics_allsar_rfm",
+            "consecutive_fully_masked": "metrics_allsar_cfm",
+        },
+    ),
+    (
         "asc+desc, random_clouds, DA",
         "all_bands_sar_asc_desc_random_clouds_da",
         {
