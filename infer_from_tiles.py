@@ -291,6 +291,12 @@ def main(
         )
     print("Evaluation completed.")
 
+    # Sauvegarder la config d'inférence utilisée dans le dossier de sortie
+    _, _, _, output_folder_inferences = _handle_folders(config)
+    config_dump_path = output_folder_inferences / "config_inference.yaml"
+    OmegaConf.save(config, config_dump_path)
+    print(f"Config d'inférence sauvegardée : {config_dump_path}")
+
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:

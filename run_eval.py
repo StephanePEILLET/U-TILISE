@@ -344,8 +344,12 @@ if __name__ == "__main__":
 
     main_config = config_utils.read_config(args.config_file)
     if main_config.get("output", False) and main_config.output.get("save_dir", False):
+        save_dir = Path(main_config.output.save_dir)
+        save_dir.mkdir(parents=True, exist_ok=True)
         if stats is not None:
-            save_dir = Path(main_config.output.save_dir)
-            save_dir.mkdir(parents=True, exist_ok=True)
             with open((save_dir / "test_stats.json"), "w") as f:
                 json.dump(stats, f)
+        # Sauvegarder la config d'évaluation utilisée dans le dossier de sortie
+        config_dump_path = save_dir / "config_eval.yaml"
+        OmegaConf.save(main_config, config_dump_path)
+        print(f"Config d'évaluation sauvegardée : {config_dump_path}")
