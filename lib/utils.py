@@ -8,16 +8,11 @@ from copy import deepcopy
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Dict
-from typing import List
-from typing import Optional
-from typing import Tuple
 
 import numpy as np
 import torch
 import torchinfo
-from omegaconf import DictConfig
-from omegaconf import OmegaConf
+from omegaconf import DictConfig, OmegaConf
 
 from lib.models import MODELS
 from lib.models.weight_init import weight_init
@@ -117,7 +112,7 @@ def get_default_model_settings(model, args_model: DictConfig) -> None:
             args_model[param] = val.value if isinstance(val, Enum) else val
 
 
-def get_model(config: DictConfig, input_dim: int, logger: Optional[logging.Logger] = None):
+def get_model(config: DictConfig, input_dim: int, logger: logging.Logger | None = None):
     """
     Returns a model instance and its parameter settings.
 
@@ -148,8 +143,8 @@ def get_model(config: DictConfig, input_dim: int, logger: Optional[logging.Logge
         if "-mask" in config.data.channels:
             args_model.output_dim -= 1
         if config.data.get("use_sar", False):
-            s1_bands = 2 if isinstance(config.data.use_sar, str) and "_only_coherence" in config.data.use_sar else 4
-            use_sar_base = config.data.use_sar.replace("_only_coherence", "") if isinstance(config.data.use_sar, str) else config.data.use_sar
+            s1_bands = 2 if isinstance(config.data.use_sar, str) and "_without_coherence" in config.data.use_sar else 4
+            use_sar_base = config.data.use_sar.replace("_without_coherence", "") if isinstance(config.data.use_sar, str) else config.data.use_sar
             if use_sar_base == "asc+desc":
                 args_model.output_dim -= 2 * s1_bands
             else:
@@ -166,7 +161,7 @@ def get_model(config: DictConfig, input_dim: int, logger: Optional[logging.Logge
     return model, args_model
 
 
-def get_optimizer(config: DictConfig, model, logger: Optional[logging.Logger] = None):
+def get_optimizer(config: DictConfig, model, logger: logging.Logger | None = None):
     """
     Returns an optimizer instance.
 
@@ -203,7 +198,7 @@ def get_optimizer(config: DictConfig, model, logger: Optional[logging.Logger] = 
     return optimizer
 
 
-def get_scheduler(config: DictConfig, optimizer, logger: Optional[logging.Logger] = None):
+def get_scheduler(config: DictConfig, optimizer, logger: logging.Logger | None = None):
     """
     Returns a learning rate scheduler instance.
 
@@ -253,7 +248,7 @@ def get_trainer(
     model,
     optimizer,
     scheduler,
-    device: Optional[torch.device] = None,
+    device: torch.device | None = None,
 ) -> Trainer:
     """
     Returns a Trainer instance.
@@ -282,7 +277,7 @@ def get_trainer(
         args.scheduler.name = config.scheduler.name
         args.scheduler.enabled = config.scheduler.enabled
     else:
-        args.scheduler = deepcopy(getattr(config, "scheduler"))
+        args.scheduler = deepcopy(config.scheduler)
 
     for key in config.training_settings.keys():
         args[key] = getattr(config.training_settings, key)
@@ -357,7 +352,7 @@ def write_model_structure_to_file(
     batch_size: int,
     seq_length: int,
     in_channels: int,
-    image_size: Tuple[int, int],
+    image_size: tuple[int, int],
 ) -> None:
     """
     Writes the model architecture to a text file.
@@ -408,7 +403,7 @@ def write_model_structure_to_file(
     sys.stdout = original
 
 
-def without_keys(d: Dict | DictConfig, ignore_keys: List[str]) -> Dict | DictConfig:
+def without_keys(d: dict | DictConfig, ignore_keys: list[str]) -> dict | DictConfig:
     """
     Returns a copy of the dictionary `d` without the keys listed in `ignore_keys`.
     """

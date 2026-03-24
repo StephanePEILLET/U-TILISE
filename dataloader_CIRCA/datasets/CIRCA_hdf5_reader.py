@@ -2,19 +2,16 @@ import datetime as dt
 import json
 import sys
 from pathlib import Path
-from typing import Dict  # noqa: F401
-from typing import List
-from typing import Literal
-from typing import Optional
-from typing import Tuple
-from typing import Union
+from typing import (
+    Dict,  # noqa: F401
+    Literal,
+)
 
 import h5py
 import numpy as np
 import pandas as pd
 import torch
 from numpy.typing import NDArray
-from rasterio import Affine
 from torch.utils.data import Dataset
 
 sys.path.append(str(Path(__file__).parents[2]))
@@ -26,11 +23,11 @@ torch.multiprocessing.set_sharing_strategy("file_system")
 
 # Constants
 SEED: int = 42
-IMAGE_SIZE: Tuple[int] = (256, 256)  # Default image size for the dataset in the HDF5 files.
+IMAGE_SIZE: tuple[int] = (256, 256)  # Default image size for the dataset in the HDF5 files.
 
 DateArray = np.ndarray[dt.date]
-TensorDict = Dict[str, Union[torch.Tensor, Dict[str, torch.Tensor]]]
-SampleDict = Dict[str, Union[NDArray, Dict[str, NDArray], List[str]]]
+TensorDict = dict[str, torch.Tensor | dict[str, torch.Tensor]]
+SampleDict = dict[str, NDArray | dict[str, NDArray] | list[str]]
 PhaseType = Literal["train", "val", "test", "train+val", "all"]
 ChannelType = Literal["all", "bgr-nir"]
 SarPairingType = Literal["asc+desc", "asc", "desc", "mix_closest"]
@@ -59,12 +56,12 @@ class CIRCA_from_HDF5(Dataset):
     def __init__(
         self,
         phase: PhaseType = "all",
-        hdf5_file: Optional[Union[str, Path]] = None,
-        load_transforms: Optional[str] = None,
+        hdf5_file: str | Path | None = None,
+        load_transforms: str | None = None,
         shuffle: bool = False,
-        use_sar: Union[bool | SarPairingType] = "mix_closest",
+        use_sar: bool | SarPairingType = "mix_closest",
         channels: ChannelType = "all",
-        image_size: Tuple[int] = IMAGE_SIZE,
+        image_size: tuple[int] = IMAGE_SIZE,
     ) -> None:
         """
         Initialize the CIRCA dataset from HDF5 file.
@@ -83,13 +80,13 @@ class CIRCA_from_HDF5(Dataset):
             ValueError: If invalid channels or phase are specified
         """
         self.phase: PhaseType = phase
-        self.image_size: Tuple[int] = image_size
+        self.image_size: tuple[int] = image_size
         self.shuffle: bool = shuffle
-        self.use_sar: Union[bool | SarPairingType] = use_sar
-        self.only_coherence = False
-        if isinstance(self.use_sar, str) and "_only_coherence" in self.use_sar:
-            self.only_coherence = True
-            self.use_sar = self.use_sar.replace("_only_coherence", "")
+        self.use_sar: bool | SarPairingType = use_sar
+        self.without_coherence = False
+        if isinstance(self.use_sar, str) and "_without_coherence" in self.use_sar:
+            self.without_coherence = True
+            self.use_sar = self.use_sar.replace("_without_coherence", "")
 
         self.rng: np.random.Generator = np.random.default_rng(seed=SEED)
         self.hdf5_file: h5py.File
@@ -102,7 +99,7 @@ class CIRCA_from_HDF5(Dataset):
         self.num_channels: int
         self.c_index_rgb: torch.Tensor
         self.c_index_nir: torch.Tensor
-        self.s2_channels: List[int]
+        self.s2_channels: list[int]
         self.num_channels, self.c_index_rgb, self.c_index_nir, self.s2_channels = self.setup_channels(channels)
 
     def __len__(self) -> int:
@@ -118,7 +115,6 @@ class CIRCA_from_HDF5(Dataset):
         Raises:
             FileNotFoundError: If the JSON file doesn't exist
         """
-        import ast
 
         if Path(path_file).exists():
             df_transforms = pd.read_json(path_file)
@@ -155,7 +151,7 @@ class CIRCA_from_HDF5(Dataset):
         """
         return dt.datetime.strptime(date_string, "%Y%m%d")
 
-    def setup_hdf5_file(self, path_file: Optional[Union[str, Path]]) -> Tuple[h5py.File, pd.DataFrame]:
+    def setup_hdf5_file(self, path_file: str | Path | None) -> tuple[h5py.File, pd.DataFrame]:
         """
         Initialize the HDF5 file and prepare the patches dataset.
 
@@ -175,7 +171,7 @@ class CIRCA_from_HDF5(Dataset):
             return f, patches_dataset
         raise FileNotFoundError(f"HDF5 file {path_file} does not exist.")
 
-    def setup_channels(self, channels: ChannelType) -> Tuple[int, torch.Tensor, torch.Tensor, List[int]]:
+    def setup_channels(self, channels: ChannelType) -> tuple[int, torch.Tensor, torch.Tensor, list[int]]:
         """
         Configure channel settings based on the specified channel mode.
 
@@ -206,7 +202,7 @@ class CIRCA_from_HDF5(Dataset):
             raise ValueError(f"Channels {channels} not recognized. Use 'all' or 'bgr-nir'.")
 
         if self.use_sar:
-            s1_bands = 2 if getattr(self, "only_coherence", False) else 4
+            s1_bands = 2 if getattr(self, "without_coherence", False) else 4
             if self.use_sar == "asc+desc":
                 num_channels += s1_bands * 2
             elif self.use_sar == "asc" or self.use_sar == "desc" or self.use_sar == "mix_closest":
@@ -272,7 +268,7 @@ class CIRCA_from_HDF5(Dataset):
 
         return patches_dataset.reset_index(drop=True)
 
-    def decode_dates(self, dates: NDArray[np.bytes_]) -> List[str]:
+    def decode_dates(self, dates: NDArray[np.bytes_]) -> list[str]:
         """
         Decode byte strings in date array to UTF-8 strings.
 

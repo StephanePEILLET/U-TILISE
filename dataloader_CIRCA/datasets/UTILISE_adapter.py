@@ -477,7 +477,7 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
                     s1_desc = patch_data["S1"]["S1_desc"][t_sampled]
                     s1_desc_dates = patch_data["S1"]["S1_dates_desc"][t_sampled]
 
-                if self.only_coherence:
+                if self.without_coherence:
                     s1_asc = s1_asc[:, :2, :, :]
                     s1_desc = s1_desc[:, :2, :, :]
 
@@ -486,12 +486,12 @@ class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
 
             elif self.phase == "test":
                 s1 = patch_data["S1"]["S1"][masks_valid_obs]
-                if self.only_coherence:
+                if self.without_coherence:
                     s1 = s1[:, :2, :, :]
                 s1_dates = patch_data["S1"]["S1_dates"][masks_valid_obs]
             else:
                 s1 = patch_data["S1"]["S1"][t_sampled]
-                if self.only_coherence:
+                if self.without_coherence:
                     s1 = s1[:, :2, :, :]
                 s1_dates = patch_data["S1"]["S1_dates"][t_sampled]
 
