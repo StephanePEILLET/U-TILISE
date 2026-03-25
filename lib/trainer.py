@@ -1,34 +1,24 @@
 import logging
-import logging.config
 import os
 import time
 from typing import Any
-from typing import Dict
-from typing import Optional
-from typing import Tuple
 
 import numpy as np
 import prodict
 import torch
 import torchvision.utils
 import wandb
-from omegaconf import DictConfig
-from omegaconf import ListConfig
-from omegaconf import OmegaConf
+from omegaconf import DictConfig, ListConfig, OmegaConf
 from prodict import Prodict
 from torch import Tensor
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from dataloader_CIRCA.datasets.cr_metrics import CloudRemovalMetrics
-from lib import logger
-from lib import visutils
-from lib.data_utils import compute_false_color
-from lib.data_utils import extract_sample
-from lib.data_utils import to_device
+from lib import logger, visutils
+from lib.data_utils import compute_false_color, extract_sample, to_device
 from lib.logger import AverageMeter
 from lib.loss import TrainLoss
-from lib.metrics import EvalMetrics
 
 OBJECTIVE = {
     "l1": "min",
@@ -52,7 +42,7 @@ OBJECTIVE = {
 }
 
 
-def seconds_to_dd_hh_mm_ss(seconds_elapsed: int) -> Tuple[int, int, int, int]:
+def seconds_to_dd_hh_mm_ss(seconds_elapsed: int) -> tuple[int, int, int, int]:
     days = seconds_elapsed // (24 * 3600)
     seconds_remainder = seconds_elapsed % (24 * 3600)
     hours = seconds_remainder // 3600
@@ -111,6 +101,7 @@ class Trainer:
 
         self.best_loss = np.inf
         self.epoch_best_loss = np.nan
+        self.early_stop_counter = 0
 
         os.makedirs(self.args.save_dir, exist_ok=True)
         os.makedirs(self.args.checkpoint_dir, exist_ok=True)
@@ -182,6 +173,7 @@ class Trainer:
         # Best validation loss so far
         self.best_loss = checkpoint["best_loss"]
         self.epoch_best_loss = checkpoint["epoch"]
+        self.early_stop_counter = checkpoint.get("early_stop_counter", 0)
 
         self.logger.info("\n\nRestoring the pretrained model from epoch %d.", self.epoch - 1)
         self.logger.info("Successfully loaded pretrained model weights from %s.\n", path)
@@ -195,6 +187,7 @@ class Trainer:
             "optimizer_state_dict": self.optimizer.state_dict(),
             "best_loss": self.best_loss,
             "best_epoch": self.epoch_best_loss,
+            "early_stop_counter": self.early_stop_counter,
         }
 
         if self.scheduler is not None:
@@ -284,7 +277,7 @@ class Trainer:
             meters[key] = AverageMeter()
         return meters
 
-    def _visualize_sample_wandb(self, sample_index: Optional[int] = None) -> None:
+    def _visualize_sample_wandb(self, sample_index: int | None = None) -> None:
         if sample_index is None:
             # Get one random batch
             batch = next(iter(self.dataloader["val"]))
@@ -404,10 +397,23 @@ class Trainer:
                     if self.val_stats.total_loss.avg < self.best_loss:
                         self.best_loss = self.val_stats.total_loss.avg
                         self.epoch_best_loss = self.epoch
+                        self.early_stop_counter = 0
                         self._save_checkpoint(self.args.path_model_best)
                         if self.use_wandb:
                             wandb.run.summary["best_loss"] = self.val_stats.total_loss.avg
                             wandb.run.summary["epoch_best_loss"] = self.epoch
+                    else:
+                        self.early_stop_counter += 1
+
+                    # Early stopping
+                    early_stop_patience = self.args.get("early_stop_patience", 0)
+                    if early_stop_patience > 0 and self.early_stop_counter >= early_stop_patience:
+                        self.logger.info(
+                            f"\nEarly stopping triggered after {self.early_stop_counter} epochs "
+                            f"without improvement. Best val loss: {self.best_loss:.4f} "
+                            f"at epoch {self.epoch_best_loss}."
+                        )
+                        break
 
                     # Plot inference
                     if (self.epoch + 1) % self.args.plot_every_n_epochs == 0 and self.use_wandb:
@@ -550,9 +556,9 @@ class Trainer:
 
     def inference_one_batch(
         self,
-        batch: Dict[str, Any],
+        batch: dict[str, Any],
         phase: str,
-    ) -> Tuple[Dict[str, float], Dict[str, float], Tensor] | Tuple[Dict[str, float], Dict[str, float]]:
+    ) -> tuple[dict[str, float], dict[str, float], Tensor] | tuple[dict[str, float], dict[str, float]]:
         """
         Perform inference on a single batch of data.
         Args:

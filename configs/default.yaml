@@ -60,6 +60,7 @@ training_settings:
     accum_iter: 1                          # Accumulate gradients for 'accum_iter` iterations.
     gradient_clip_norm: 0                  # If > 0, clips gradient norm to that value.
     gradient_clip_value: 0                 # If > 0, clips gradient at specified value.
+    early_stop_patience: 0                 # If > 0, stops training after N epochs without val loss improvement.
     resume: false                          # True to resume training, False otherwise.
     pretrained_path: ''                    # Path to the pretrained model weights.
 
