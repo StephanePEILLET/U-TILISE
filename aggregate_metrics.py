@@ -30,8 +30,8 @@ EXPERIMENTS: list[tuple[str, str, dict[str, str]]] = [
         "**ALL_SAR_120_epochs** (mix_closest)",
         "ALL_SAR_120_epochs",
         {
-            "random_fully_masked": "metrics_allsar_rfm",
-            "consecutive_fully_masked": "metrics_allsar_cfm",
+            "random_fully_masked": "metrics_allsar_rfm_v2",
+            "consecutive_fully_masked": "metrics_allsar_cfm_v2",
         },
     ),
     (
@@ -80,6 +80,39 @@ EXPERIMENTS: list[tuple[str, str, dict[str, str]]] = [
         {
             "random_fully_masked": "metrics_coh_only_rfm",
             "consecutive_fully_masked": "metrics_coh_only_cfm",
+        },
+    ),
+    # ── V2 models (intersect_real_cloud_masks=false, batch_size=6, 120 epochs) ──
+    (
+        "**v2** mix_closest, random_fully_masked",
+        "v2_mix_closest_random_fully_masked",
+        {
+            "random_fully_masked": "metrics_v2_mix_rfm_rfm",
+            "consecutive_fully_masked": "metrics_v2_mix_rfm_cfm",
+        },
+    ),
+    (
+        "**v2** mix_closest, random_clouds",
+        "v2_mix_closest_random_clouds",
+        {
+            "random_fully_masked": "metrics_v2_mix_rc_rfm",
+            "consecutive_fully_masked": "metrics_v2_mix_rc_cfm",
+        },
+    ),
+    (
+        "**v2** asc+desc, random_fully_masked",
+        "v2_asc_desc_random_fully_masked",
+        {
+            "random_fully_masked": "metrics_v2_ad_rfm_rfm",
+            "consecutive_fully_masked": "metrics_v2_ad_rfm_cfm",
+        },
+    ),
+    (
+        "**v2** asc+desc, random_clouds",
+        "v2_asc_desc_random_clouds",
+        {
+            "random_fully_masked": "metrics_v2_ad_rc_rfm",
+            "consecutive_fully_masked": "metrics_v2_ad_rc_cfm",
         },
     ),
 ]

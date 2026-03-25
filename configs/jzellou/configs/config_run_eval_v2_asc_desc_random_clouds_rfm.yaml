@@ -1,0 +1,67 @@
+data:
+    dataset: circa
+    hdf5_file: /var/data/datasets/CIRCA_CR_merged.hdf5
+    load_transforms: /mnt/common/hdd/home/SPeillet/U-TILISE/data/CIRCA_patches_datasets_with_transforms.json
+    channels: all
+    use_sar: asc+desc
+    subset: False
+    max_seq_length: 14
+    filter_settings:
+        type: cloud-free
+        min_length: 5
+        return_valid_obs_only: true
+
+test_data:
+    checkpoint: /mnt/common/hdd/home/SPeillet/outputs/U-TILISE/v2_asc_desc_random_clouds/2026-03-23_15-30/checkpoints/Model_best.pth
+    test_config: /mnt/common/hdd/home/SPeillet/outputs/U-TILISE/v2_asc_desc_random_clouds/2026-03-23_15-30/config.yaml
+    hdf5_file: /var/data/datasets/CIRCA_CR_merged.hdf5
+    mode: null
+    split: test
+
+mask:
+    mask_type: random_fully_masked
+    ratio_masked_frames: 0.5
+    ratio_fully_masked_frames: 0.0
+    fixed_masking_ratio: false
+    non_masked_frames: [0]
+    intersect_real_cloud_masks: false
+    dilate_cloud_masks: false
+    fill_type: fill_value
+    fill_value: 1
+    p_filter: 0.1
+
+utilise:
+    encoder_widths: [64, 64, 64, 64, 128]
+    decoder_widths: [64, 64, 64, 64, 128]
+
+training_settings:
+    batch_size: 1
+    num_epochs: 1
+    accum_iter: 1
+    gradient_clip_norm: 0
+    gradient_clip_value: 0
+    resume: false
+    pretrained_path: ''
+
+method:
+    model_type: utilise
+    pad_value: 0
+
+metrics:
+    masked_metrics: true
+    mae: true
+    mse: true
+    rmse: true
+    ssim: true
+    psnr: true
+    sam: true
+
+misc:
+    num_workers: 0
+    pin_memory: true
+    run_mode: test
+
+output:
+    save_dir: /mnt/common/hdd/home/SPeillet/outputs/U-TILISE/metrics/v2_asc_desc_random_clouds/random_fully_masked
+    suffix:
+    plot_model_txt: true
