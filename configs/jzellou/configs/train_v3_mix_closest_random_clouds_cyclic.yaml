@@ -43,6 +43,8 @@ scheduler:
     T_0: 40         # Période du premier cycle (epochs)
     T_mult: 2       # Facteur multiplicatif de la période à chaque restart (40, 80, 160)
     eta_min: 1.e-06  # LR minimum en fin de cycle
+    milestones: null  # Écrase le default.yaml (non utilisé par CosineAnnealingWarmRestarts)
+    gamma: null       # Idem
 
 loss:
     ssim_loss: false

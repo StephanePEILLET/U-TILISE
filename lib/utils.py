@@ -215,6 +215,8 @@ def get_scheduler(config: DictConfig, optimizer, logger: logging.Logger | None =
     if config.scheduler.enabled:
         name = config.scheduler.name
         settings = without_keys(config.scheduler, ["name", "enabled"])
+        # Filtrer les valeurs None (venant de clés écrasées par null dans le YAML)
+        settings = {k: v for k, v in settings.items() if v is not None}
 
         if name == "ReduceLROnPlateau":
             scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", verbose=True, **settings)
