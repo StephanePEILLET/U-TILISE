@@ -228,6 +228,8 @@ def get_scheduler(config: DictConfig, optimizer, logger: logging.Logger | None =
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
                 optimizer, verbose=False, T_max=config.training_settings.num_epochs
             )
+        elif name == "CosineAnnealingWarmRestarts":
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, **settings)
         elif logger:
             logger.error(f"{name} learning rate scheduler is not implemented.\n")
             sys.exit(1)
