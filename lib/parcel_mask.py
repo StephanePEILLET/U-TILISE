@@ -2,18 +2,22 @@
 
 Given a GeoPackage containing parcel geometries and the patch metadata (CRS, transform, size),
 this module rasterizes the parcels that intersect each patch into a binary mask (1 = parcel pixel).
+
+Uses fiona + shapely + pyproj directly (no geopandas dependency).
 """
 
 import json
 from pathlib import Path
 
-import geopandas as gpd
+import fiona
 import numpy as np
 import torch
-from pyproj import CRS
+from pyproj import CRS, Transformer
 from rasterio.features import rasterize
 from rasterio.transform import Affine
-from shapely.geometry import box
+from shapely import STRtree
+from shapely.geometry import box, shape
+from shapely.ops import transform as shapely_transform
 
 
 class ParcelMaskGenerator:
@@ -33,14 +37,22 @@ class ParcelMaskGenerator:
             raw = json.load(f)
         self._build_patch_meta_index(raw)
 
-        # Load parcel geometries (EPSG:2154)
+        # Load parcel geometries (EPSG:2154) using fiona
         print(f"Loading parcel geometries from {self.gpkg_path}...")
-        self.parcels_gdf = gpd.read_file(str(self.gpkg_path))
-        self.parcels_crs = self.parcels_gdf.crs
-        print(f"  Loaded {len(self.parcels_gdf)} parcels in CRS {self.parcels_crs}")
+        self.parcels_geoms: list = []
+        with fiona.open(str(self.gpkg_path)) as src:
+            self.parcels_src_crs = CRS.from_user_input(src.crs)
+            for feat in src:
+                geom = shape(feat["geometry"])
+                if geom is not None and not geom.is_empty:
+                    self.parcels_geoms.append(geom)
+        print(f"  Loaded {len(self.parcels_geoms)} parcels in CRS {self.parcels_src_crs}")
 
-        # Pre-reproject parcels to each UTM zone encountered in the dataset
-        self._reprojected_parcels: dict[str, gpd.GeoDataFrame] = {}
+        # Build spatial index on source geometries
+        self._src_strtree = STRtree(self.parcels_geoms)
+
+        # Cache reprojected geometries + STRtree per target CRS
+        self._reprojected: dict[str, tuple[list, STRtree]] = {}
 
         # Cache for generated masks: key = (mgrs25, window_str)
         self._cache: dict[tuple[str, str], np.ndarray] = {}
@@ -62,19 +74,31 @@ class ParcelMaskGenerator:
                 "width": window[3],
             }
 
-    def _get_parcels_in_crs(self, target_crs_wkt: str) -> gpd.GeoDataFrame:
+    def _get_parcels_in_crs(self, target_crs_wkt: str) -> tuple[list, STRtree]:
         """Get parcels reprojected to the target CRS, with caching per CRS."""
-        # Extract EPSG code from WKT for caching
         try:
             crs_obj = CRS.from_wkt(target_crs_wkt)
             crs_key = str(crs_obj.to_epsg()) if crs_obj.to_epsg() else target_crs_wkt[:80]
         except Exception:
             crs_key = target_crs_wkt[:80]
 
-        if crs_key not in self._reprojected_parcels:
+        if crs_key not in self._reprojected:
             print(f"  Reprojecting parcels to CRS {crs_key}...")
-            self._reprojected_parcels[crs_key] = self.parcels_gdf.to_crs(target_crs_wkt)
-        return self._reprojected_parcels[crs_key]
+            target_crs = CRS.from_wkt(target_crs_wkt)
+            transformer = Transformer.from_crs(self.parcels_src_crs, target_crs, always_xy=True)
+            proj_fn = transformer.transform
+            reprojected = []
+            for geom in self.parcels_geoms:
+                try:
+                    rg = shapely_transform(proj_fn, geom)
+                    if rg is not None and not rg.is_empty:
+                        reprojected.append(rg)
+                except Exception:
+                    continue
+            tree = STRtree(reprojected)
+            self._reprojected[crs_key] = (reprojected, tree)
+            print(f"  Reprojected {len(reprojected)} parcels.")
+        return self._reprojected[crs_key]
 
     def _patch_bbox_and_transform(self, meta: dict) -> tuple:
         """Compute the patch bounding box and affine transform from metadata."""
@@ -87,16 +111,20 @@ class ParcelMaskGenerator:
         patch_bbox = box(min(left, right), min(top, bottom), max(left, right), max(top, bottom))
         return transform, h, w, patch_bbox
 
-    def _rasterize_parcels(self, parcels: gpd.GeoDataFrame, patch_bbox, transform, h: int, w: int) -> np.ndarray:
+    def _rasterize_parcels(self, parcels: list, strtree: STRtree, patch_bbox, transform, h: int, w: int) -> np.ndarray:
         """Rasterize parcel geometries intersecting the patch bbox."""
-        candidates_idx = parcels.sindex.query(patch_bbox, predicate="intersects")
-        candidates = parcels.iloc[candidates_idx]
+        candidate_idxs = strtree.query(patch_bbox, predicate="intersects")
 
-        if len(candidates) == 0:
+        if len(candidate_idxs) == 0:
             return np.zeros((h, w), dtype=np.uint8)
 
-        clipped = candidates.clip(patch_bbox)
-        shapes = [(geom, 1) for geom in clipped.geometry if geom is not None and not geom.is_empty]
+        shapes = []
+        for idx in candidate_idxs:
+            geom = parcels[idx]
+            clipped = geom.intersection(patch_bbox)
+            if clipped is not None and not clipped.is_empty:
+                shapes.append((clipped, 1))
+
         if not shapes:
             return np.zeros((h, w), dtype=np.uint8)
 
@@ -124,8 +152,8 @@ class ParcelMaskGenerator:
             )
 
         transform, h, w, patch_bbox = self._patch_bbox_and_transform(meta)
-        parcels = self._get_parcels_in_crs(meta["crs"])
-        mask = self._rasterize_parcels(parcels, patch_bbox, transform, h, w)
+        parcels, strtree = self._get_parcels_in_crs(meta["crs"])
+        mask = self._rasterize_parcels(parcels, strtree, patch_bbox, transform, h, w)
 
         mask_tensor = torch.from_numpy(mask).unsqueeze(0).unsqueeze(0).float()
         self._cache[cache_key] = mask_tensor
