@@ -222,11 +222,21 @@ def _stat_key(metric: str, suffix: str, band: int | None = None) -> str:
 
     SSIM utilise 'ssim_images_occluded_input_pixels' alors que les autres
     métriques utilisent '{metric}_occluded_input_pixels'.
+
+    Pour les clés per-band avec suffix (occluded/observed), le format réel est :
+      - SSIM : ssim_images{suffix}_band_{i}
+      - Autres : {metric}_band_{i}{suffix}
     """
-    base = f"{metric}_images{suffix}" if "ssim" in metric and suffix else f"{metric}{suffix}"
+    if "ssim" in metric and suffix:
+        base = f"{metric}_images{suffix}"
+        if band is not None:
+            return f"{base}_band_{band}"
+        return base
     if band is not None:
-        return f"{base}_band_{band}"
-    return base
+        if suffix:
+            return f"{metric}_band_{band}{suffix}"
+        return f"{metric}_band_{band}"
+    return f"{metric}{suffix}"
 
 
 # ─── Sections du rapport ────────────────────────────────────────────────────────
@@ -329,7 +339,121 @@ def _section_per_band(lines: list[str], store: StatsStore) -> None:
 
 
 def _section_availability(lines: list[str], store: StatsStore) -> None:
-    """Section 4 : résumé des résultats trouvés / manquants."""
+    """Section 5 : résumé des résultats trouvés / manquants."""
+    lines.append("## 6. Disponibilité des résultats\n")
+
+
+TOP_N = 5  # Nombre de meilleurs modèles à afficher
+
+# Métriques pour lesquelles une valeur plus élevée est meilleure
+_HIGHER_IS_BETTER = {"psnr", "ssim", "r2"}
+
+# Métriques utilisées pour le classement composite et leurs poids.
+# Priorité 1 : MAE, RMSE, R2  |  Priorité 2 : PSNR, SSIM, SAM
+_RANK_METRICS: list[tuple[str, float]] = [
+    ("mae", 2.0),
+    ("rmse", 2.0),
+    ("r2", 2.0),
+    ("psnr", 1.0),
+    ("ssim", 1.0),
+    ("sam", 1.0),
+]
+
+
+def _rank_models(store: StatsStore, mask_mode: str) -> list[tuple[str, str, float]]:
+    """Classe les modèles par score composite (rang moyen pondéré, occluded).
+
+    Pour chaque métrique on calcule le rang de chaque modèle (1 = meilleur).
+    Le score final = moyenne pondérée des rangs.  Plus le score est bas, mieux c'est.
+    Retourne [(display_name, exp_dir, composite_score)] trié par score croissant.
+    """
+    sfx = "_occluded_input_pixels"
+
+    # Collecter les valeurs par modèle
+    models: list[tuple[str, str]] = []  # (display_name, exp_dir)
+    metric_vals: dict[str, list[float | None]] = {m: [] for m, _ in _RANK_METRICS}
+
+    for display_name, exp_dir, _jobs in EXPERIMENTS:
+        stats = store.get((exp_dir, mask_mode))
+        if stats is None:
+            continue
+        models.append((display_name, exp_dir))
+        for m, _ in _RANK_METRICS:
+            metric_vals[m].append(stats.get(_stat_key(m, sfx)))
+
+    if not models:
+        return []
+
+    n = len(models)
+    # Calculer les rangs par métrique (1 = meilleur)
+    ranks: dict[str, list[float]] = {}
+    for m, _ in _RANK_METRICS:
+        vals = metric_vals[m]
+        # Trier les indices : ascending pour lower-is-better, descending pour higher-is-better
+        reverse = m in _HIGHER_IS_BETTER
+        indexed = [(i, v) for i, v in enumerate(vals) if v is not None]
+        indexed.sort(key=lambda x: x[1], reverse=reverse)
+        r = [float(n)] * n  # valeur par défaut si None
+        for rank_pos, (idx, _) in enumerate(indexed, start=1):
+            r[idx] = float(rank_pos)
+        ranks[m] = r
+
+    # Score composite = moyenne pondérée des rangs
+    total_weight = sum(w for _, w in _RANK_METRICS)
+    scores: list[tuple[str, str, float]] = []
+    for i, (display_name, exp_dir) in enumerate(models):
+        score = sum(ranks[m][i] * w for m, w in _RANK_METRICS) / total_weight
+        scores.append((display_name, exp_dir, score))
+
+    scores.sort(key=lambda x: x[2])
+    return scores
+
+
+def _section_best_models(lines: list[str], store: StatsStore) -> None:
+    """Section 4 : classement des meilleurs modèles (occluded) + détail per-band du #1."""
+    lines.append("## 4. Meilleurs modèles — Métriques Occluded\n")
+    sfx = "_occluded_input_pixels"
+    band_metrics = ["mae", "rmse", "psnr", "ssim", "r2"]
+
+    for mask_mode in MASK_MODES:
+        mode_label = mask_mode.replace("_", " ").title()
+        lines.append(f"### {mode_label}\n")
+
+        ranking = _rank_models(store, mask_mode)
+        top = ranking[:TOP_N]
+        if not top:
+            lines.append("_Aucun résultat disponible._\n")
+            continue
+
+        # ── Tableau classement occluded global ──
+        lines.append("#### Classement (pixels occluded, score = rang moyen pondéré)\n")
+        header = "| # | Modèle | Score | " + " | ".join(m.upper() for m in MAIN_METRICS) + " |"
+        sep = "|:---:|:---|:---:|" + "|".join(":---:" for _ in MAIN_METRICS) + "|"
+        lines.extend([header, sep])
+        for rank_i, (display_name, exp_dir, score) in enumerate(top, start=1):
+            stats = store[exp_dir, mask_mode]
+            vals = [fmt(stats.get(_stat_key(m, sfx)), m) for m in MAIN_METRICS]
+            lines.append(f"| {rank_i} | {display_name} | {score:.2f} | {' | '.join(vals)} |")
+        lines.append("")
+
+        # ── Tableau per-band du meilleur modèle uniquement ──
+        best_name, best_dir, _ = top[0]
+        best_stats = store[best_dir, mask_mode]
+        lines.append(f"#### Détail par bande du meilleur modèle : {best_name}\n")
+        header = "| Métrique | " + " | ".join(BAND_NAMES) + " |"
+        sep = "|:---|" + "|".join(":---:" for _ in BAND_NAMES) + "|"
+        lines.extend([header, sep])
+        for metric in band_metrics:
+            vals = [
+                fmt(best_stats.get(_stat_key(metric, sfx, band=i)), metric)
+                for i in range(len(BAND_NAMES))
+            ]
+            lines.append(f"| {metric.upper()} | {' | '.join(vals)} |")
+        lines.append("")
+
+
+def _section_availability(lines: list[str], store: StatsStore) -> None:
+    """Section 5 : résumé des résultats trouvés / manquants."""
     lines.append("## 5. Disponibilité des résultats\n")
     header = "| Modèle | " + " | ".join(m.replace("_", " ").title() for m in MASK_MODES) + " |"
     sep = "|:---|" + "|".join(":---:" for _ in MASK_MODES) + "|"
@@ -352,7 +476,7 @@ def generate_report(store: StatsStore, source_label: str) -> str:
     _section_global(lines, store)
     _section_occluded_only(lines, store)
     _section_occluded_observed(lines, store)
-    _section_per_band(lines, store)
+    _section_best_models(lines, store)
     _section_availability(lines, store)
     return "\n".join(lines)
 

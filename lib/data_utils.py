@@ -5,31 +5,23 @@ import re
 import warnings
 from functools import partial
 from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
-from typing import Tuple
-from typing import Union
 
 import numpy as np
 import torch
-import torch.utils
 import torch.utils.data
 from omegaconf import DictConfig
 from torch import Tensor
 from torch.nn import functional as F
 from torch.utils.data import Dataset
 
-from lib.datasets import DATASETS
-from lib.datasets import EarthNet2021Dataset
-from lib.datasets import SEN12MSCRTSDataset
+from lib.datasets import DATASETS, EarthNet2021Dataset, SEN12MSCRTSDataset
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
 np_str_obj_array_pattern = re.compile(r"[SaUO]")
 
 
-def to_device(sample: Dict[str, Any], device: torch.device = torch.device("cuda")) -> Dict[str, Any]:
+def to_device(sample: dict[str, Any], device: torch.device = torch.device("cuda")) -> dict[str, Any]:
     sample_out = {}
     for key, val in sample.items():
         if isinstance(val, torch.Tensor):
@@ -49,8 +41,8 @@ def to_device(sample: Dict[str, Any], device: torch.device = torch.device("cuda"
 
 
 def extract_sample(
-    sample: Dict[str, Any],
-) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Union[float, int]]:
+    sample: dict[str, Any],
+) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, float | int]:
     inputs = sample["x"]
     target = sample["y"]
     masks = sample["masks"]
@@ -67,7 +59,7 @@ def extract_sample(
     return inputs, target, masks, mask_valid, cloud_mask, indices_rgb, index_nir
 
 
-def pad_tensor(x: Tensor, l: int, pad_value: Union[int, float] = 0) -> Tensor:
+def pad_tensor(x: Tensor, l: int, pad_value: int | float = 0) -> Tensor:
     """
     Source: https://github.com/VSainteuf/utae-paps/blob/main/src/utils.py
     """
@@ -77,7 +69,7 @@ def pad_tensor(x: Tensor, l: int, pad_value: Union[int, float] = 0) -> Tensor:
     return F.pad(x, pad=pad, value=pad_value)
 
 
-def pad_collate(batch: List[Any], pad_value: Union[int, float] = 0) -> Any:
+def pad_collate(batch: list[Any], pad_value: int | float = 0) -> Any:
     """
     Modified version of: https://github.com/VSainteuf/utae-paps/blob/main/src/utils.py
     """
@@ -145,11 +137,11 @@ def get_dataloader(
     dset: torch.utils.data.Dataset,
     config: DictConfig,
     drop_last: bool = False,
-    subset: Optional[Union[bool, int]] = False,
-    shuffle: Optional[bool] = None,
-    batch_size: Optional[int] = None,
-    pin_memory: Optional[bool] = False,
-    generator: Optional[torch.Generator] = None,
+    subset: bool | int | None = False,
+    shuffle: bool | None = None,
+    batch_size: int | None = None,
+    pin_memory: bool | None = False,
+    generator: torch.Generator | None = None,
 ) -> torch.utils.data.dataloader.DataLoader:
     """Returns a torch.utils.data.DataLoader instance."""
 
@@ -178,7 +170,7 @@ def get_dataloader(
     return loader
 
 
-def get_dataset(config: DictConfig, phase: str, logger: Optional[logging.Logger] = None) -> Dataset:
+def get_dataset(config: DictConfig, phase: str, logger: logging.Logger | None = None) -> Dataset:
     """Returns a torch.utils.data.Dataset instance."""
 
     from lib.utils import without_keys
@@ -205,13 +197,13 @@ def get_dataset(config: DictConfig, phase: str, logger: Optional[logging.Logger]
         # Choose the input hdf5 file depending on the phase
         dset = Dataset(
             hdf5_file=config.data.hdf5_file[phase],
-            **without_keys(config.data, ["dataset", "hdf5_file", "augment"]),
+            **without_keys(config.data, ["dataset", "hdf5_file", "augment", "parcel_gpkg"]),
             mask_kwargs=config.mask,
             augment=augment,
         )
     else:
         dset = Dataset(
-            **without_keys(config.data, ["dataset", "subset", "mode", "root", "split", "augment"]),
+            **without_keys(config.data, ["dataset", "subset", "mode", "root", "split", "augment", "parcel_gpkg"]),
             mask_kwargs=config.mask,
             augment=augment,
             phase=phase,
@@ -219,7 +211,7 @@ def get_dataset(config: DictConfig, phase: str, logger: Optional[logging.Logger]
     return dset
 
 
-def compute_false_color(x: Tensor, index_rgb: Union[Tensor, List[int]], index_nir: Union[int, float]) -> Tensor:
+def compute_false_color(x: Tensor, index_rgb: Tensor | list[int], index_nir: int | float) -> Tensor:
     """
     Returns the false color composite (NIR, R, G) for every time step of the input sequence or
     for the single input image.

@@ -15,6 +15,7 @@ from lib import config_utils
 from lib.arguments import eval_parser
 from lib.data_utils import get_dataset
 from lib.eval_tools import Imputation
+from lib.parcel_mask import ParcelMaskGenerator
 
 THRESHOLD = 0.5
 MAX_PIXEL_INTENSITY_USED_FOR_REVERSE = 10_000
@@ -202,6 +203,22 @@ class Evaluator:
             num_channels=self.dset.num_channels,
             device=device,
         )
+        # Parcel mask generator (optional)
+        parcel_gpkg = self.config.data.get("parcel_gpkg", None)
+        if parcel_gpkg is not None:
+            load_transforms = self.config.data.get("load_transforms", None)
+            if load_transforms is None:
+                raise ValueError(
+                    "load_transforms must be specified in the data config when using parcel_gpkg."
+                )
+            self.parcel_mask_gen = ParcelMaskGenerator(
+                gpkg_path=parcel_gpkg,
+                patches_json_path=load_transforms,
+            )
+            print(f"Parcel mask generator loaded from {parcel_gpkg}")
+        else:
+            self.parcel_mask_gen = None
+
         # Case with return of predictions
         if "return_predictions" in self.args:
             self.return_predictions = self.args.return_predictions
@@ -274,11 +291,29 @@ class Evaluator:
                     batch["y"], intensity_max=MAX_PIXEL_INTENSITY_USED_FOR_REVERSE
                 )
 
+                cloud_masks = batch.get("cloud_mask", None)
+
+                # Apply parcel mask: exclude non-parcel pixels from metrics
+                if self.parcel_mask_gen is not None:
+                    mgrs25 = batch["info"]["mgrs25"][0]  # batch_size=1
+                    window_str = batch["info"]["window"][0]
+                    parcel_mask = self.parcel_mask_gen.get_mask(mgrs25, window_str)
+                    # parcel_mask: (1, 1, H, W), 1=parcel, 0=non-parcel
+                    # Mark non-parcel pixels as cloudy so they are excluded
+                    non_parcel = (1 - parcel_mask)  # (1, 1, H, W), 1=non-parcel
+                    # Expand to match temporal dimension (1, T, 1, H, W)
+                    T = denorm_target.shape[1]
+                    non_parcel = non_parcel.unsqueeze(1).expand(-1, T, -1, -1, -1)
+                    if cloud_masks is not None:
+                        cloud_masks = torch.clamp(cloud_masks + non_parcel, 0, 1)
+                    else:
+                        cloud_masks = non_parcel
+
                 self.compute_metrics.update(
                     target=denorm_target,
                     masks=batch["masks"],
                     predicted=denorm_pred,
-                    cloud_masks=batch.get("cloud_mask", None),
+                    cloud_masks=cloud_masks,
                 )
 
             return self.compute_metrics.compute()
