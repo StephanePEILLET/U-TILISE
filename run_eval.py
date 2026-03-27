@@ -293,6 +293,14 @@ class Evaluator:
 
                 cloud_masks = batch.get("cloud_mask", None)
 
+                # Exclude black (no-data) pixels from metrics:
+                # pixels where all bands == 0 in the target are marked as cloudy
+                nodata_mask = (denorm_target == 0).all(dim=2, keepdim=True).float()  # (B, T, 1, H, W)
+                if cloud_masks is not None:
+                    cloud_masks = torch.clamp(cloud_masks + nodata_mask, 0, 1)
+                else:
+                    cloud_masks = nodata_mask
+
                 # Apply parcel mask: exclude non-parcel pixels from metrics
                 if self.parcel_mask_gen is not None:
                     mgrs25 = batch["info"]["mgrs25"][0]  # batch_size=1

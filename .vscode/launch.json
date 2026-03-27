@@ -47,13 +47,13 @@
             ]
         },
         {
-            "name": "Eval U-TILISE best",
+            "name": "Eval U-TILISE mask",
             "type": "debugpy",
             "request": "launch",
             "program": "run_eval.py",
             "console": "integratedTerminal",
             "args": [
-                "./configs/config_run_eval_best.yaml",
+                "./configs/config_run_eval_ALL_SAR_rfm_parcelle.yaml",
                 "utilise",
             ]
         },

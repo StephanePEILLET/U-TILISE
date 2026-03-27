@@ -1,8 +1,7 @@
 data:
     dataset: circa
-    hdf5_file: /mnt/DATA_10T/data_rpg/circa/hdf5/CIRCA_CR_merged.hdf5
-    load_transforms: ./data/CIRCA_patches_datasets_with_transforms.json
-    parcel_gpkg: /mnt/stores/store_dai/projets/pac/3str/EXP_2/Data_Vecteur/CIRCA+_parcels_full.gpkg
+    hdf5_file: /var/data/datasets/CIRCA_CR_merged.hdf5
+    load_transforms: /mnt/common/hdd/home/SPeillet/U-TILISE/data/CIRCA_patches_datasets_with_transforms.json
     channels: all
     use_sar: mix_closest
     subset: False
@@ -13,9 +12,9 @@ data:
         return_valid_obs_only: true
 
 test_data:
-    checkpoint: /mnt/DATA_10T/data_rpg/outputs/U-TILISE/results/ALL_SAR_120_epochs_2025-07-11_16-56/checkpoints/Model_best.pth
-    test_config: /mnt/DATA_10T/data_rpg/outputs/U-TILISE/results/ALL_SAR_120_epochs_2025-07-11_16-56/config.yaml
-    hdf5_file: /mnt/DATA_10T/data_rpg/circa/hdf5/CIRCA_CR_merged.hdf5
+    checkpoint: /mnt/common/hdd/home/SPeillet/outputs/U-TILISE/v2_mix_closest_random_clouds/2026-03-23_15-30/checkpoints/Model_best.pth
+    test_config: /mnt/common/hdd/home/SPeillet/outputs/U-TILISE/v2_mix_closest_random_clouds/2026-03-23_15-30/config.yaml
+    hdf5_file: /var/data/datasets/CIRCA_CR_merged.hdf5
     mode: null
     split: test
 
@@ -32,8 +31,8 @@ mask:
     p_filter: 0.1
 
 utilise:
-    encoder_widths: [64, 64, 64, 128]
-    decoder_widths: [64, 64, 64, 128]
+    encoder_widths: [64, 64, 64, 64, 128]
+    decoder_widths: [64, 64, 64, 64, 128]
 
 training_settings:
     batch_size: 1
@@ -63,6 +62,6 @@ misc:
     run_mode: test
 
 output:
-    save_dir: /mnt/DATA_10T/data_rpg/outputs/U-TILISE/metrics/ALL_SAR_120_epochs/consecutive_fully_masked_parcelle
+    save_dir: /mnt/common/hdd/home/SPeillet/outputs/U-TILISE/metrics/v2_mix_closest_random_clouds/consecutive_fully_masked
     suffix:
     plot_model_txt: true

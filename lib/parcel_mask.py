@@ -18,6 +18,7 @@ from rasterio.transform import Affine
 from shapely import STRtree
 from shapely.geometry import box, shape
 from shapely.ops import transform as shapely_transform
+from shapely.validation import make_valid
 
 
 class ParcelMaskGenerator:
@@ -121,7 +122,10 @@ class ParcelMaskGenerator:
         shapes = []
         for idx in candidate_idxs:
             geom = parcels[idx]
-            clipped = geom.intersection(patch_bbox)
+            try:
+                clipped = geom.intersection(patch_bbox)
+            except Exception:
+                clipped = make_valid(geom).intersection(patch_bbox)
             if clipped is not None and not clipped.is_empty:
                 shapes.append((clipped, 1))
 
