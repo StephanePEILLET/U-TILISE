@@ -2,7 +2,7 @@ data:
     dataset: circa
     hdf5_file: /var/data/datasets/CIRCA_CR_merged.hdf5
     load_transforms: /mnt/common/hdd/home/SPeillet/U-TILISE/data/CIRCA_patches_datasets_with_transforms.json
-    parcel_gpkg: /mnt/stores/store_dai/projets/pac/3str/EXP_2/Data_Vecteur/CIRCA+_parcels_full.gpkg
+    parcel_gpkg: /mnt/stores/store-DAI/projets/pac/3str/EXP_2/Data_Vecteur/CIRCA+_parcels_full.gpkg
     channels: all
     use_sar: mix_closest
     subset: False
