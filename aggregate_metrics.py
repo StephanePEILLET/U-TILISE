@@ -124,6 +124,38 @@ EXPERIMENTS: list[tuple[str, str, dict[str, str]]] = [
             "consecutive_fully_masked": "metrics_v3_mix_rc_cfm",
         },
     ),
+    (
+        "**v3** loss (L1+SSIM+L1_occ)",
+        "v3_mix_closest_random_clouds_loss",
+        {
+            "random_fully_masked": "metrics_v3_loss_rfm",
+            "consecutive_fully_masked": "metrics_v3_loss_cfm",
+        },
+    ),
+    (
+        "**v3** wider",
+        "v3_mix_closest_random_clouds_wider",
+        {
+            "random_fully_masked": "metrics_v3_wider_rfm",
+            "consecutive_fully_masked": "metrics_v3_wider_cfm",
+        },
+    ),
+    (
+        "**v3** combined (wider+cyclic+loss)",
+        "v3_mix_closest_random_clouds_combined",
+        {
+            "random_fully_masked": "metrics_v3_combined_rfm",
+            "consecutive_fully_masked": "metrics_v3_combined_cfm",
+        },
+    ),
+    (
+        "**v3** cyclic",
+        "v3_mix_closest_random_clouds_cyclic",
+        {
+            "random_fully_masked": "metrics_v3_cyclic_rfm",
+            "consecutive_fully_masked": "metrics_v3_cyclic_cfm",
+        },
+    ),
 ]
 
 MASK_MODES = ["random_fully_masked", "consecutive_fully_masked"]
@@ -302,6 +334,15 @@ def _load_all_stats(logs_dir: Path | None, json_root: Path | None) -> StatsStore
     return store
 
 
+def _experiments_with_data(store: StatsStore) -> list[tuple[str, str, dict[str, str]]]:
+    """Retourne uniquement les expériences ayant au moins un résultat dans le store."""
+    return [
+        (display_name, exp_dir, log_jobs)
+        for display_name, exp_dir, log_jobs in EXPERIMENTS
+        if any(store.get((exp_dir, mm)) is not None for mm in MASK_MODES)
+    ]
+
+
 def _section_global(lines: list[str], store: StatsStore) -> None:
     """Section 1 : tableau récapitulatif global."""
     lines.append("## 1. Récapitulatif Global\n")
@@ -311,7 +352,7 @@ def _section_global(lines: list[str], store: StatsStore) -> None:
         header = "| Modèle | " + " | ".join(m.upper() for m in MAIN_METRICS) + " |"
         sep = "|:---|" + "|".join(":---:" for _ in MAIN_METRICS) + "|"
         lines.extend([header, sep])
-        for display_name, exp_dir, _jobs in EXPERIMENTS:
+        for display_name, exp_dir, _jobs in _experiments_with_data(store):
             stats = store.get((exp_dir, mask_mode))
             vals = [fmt(stats.get(m), m) for m in MAIN_METRICS] if stats else ["—"] * len(MAIN_METRICS)
             lines.append(f"| {display_name} | {' | '.join(vals)} |")
@@ -328,7 +369,7 @@ def _section_occluded_only(lines: list[str], store: StatsStore) -> None:
         header = "| Modèle | " + " | ".join(m.upper() for m in MAIN_METRICS) + " |"
         sep = "|:---|" + "|".join(":---:" for _ in MAIN_METRICS) + "|"
         lines.extend([header, sep])
-        for display_name, exp_dir, _jobs in EXPERIMENTS:
+        for display_name, exp_dir, _jobs in _experiments_with_data(store):
             stats = store.get((exp_dir, mask_mode))
             if stats is None:
                 vals = ["—"] * len(MAIN_METRICS)
@@ -347,7 +388,7 @@ def _section_occluded_observed(lines: list[str], store: StatsStore) -> None:
         header = "| Modèle | Type | " + " | ".join(m.upper() for m in MAIN_METRICS) + " |"
         sep = "|:---|:---|" + "|".join(":---:" for _ in MAIN_METRICS) + "|"
         lines.extend([header, sep])
-        for display_name, exp_dir, _jobs in EXPERIMENTS:
+        for display_name, exp_dir, _jobs in _experiments_with_data(store):
             stats = store.get((exp_dir, mask_mode))
             for sub_label, suffix in [("Occluded", "_occluded_input_pixels"), ("Observed", "_observed_input_pixels")]:
                 if stats is None:
@@ -369,7 +410,7 @@ def _section_per_band(lines: list[str], store: StatsStore) -> None:
             header = "| Modèle | " + " | ".join(BAND_NAMES) + " |"
             sep = "|:---|" + "|".join(":---:" for _ in BAND_NAMES) + "|"
             lines.extend([header, sep])
-            for display_name, exp_dir, _jobs in EXPERIMENTS:
+            for display_name, exp_dir, _jobs in _experiments_with_data(store):
                 stats = store.get((exp_dir, mask_mode))
                 if stats is None:
                     vals = ["—"] * len(BAND_NAMES)
