@@ -8,8 +8,8 @@
 #SBATCH --mem=100G
 #SBATCH --partition=jean-zellou
 
-#SBATCH -e /mnt/stores/store_dai/tmp/speillet/logs/metrics_v3_combined_cfm-%j.out
-#SBATCH -o /mnt/stores/store_dai/tmp/speillet/logs/metrics_v3_combined_cfm-%j.out
+#SBATCH -e /mnt/stores/store-DAI/tmp/speillet/logs/metrics_v3_combined_cfm-%j.out
+#SBATCH -o /mnt/stores/store-DAI/tmp/speillet/logs/metrics_v3_combined_cfm-%j.out
 
 cat "$0"
 echo "================================================================================"
