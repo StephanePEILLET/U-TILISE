@@ -30,8 +30,8 @@ EXPERIMENTS: list[tuple[str, str, dict[str, str]]] = [
         "**ALL_SAR_120_epochs** (mix_closest)",
         "ALL_SAR_120_epochs",
         {
-            "random_fully_masked": "metrics_ALL_SAR_rfm",
-            "consecutive_fully_masked": "metrics_ALL_SAR_cfm",
+            "random_fully_masked": "metrics_allsar_rfm_v2",
+            "consecutive_fully_masked": "metrics_allsar_cfm_v2",
         },
     ),
     (
