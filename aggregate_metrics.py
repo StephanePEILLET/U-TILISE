@@ -30,8 +30,8 @@ EXPERIMENTS: list[tuple[str, str, dict[str, str]]] = [
         "**ALL_SAR_120_epochs** (mix_closest)",
         "ALL_SAR_120_epochs",
         {
-            "random_fully_masked": "metrics_allsar_rfm_v2",
-            "consecutive_fully_masked": "metrics_allsar_cfm_v2",
+            "random_fully_masked": "metrics_ALL_SAR_rfm",
+            "consecutive_fully_masked": "metrics_ALL_SAR_cfm",
         },
     ),
     (
@@ -201,22 +201,22 @@ NODATA_COMPARISON: list[tuple[str, str, str, str]] = [
 # ─── Chargement des stats ──────────────────────────────────────────────────────
 
 
-def _find_latest_log(logs_dir: Path, job_prefix: str) -> Path | None:
-    """Trouve le fichier .out le plus récent correspondant à un job-name.
+def _find_logs_sorted(logs_dir: Path, job_prefix: str) -> list[Path]:
+    """Trouve tous les fichiers .out correspondant à un job-name, triés par job_id décroissant.
 
     Les fichiers sont nommés : <job-name>-<slurm_job_id>.out
-    On prend celui avec le plus grand job_id (= le plus récent).
+    Cherche récursivement dans les sous-répertoires (ex: archives_metrics/).
     """
     pattern = re.compile(rf"^{re.escape(job_prefix)}-(\d+)\.out$")
     candidates: list[tuple[int, Path]] = []
     for f in logs_dir.iterdir():
+        if f.is_dir():
+            continue
         m = pattern.match(f.name)
         if m:
             candidates.append((int(m.group(1)), f))
-    if not candidates:
-        return None
     candidates.sort(key=lambda x: x[0], reverse=True)
-    return candidates[0][1]
+    return [p for _, p in candidates]
 
 
 def _parse_stats_from_log(log_path: Path) -> dict | None:
@@ -256,11 +256,16 @@ def _parse_stats_from_log(log_path: Path) -> dict | None:
 
 
 def load_stats_from_logs(logs_dir: Path, job_prefix: str) -> dict | None:
-    """Charge les stats depuis le log le plus récent pour un job donné."""
-    log_path = _find_latest_log(logs_dir, job_prefix)
-    if log_path is None:
-        return None
-    return _parse_stats_from_log(log_path)
+    """Charge les stats depuis le log le plus récent **valide** pour un job donné.
+
+    Essaie les logs du plus récent au plus ancien, et retourne les stats
+    du premier qui contient un bloc 'Statistics:' parsable.
+    """
+    for log_path in _find_logs_sorted(logs_dir, job_prefix):
+        stats = _parse_stats_from_log(log_path)
+        if stats is not None:
+            return stats
+    return None
 
 
 def load_stats_from_json(json_root: Path, experiment_dir: str, mask_mode: str) -> dict | None:

@@ -12,8 +12,8 @@ data:
         return_valid_obs_only: true
 
 test_data:
-    checkpoint: /mnt/stores/store_dai/tmp/speillet/cloud_reconstruction_results/U-TILISE/v3_mix_closest_random_clouds_loss/2026-03-26_16-00/checkpoints/Model_best.pth
-    test_config: /mnt/stores/store_dai/tmp/speillet/cloud_reconstruction_results/U-TILISE/v3_mix_closest_random_clouds_loss/2026-03-26_16-00/config.yaml
+    checkpoint: /mnt/common/hdd/home/SPeillet/outputs/U-TILISE/v3_mix_closest_random_clouds_loss/2026-03-26_16-00/checkpoints/Model_best.pth
+    test_config: /mnt/common/hdd/home/SPeillet/outputs/U-TILISE/v3_mix_closest_random_clouds_loss/2026-03-26_16-00/config.yaml
     hdf5_file: /var/data/datasets/CIRCA_CR_merged.hdf5
     mode: null
     split: test

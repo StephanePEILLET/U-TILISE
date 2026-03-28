@@ -259,6 +259,7 @@ def main(args: argparse.Namespace) -> None:
             mode=None,
             checkpoint=(Path(config.output.checkpoint_dir) / "Model_best.pth"),
             # temporal_window=MAX_SAMPLES_ON_GPU,
+            num_channels=test_dset.num_channels,
             device=device,
         )
 

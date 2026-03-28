@@ -141,7 +141,7 @@ class Imputation:
         return batch, y_pred
 
     def _resume(self) -> None:
-        checkpoint = torch.load(self.checkpoint)
+        checkpoint = torch.load(self.checkpoint, weights_only=True)
         self.model.load_state_dict(checkpoint["model_state_dict"])
         print(f"Checkpoint '{self.checkpoint}' loaded.")
         print(f"Chosen epoch: {checkpoint['epoch']}\n")

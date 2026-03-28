@@ -5,6 +5,7 @@ data:
     parcel_gpkg: /mnt/stores/store_dai/projets/pac/3str/EXP_2/Data_Vecteur/CIRCA+_parcels_full.gpkg
     channels: all
     use_sar: mix_closest
+    mask_sar: true                         # Mode legacy ALL_SAR : le SAR est aussi masqué (erreur d'entraînement)
     subset: False
     max_seq_length: 14
     filter_settings:
