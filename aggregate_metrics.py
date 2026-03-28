@@ -115,6 +115,15 @@ EXPERIMENTS: list[tuple[str, str, dict[str, str]]] = [
             "consecutive_fully_masked": "metrics_v2_ad_rc_cfm",
         },
     ),
+    # ── V3 models ──
+    (
+        "**v3** mix_closest, random_clouds",
+        "v3_mix_closest_random_clouds",
+        {
+            "random_fully_masked": "metrics_v3_mix_rc_rfm",
+            "consecutive_fully_masked": "metrics_v3_mix_rc_cfm",
+        },
+    ),
 ]
 
 MASK_MODES = ["random_fully_masked", "consecutive_fully_masked"]
@@ -123,6 +132,38 @@ MASK_MODES = ["random_fully_masked", "consecutive_fully_masked"]
 MAIN_METRICS = ["mae", "rmse", "psnr", "ssim", "sam", "r2"]
 
 BAND_NAMES = ["B2", "B3", "B4", "B5", "B6", "B7", "B8", "B8A", "B11", "B12"]
+
+# ─── Parcelle experiments ────────────────────────────────────────────────────────
+# (display_name, json_subdir, {mask_mode: log_prefix})
+PARCELLE_EXPERIMENTS: list[tuple[str, str, dict[str, str]]] = [
+    (
+        "**ALL_SAR_120_epochs** (mix_closest)",
+        "ALL_SAR_120_epochs",
+        {
+            "random_fully_masked": "m_allsar_rfm_parc",
+            "consecutive_fully_masked": "m_allsar_cfm_parc",
+        },
+    ),
+    (
+        "**v2** mix_closest, random_clouds",
+        "v2_mix_closest_random_clouds",
+        {
+            "random_fully_masked": "m_v2rc_rfm_parc",
+            "consecutive_fully_masked": "m_v2rc_cfm_parc",
+        },
+    ),
+]
+
+PARCELLE_MASK_SUFFIX = "_parcelle"  # appended to mask_mode for JSON subdir
+
+DEFAULT_JSON_ROOT = Path("/mnt/DATA_10T/data_rpg/outputs/U-TILISE/metrics")
+
+# ─── Nodata comparison: original logs (without nodata filtering) ────────────────
+NODATA_COMPARISON: list[tuple[str, str, str, str]] = [
+    # (display_name, mask_mode, old_log_prefix, new_log_prefix)
+    ("**ALL_SAR_120_epochs** (mix_closest)", "random_fully_masked", "metrics_allsar_rfm", "metrics_allsar_rfm_v2"),
+    ("**ALL_SAR_120_epochs** (mix_closest)", "consecutive_fully_masked", "metrics_allsar_cfm", "metrics_allsar_cfm_v2"),
+]
 
 
 # ─── Chargement des stats ──────────────────────────────────────────────────────
@@ -453,7 +494,7 @@ def _section_best_models(lines: list[str], store: StatsStore) -> None:
 
 
 def _section_availability(lines: list[str], store: StatsStore) -> None:
-    """Section 5 : résumé des résultats trouvés / manquants."""
+    """Section : résumé des résultats trouvés / manquants."""
     lines.append("## 5. Disponibilité des résultats\n")
     header = "| Modèle | " + " | ".join(m.replace("_", " ").title() for m in MASK_MODES) + " |"
     sep = "|:---|" + "|".join(":---:" for _ in MASK_MODES) + "|"
@@ -464,10 +505,113 @@ def _section_availability(lines: list[str], store: StatsStore) -> None:
     lines.append("")
 
 
+# ─── Parcelle metrics ───────────────────────────────────────────────────────────
+
+
+def _load_parcelle_stats(
+    logs_dir: Path | None, json_root: Path | None
+) -> StatsStore:
+    """Charge les stats parcelle depuis logs SLURM ou JSON locaux."""
+    store: StatsStore = {}
+    for _display_name, exp_dir, log_jobs in PARCELLE_EXPERIMENTS:
+        for mask_mode in MASK_MODES:
+            key = (exp_dir, mask_mode)
+            stats = None
+            if logs_dir is not None:
+                job_prefix = log_jobs.get(mask_mode)
+                if job_prefix:
+                    stats = load_stats_from_logs(logs_dir, job_prefix)
+            if stats is None and json_root is not None:
+                # JSON path: <json_root>/<exp_dir>/<mask_mode>_parcelle/test_stats.json
+                json_subdir = f"{mask_mode}{PARCELLE_MASK_SUFFIX}"
+                path = json_root / exp_dir / json_subdir / "test_stats.json"
+                if path.exists():
+                    with open(path, encoding="utf-8") as f:
+                        stats = json.load(f)
+            store[key] = stats
+    return store
+
+
+def _section_parcelle(lines: list[str], parc_store: StatsStore) -> None:
+    """Section : métriques à la parcelle (RPG)."""
+    lines.append("## 6. Métriques à la Parcelle (RPG)\n")
+    sfx_occ = "_occluded_input_pixels"
+    sfx_obs = "_observed_input_pixels"
+
+    for mask_mode in MASK_MODES:
+        mode_label = mask_mode.replace("_", " ").title()
+        lines.append(f"### Masquage : {mode_label}\n")
+        header = "| Modèle | Type | " + " | ".join(m.upper() for m in MAIN_METRICS) + " |"
+        sep = "|:---|:---|" + "|".join(":---:" for _ in MAIN_METRICS) + "|"
+        lines.extend([header, sep])
+        has_data = False
+        for display_name, exp_dir, _jobs in PARCELLE_EXPERIMENTS:
+            stats = parc_store.get((exp_dir, mask_mode))
+            if stats is None:
+                for sub_label in ["Global", "Occluded", "Observed"]:
+                    lines.append(f"| {display_name} | {sub_label} | " + " | ".join(["—"] * len(MAIN_METRICS)) + " |")
+                continue
+            has_data = True
+            # Global
+            vals = [fmt(stats.get(m), m) for m in MAIN_METRICS]
+            lines.append(f"| {display_name} | Global | {' | '.join(vals)} |")
+            # Occluded
+            vals = [fmt(stats.get(_stat_key(m, sfx_occ)), m) for m in MAIN_METRICS]
+            lines.append(f"| {display_name} | Occluded | {' | '.join(vals)} |")
+            # Observed
+            vals = [fmt(stats.get(_stat_key(m, sfx_obs)), m) for m in MAIN_METRICS]
+            lines.append(f"| {display_name} | Observed | {' | '.join(vals)} |")
+        if not has_data:
+            lines.append("\n_Aucun résultat parcelle disponible._\n")
+        lines.append("")
+
+
+# ─── Nodata comparison ──────────────────────────────────────────────────────────
+
+
+def _section_nodata_comparison(lines: list[str], logs_dir: Path | None) -> None:
+    """Section : comparaison avant/après filtrage des pixels noirs (nodata)."""
+    lines.append("## 7. Impact du Filtrage des Pixels Noirs (nodata)\n")
+    lines.append("Comparaison des métriques **avant** et **après** exclusion des pixels "
+                 "où toutes les bandes = 0 dans la cible.\n")
+
+    if logs_dir is None:
+        lines.append("_Logs SLURM non disponibles._\n")
+        return
+
+    header = "| Modèle | Masquage | Version | " + " | ".join(m.upper() for m in MAIN_METRICS) + " |"
+    sep = "|:---|:---|:---|" + "|".join(":---:" for _ in MAIN_METRICS) + "|"
+    lines.extend([header, sep])
+
+    sfx = "_occluded_input_pixels"
+    has_data = False
+    for display_name, mask_mode, old_prefix, new_prefix in NODATA_COMPARISON:
+        old_stats = load_stats_from_logs(logs_dir, old_prefix)
+        new_stats = load_stats_from_logs(logs_dir, new_prefix)
+        mode_label = mask_mode.replace("_", " ").title()
+
+        for label, stats in [("Sans filtrage", old_stats), ("Avec filtrage", new_stats)]:
+            if stats is None:
+                vals = ["—"] * len(MAIN_METRICS)
+            else:
+                has_data = True
+                vals = [fmt(stats.get(_stat_key(m, sfx)), m) for m in MAIN_METRICS]
+            lines.append(f"| {display_name} | {mode_label} | {label} | {' | '.join(vals)} |")
+
+    if not has_data:
+        lines.append("\n_Aucune comparaison nodata disponible._\n")
+    lines.append("")
+
+
 # ─── Génération du rapport ──────────────────────────────────────────────────────
 
 
-def generate_report(store: StatsStore, source_label: str) -> str:
+def generate_report(
+    store: StatsStore,
+    source_label: str,
+    parc_store: StatsStore | None = None,
+    logs_dir: Path | None = None,
+) -> str:
     """Génère le rapport complet en Markdown."""
     lines: list[str] = [
         "# Rapport de Métriques — Cloud Reconstruction U-TILISE\n",
@@ -478,6 +622,9 @@ def generate_report(store: StatsStore, source_label: str) -> str:
     _section_occluded_observed(lines, store)
     _section_best_models(lines, store)
     _section_availability(lines, store)
+    if parc_store is not None:
+        _section_parcelle(lines, parc_store)
+    _section_nodata_comparison(lines, logs_dir)
     return "\n".join(lines)
 
 
@@ -492,7 +639,7 @@ def main() -> None:
     parser.add_argument(
         "--json-root",
         type=Path,
-        default=None,
+        default=DEFAULT_JSON_ROOT,
         help="Répertoire racine contenant les test_stats.json (fallback si log absent)",
     )
     parser.add_argument(
@@ -524,8 +671,14 @@ def main() -> None:
     n_total = len(store)
     print(f"Résultats trouvés : {n_found}/{n_total}")
 
+    # Chargement parcelle
+    parc_store = _load_parcelle_stats(logs_dir, json_root)
+    n_parc = sum(1 for v in parc_store.values() if v is not None)
+    n_parc_total = len(parc_store)
+    print(f"Résultats parcelle : {n_parc}/{n_parc_total}")
+
     # Génération du rapport
-    report = generate_report(store, source_label)
+    report = generate_report(store, source_label, parc_store=parc_store, logs_dir=logs_dir)
 
     # Afficher sur stdout
     print(report)
