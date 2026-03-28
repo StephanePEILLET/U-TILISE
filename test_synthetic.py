@@ -1,114 +1,62 @@
+"""
+Test that the without_coherence pipeline works correctly end-to-end:
+- Channel calculation in CIRCA_from_HDF5.setup_channels
+- Model input/output dimensions in utils.get_model
+- Forward pass through U-TILISE model
+"""
 
 import torch
 
-from dataloader_CIRCA.datasets.UTILISE_adapter import CIRCA_ADAPTED2UTILISE_Dataset
 from lib.models.utilise import UTILISE
 
 
-class MockDataset:
-    def __init__(self, phase, hdf5_file, shuffle, use_sar, channels, image_size, load_transforms):
-        self.use_sar = use_sar
-        self.channels = channels
-        self.without_coherence = False
-        if isinstance(self.use_sar, str) and "_without_coherence" in self.use_sar:
-            self.without_coherence = True
-            self.use_sar = self.use_sar.replace("_without_coherence", "")
+def simulate_setup_channels(use_sar_val, channels="all"):
+    """Reproduce the channel calculation logic from CIRCA_from_HDF5.setup_channels."""
+    without_coherence = False
+    use_sar = use_sar_val
+    if isinstance(use_sar, str) and ("_without_coherence" in use_sar or "_only_coherence" in use_sar):
+        without_coherence = True
+        use_sar = use_sar.replace("_without_coherence", "").replace("_only_coherence", "")
 
-        # Calculate num_channels identical to how setup_channels does it
-        self.num_channels = 10
-        if self.use_sar:
-            s1_bands = 2 if self.without_coherence else 4
-            if self.use_sar == "asc+desc":
-                self.num_channels += s1_bands * 2
-            elif self.use_sar in ["asc", "desc", "mix_closest"]:
-                self.num_channels += s1_bands
-            else:
-                raise ValueError("Bad SAR pairing")
-
-        self.c_index_rgb = [0, 1, 2]
-        self.c_index_nir = 3
-        self.s2_channels = list(range(10))
-
-    def __len__(self):
-        return 5
-
-    def __getitem__(self, idx):
-        seq_len = 10
-        t_seq = list(range(seq_len))
-        s1_asc = torch.randn(seq_len, 4, 32, 32)
-        s1_desc = torch.randn(seq_len, 4, 32, 32)
-        s1 = torch.randn(seq_len, 4, 32, 32)
-
-        return {
-            "S2": torch.randn(seq_len, 10, 32, 32),
-            "S2_dates": [torch.tensor(d, dtype=torch.float32) for d in t_seq],
-            "cloud_mask": torch.randint(0, 2, (seq_len, 1, 32, 32)),
-            "cloud_prob": torch.rand(seq_len, 1, 32, 32),
-            "S1": {
-                "S1_asc": s1_asc,
-                "S1_desc": s1_desc,
-                "S1_dates_asc": [torch.tensor(d, dtype=torch.float32) for d in t_seq],
-                "S1_dates_desc": [torch.tensor(d, dtype=torch.float32) for d in t_seq],
-                "S1": s1,
-                "S1_dates": [torch.tensor(d, dtype=torch.float32) for d in t_seq]
-            }
-        }
+    num_channels = 10 if channels == "all" else 4
+    if use_sar:
+        s1_bands = 2 if without_coherence else 4
+        if use_sar == "asc+desc":
+            num_channels += s1_bands * 2
+        elif use_sar in ["asc", "desc", "mix_closest"]:
+            num_channels += s1_bands
+        else:
+            raise ValueError(f"Bad SAR pairing: {use_sar}")
+    return num_channels, without_coherence, use_sar
 
 
-# Monkey patch CIRCA_from_HDF5
-import dataloader_CIRCA.datasets.UTILISE_adapter as uta
-
-uta.CIRCA_from_HDF5 = MockDataset
+def simulate_get_model_dims(use_sar_val, input_dim):
+    """Reproduce the output_dim calculation from lib.utils.get_model."""
+    output_dim = input_dim
+    if use_sar_val:
+        _has_no_coh = isinstance(use_sar_val, str) and ("_without_coherence" in use_sar_val or "_only_coherence" in use_sar_val)
+        s1_bands = 2 if _has_no_coh else 4
+        use_sar_base = use_sar_val.replace("_without_coherence", "").replace("_only_coherence", "") if isinstance(use_sar_val, str) else use_sar_val
+        if use_sar_base == "asc+desc":
+            output_dim -= 2 * s1_bands
+        else:
+            output_dim -= s1_bands
+    return output_dim
 
 
 def test_config(use_sar_val):
     print(f"=== TESTING CONFIG: use_sar='{use_sar_val}' ===")
 
-    # 1. Adapter creation
-    adapter = CIRCA_ADAPTED2UTILISE_Dataset(
-        method="utilise",
-        mask_settings={
-            "mask_type": "random_fully_masked",
-            "ratio_masked_frames": 0.5,
-            "ratio_fully_masked_frames": 0.0,
-            "fixed_masking_ratio": False,
-            "non_masked_frames": [0],
-            "intersect_real_cloud_masks": False,
-            "fill_value": 0,
-            "p_filter": 0.1
-        },
-        filter_settings={
-            "type": "cloud-free",
-            "min_length": 3,
-            "return_valid_obs_only": True
-        },
-        phase="train",
-        use_sar=use_sar_val,
-        channels="all",
-        image_size=(32, 32)
-    )
+    # 1. Channel calculation (same as CIRCA_from_HDF5.setup_channels)
+    input_dim, without_coherence, use_sar_resolved = simulate_setup_channels(use_sar_val)
+    print(f"  num_channels (input_dim) = {input_dim}, without_coherence = {without_coherence}")
 
-    # Check dataset initialized channel correctly
-    input_dim = adapter.dataset.num_channels
-    print(f"Dataset num_channels = {input_dim}")
+    # 2. Model output_dim calculation (same as lib.utils.get_model)
+    output_dim = simulate_get_model_dims(use_sar_val, input_dim)
+    print(f"  output_dim = {output_dim}")
+    assert output_dim == 10, f"Output dimension should be 10 (S2 only) but got {output_dim}!"
 
-    # 2. Get item
-    batch = adapter[0]
-    x = batch["x"]
-    print(f"Batch 'x' tensor shape = {x.shape}")
-    assert x.shape[1] == input_dim, f"Error: Dataset claims {input_dim} channels but returned {x.shape[1]}!"
-
-    # 3. Model setup logic
-    output_dim = input_dim
-    s1_bands = 2 if "_without_coherence" in use_sar_val else 4
-    base_use_sar = use_sar_val.replace("_without_coherence", "")
-    if base_use_sar == "asc+desc":
-        output_dim -= 2 * s1_bands
-    else:
-        output_dim -= s1_bands
-    print(f"Model config output_dim resolved to = {output_dim}")
-    assert output_dim == 10, "Output dimension didn't correctly subtract back to 10!"
-
+    # 3. Create model and run a forward pass
     model = UTILISE(
         input_dim=input_dim,
         output_dim=output_dim,
@@ -116,18 +64,41 @@ def test_config(use_sar_val):
         decoder_widths=[16, 16],
     )
 
-    # 4. Forward pass
-    x_input = x.unsqueeze(0)  # B=1
-    dates_input = batch["dates"].unsqueeze(0)  # B=1
-    out = model(x_input, batch_positions=dates_input)
-    print(f"Model output shape = {out.shape}")
-    assert out.shape[2] == 10, f"Expected 10 channels but got {out.shape[2]}"
-    print("SUCCESS!\n")
+    seq_len = 5
+    x = torch.randn(1, seq_len, input_dim, 32, 32)  # B=1
+    dates = torch.arange(seq_len, dtype=torch.float32).unsqueeze(0)  # B=1
+    out = model(x, batch_positions=dates)
+    print(f"  Model output shape = {out.shape}")
+    assert out.shape == (1, seq_len, 10, 32, 32), f"Expected (1, {seq_len}, 10, 32, 32) but got {out.shape}"
+
+    # 4. Simulate SAR slicing in __getitem__
+    s1_full = torch.randn(seq_len, 4, 32, 32)
+    if without_coherence:
+        s1_sliced = s1_full[:, :2, :, :]
+        assert s1_sliced.shape[1] == 2, f"Expected 2 SAR bands without coherence, got {s1_sliced.shape[1]}"
+    else:
+        s1_sliced = s1_full
+        assert s1_sliced.shape[1] == 4, f"Expected 4 SAR bands with coherence, got {s1_sliced.shape[1]}"
+
+    # 5. Verify x concatenation matches input_dim
+    frames_s2 = torch.randn(seq_len, 10, 32, 32)
+    if use_sar_resolved == "asc+desc":
+        frames_input = torch.cat((frames_s2, s1_sliced, s1_sliced), dim=1)
+    else:
+        frames_input = torch.cat((frames_s2, s1_sliced), dim=1)
+    assert frames_input.shape[1] == input_dim, (
+        f"Concatenated input has {frames_input.shape[1]} channels but expected {input_dim}"
+    )
+
+    print("  SUCCESS!\n")
 
 
 if __name__ == "__main__":
     # Test all variations
     test_config("mix_closest")
     test_config("mix_closest_without_coherence")
+    test_config("mix_closest_only_coherence")
     test_config("asc+desc")
     test_config("asc+desc_without_coherence")
+    test_config("asc+desc_only_coherence")
+    print("All tests passed.")

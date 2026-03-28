@@ -84,9 +84,9 @@ class CIRCA_from_HDF5(Dataset):
         self.shuffle: bool = shuffle
         self.use_sar: bool | SarPairingType = use_sar
         self.without_coherence = False
-        if isinstance(self.use_sar, str) and "_without_coherence" in self.use_sar:
+        if isinstance(self.use_sar, str) and ("_without_coherence" in self.use_sar or "_only_coherence" in self.use_sar):
             self.without_coherence = True
-            self.use_sar = self.use_sar.replace("_without_coherence", "")
+            self.use_sar = self.use_sar.replace("_without_coherence", "").replace("_only_coherence", "")
 
         self.rng: np.random.Generator = np.random.default_rng(seed=SEED)
         self.hdf5_file: h5py.File

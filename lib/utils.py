@@ -143,8 +143,10 @@ def get_model(config: DictConfig, input_dim: int, logger: logging.Logger | None 
         if "-mask" in config.data.channels:
             args_model.output_dim -= 1
         if config.data.get("use_sar", False):
-            s1_bands = 2 if isinstance(config.data.use_sar, str) and "_without_coherence" in config.data.use_sar else 4
-            use_sar_base = config.data.use_sar.replace("_without_coherence", "") if isinstance(config.data.use_sar, str) else config.data.use_sar
+            _sar = config.data.use_sar
+            _has_no_coh = isinstance(_sar, str) and ("_without_coherence" in _sar or "_only_coherence" in _sar)
+            s1_bands = 2 if _has_no_coh else 4
+            use_sar_base = _sar.replace("_without_coherence", "").replace("_only_coherence", "") if isinstance(_sar, str) else _sar
             if use_sar_base == "asc+desc":
                 args_model.output_dim -= 2 * s1_bands
             else:
