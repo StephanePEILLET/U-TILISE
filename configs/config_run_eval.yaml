@@ -2,10 +2,10 @@ data:
     dataset: circa         # Name of the dataset, ['earthnet2021', 'sen12mscrts']
     hdf5_file: /mnt/DATA_10T/data_rpg/circa/hdf5/CIRCA_CR_merged.hdf5 #/mnt/DATA_10T/data_rpg/circa/hdf5/circa_cloud_removal.hdf5
     load_transforms: ./data/CIRCA_patches_datasets_with_transforms.json
-    parcel_gpkg: /mnt/stores/store_dai/projets/pac/3str/EXP_2/Data_Vecteur/CIRCA+_parcels_full.gpkg  # Path to parcel GPKG. Set to null to disable parcel-only evaluation.
+    # parcel_gpkg: /mnt/stores/store_dai/projets/pac/3str/EXP_2/Data_Vecteur/CIRCA+_parcels_full.gpkg  # Path to parcel GPKG. Set to null to disable parcel-only evaluation.
     channels: all
     use_sar: mix_closest # asc /desc/ mix_closest / asc+desc
-    subset: False   
+    subset: false   
     max_seq_length: 5                     # Maximum temporal sequence length. Set to None to skip temporal trimming.
     return_windows: true
     filter_settings:
