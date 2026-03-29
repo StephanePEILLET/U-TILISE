@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=infer_tiles_v3_combined_consecutif
+#SBATCH --job-name=infer_tiles_v3_combined
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:1
@@ -8,8 +8,8 @@
 #SBATCH --mem=100G
 #SBATCH --partition=jean-zellou
 
-#SBATCH -e /mnt/stores/store-DAI/tmp/speillet/logs/infer_tiles_v3_combined_consecutif-%j.out
-#SBATCH -o /mnt/stores/store-DAI/tmp/speillet/logs/infer_tiles_v3_combined_consecutif-%j.out
+#SBATCH -e /mnt/stores/store-DAI/tmp/speillet/logs/infer_tiles_v3_combined-%j.out
+#SBATCH -o /mnt/stores/store-DAI/tmp/speillet/logs/infer_tiles_v3_combined-%j.out
 
 cat "$0"
 echo "================================================================================"
@@ -38,5 +38,5 @@ export TEMP=$TMPDIR
 export TMP=$TMPDIR
 
 WORK_DIR="/mnt/common/hdd/home/SPeillet/U-TILISE"
-srun --cpu-bind=none python $WORK_DIR/infer_from_tiles.py $WORK_DIR/configs/jzellou/configs/config_run_infer_from_tiles_v3_combined_consecutif.yaml utilise
+srun --cpu-bind=none python $WORK_DIR/infer_from_tiles.py $WORK_DIR/configs/jzellou/configs/config_run_infer_from_tiles_v3_combined.yaml utilise
 echo "Job complete"
