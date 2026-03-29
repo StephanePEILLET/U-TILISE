@@ -8,20 +8,24 @@
 
 | Modèle | MAE | RMSE | PSNR | SSIM | SAM | R2 |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|
-| **ALL_SAR_120_epochs** (mix_closest) | 1108.7 | 2112.3 | 21.53 | 0.6394 | 0.0735 | 0.4541 |
-| asc+desc, random_fully_masked, DA | — | — | — | — | — | — |
+| **ALL_SAR_120_epochs** (mix_closest) | 114.7 | 207.7 | 35.27 | 0.7129 | 0.0385 | 0.9535 |
+| asc+desc, random_fully_masked, DA | 126.9 | 250.0 | 34.54 | 0.7202 | 0.0404 | 0.9358 |
 | coherence_only | 268.9 | 509.7 | 30.91 | 0.7048 | 0.0696 | 0.7959 |
 | **v2** mix_closest, random_fully_masked | 129.7 | 248.6 | 34.30 | 0.7234 | 0.0417 | 0.9364 |
 | **v2** mix_closest, random_clouds | 107.4 | 204.7 | 35.69 | 0.7326 | 0.0353 | 0.9527 |
 | **v2** asc+desc, random_fully_masked | 129.4 | 250.8 | 34.33 | 0.7200 | 0.0408 | 0.9356 |
 | **v2** asc+desc, random_clouds | 116.0 | 216.0 | 35.06 | 0.7091 | 0.0392 | 0.9478 |
 | **v3** mix_closest, random_clouds | 122.6 | 226.6 | 34.66 | 0.7039 | 0.0420 | 0.9432 |
+| **v3** loss (L1+SSIM+L1_occ) | 110.8 | 206.7 | 35.46 | 0.7482 | 0.0368 | 0.9520 |
+| **v3** wider | 113.3 | 215.5 | 35.22 | 0.7194 | 0.0366 | 0.9480 |
+| **v3** combined (wider+cyclic+loss) | — | — | — | — | — | — |
+| **v3** cyclic | 108.0 | 210.1 | 35.62 | 0.7319 | 0.0355 | 0.9511 |
 
 ### Masquage : Consecutive Fully Masked
 
 | Modèle | MAE | RMSE | PSNR | SSIM | SAM | R2 |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|
-| **ALL_SAR_120_epochs** (mix_closest) | 823.9 | 1820.3 | 22.07 | 0.6275 | 0.0598 | 0.4705 |
+| **ALL_SAR_120_epochs** (mix_closest) | 131.9 | 278.3 | 33.42 | 0.6548 | 0.0411 | 0.9187 |
 | asc+desc, random_fully_masked, DA | 145.6 | 321.6 | 33.47 | 0.6832 | 0.0395 | 0.9077 |
 | coherence_only | 389.1 | 837.2 | 26.54 | 0.6488 | 0.1002 | 0.6212 |
 | **v2** mix_closest, random_fully_masked | 151.2 | 329.0 | 33.10 | 0.6783 | 0.0412 | 0.9038 |
@@ -29,6 +33,10 @@
 | **v2** asc+desc, random_fully_masked | 152.8 | 336.6 | 33.02 | 0.6760 | 0.0403 | 0.9000 |
 | **v2** asc+desc, random_clouds | 125.6 | 270.7 | 33.75 | 0.6586 | 0.0393 | 0.9204 |
 | **v3** mix_closest, random_clouds | 135.8 | 286.3 | 33.27 | 0.6651 | 0.0419 | 0.9132 |
+| **v3** loss (L1+SSIM+L1_occ) | 125.2 | 269.3 | 33.87 | 0.6987 | 0.0377 | 0.9219 |
+| **v3** wider | 130.6 | 287.7 | 33.45 | 0.6702 | 0.0376 | 0.9139 |
+| **v3** combined (wider+cyclic+loss) | 122.9 | 266.0 | 33.82 | 0.6901 | 0.0377 | 0.9241 |
+| **v3** cyclic | — | — | — | — | — | — |
 
 ## 2. Métriques sur pixels reconstruits (Occluded)
 
@@ -36,20 +44,24 @@
 
 | Modèle | MAE | RMSE | PSNR | SSIM | SAM | R2 |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|
-| **ALL_SAR_120_epochs** (mix_closest) | 6416.1 | 6750.5 | 3.63 | 0.0806 | 0.2969 | 0.0243 |
-| asc+desc, random_fully_masked, DA | — | — | — | — | — | — |
+| **ALL_SAR_120_epochs** (mix_closest) | 352.7 | 520.1 | 26.70 | 0.4409 | 0.0886 | 0.7902 |
+| asc+desc, random_fully_masked, DA | 435.8 | 658.9 | 25.26 | 0.4019 | 0.1014 | 0.7359 |
 | coherence_only | 1078.2 | 1382.8 | 19.53 | 0.3466 | 0.2360 | 0.4474 |
 | **v2** mix_closest, random_fully_masked | 421.7 | 636.5 | 25.48 | 0.4587 | 0.0976 | 0.7420 |
 | **v2** mix_closest, random_clouds | 360.5 | 538.3 | 26.36 | 0.4566 | 0.0903 | 0.7770 |
 | **v2** asc+desc, random_fully_masked | 432.5 | 651.6 | 25.34 | 0.4591 | 0.0980 | 0.7394 |
 | **v2** asc+desc, random_clouds | 379.2 | 556.4 | 26.01 | 0.4229 | 0.0965 | 0.7644 |
 | **v3** mix_closest, random_clouds | 406.1 | 585.0 | 25.54 | 0.3765 | 0.1065 | 0.7422 |
+| **v3** loss (L1+SSIM+L1_occ) | 351.0 | 528.1 | 26.60 | 0.4860 | 0.0861 | 0.7850 |
+| **v3** wider | 374.1 | 560.7 | 26.10 | 0.4633 | 0.0891 | 0.7654 |
+| **v3** combined (wider+cyclic+loss) | — | — | — | — | — | — |
+| **v3** cyclic | 381.0 | 563.5 | 25.98 | 0.4270 | 0.0981 | 0.7623 |
 
 ### Masquage : Consecutive Fully Masked
 
 | Modèle | MAE | RMSE | PSNR | SSIM | SAM | R2 |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|
-| **ALL_SAR_120_epochs** (mix_closest) | 6485.9 | 6753.7 | 3.60 | 0.0820 | 0.2818 | 0.0316 |
+| **ALL_SAR_120_epochs** (mix_closest) | 594.2 | 880.5 | 22.20 | 0.2190 | 0.1284 | 0.5547 |
 | asc+desc, random_fully_masked, DA | 698.2 | 1026.0 | 22.28 | 0.2904 | 0.1122 | 0.5836 |
 | coherence_only | 2665.8 | 2955.5 | 10.97 | 0.1041 | 0.5966 | 0.1401 |
 | **v2** mix_closest, random_fully_masked | 704.1 | 1036.2 | 22.24 | 0.3089 | 0.1106 | 0.5790 |
@@ -57,6 +69,10 @@
 | **v2** asc+desc, random_fully_masked | 729.6 | 1070.8 | 21.91 | 0.3149 | 0.1111 | 0.5681 |
 | **v2** asc+desc, random_clouds | 567.2 | 858.5 | 22.49 | 0.2374 | 0.1191 | 0.5722 |
 | **v3** mix_closest, random_clouds | 626.4 | 907.3 | 21.91 | 0.2504 | 0.1291 | 0.5601 |
+| **v3** loss (L1+SSIM+L1_occ) | 568.2 | 855.1 | 22.60 | 0.3146 | 0.1093 | 0.5880 |
+| **v3** wider | 619.6 | 926.9 | 21.83 | 0.2896 | 0.1141 | 0.5720 |
+| **v3** combined (wider+cyclic+loss) | 521.7 | 829.7 | 22.99 | 0.3176 | 0.1063 | 0.5993 |
+| **v3** cyclic | — | — | — | — | — | — |
 
 ## 3. Occluded vs Observed (détail)
 
@@ -64,10 +80,10 @@
 
 | Modèle | Type | MAE | RMSE | PSNR | SSIM | SAM | R2 |
 |:---|:---|:---:|:---:|:---:|:---:|:---:|:---:|
-| **ALL_SAR_120_epochs** (mix_closest) | Occluded | 6416.1 | 6750.5 | 3.63 | 0.0806 | 0.2969 | 0.0243 |
-| **ALL_SAR_120_epochs** (mix_closest) | Observed | 69.9 | 100.2 | 40.08 | 0.8085 | 0.0290 | 0.9908 |
-| asc+desc, random_fully_masked, DA | Occluded | — | — | — | — | — | — |
-| asc+desc, random_fully_masked, DA | Observed | — | — | — | — | — | — |
+| **ALL_SAR_120_epochs** (mix_closest) | Occluded | 352.7 | 520.1 | 26.70 | 0.4409 | 0.0886 | 0.7902 |
+| **ALL_SAR_120_epochs** (mix_closest) | Observed | 69.2 | 99.0 | 40.19 | 0.8106 | 0.0288 | 0.9911 |
+| asc+desc, random_fully_masked, DA | Occluded | 435.8 | 658.9 | 25.26 | 0.4019 | 0.1014 | 0.7359 |
+| asc+desc, random_fully_masked, DA | Observed | 67.7 | 98.3 | 40.33 | 0.8276 | 0.0290 | 0.9891 |
 | coherence_only | Occluded | 1078.2 | 1382.8 | 19.53 | 0.3466 | 0.2360 | 0.4474 |
 | coherence_only | Observed | 71.3 | 103.8 | 39.83 | 0.8044 | 0.0299 | 0.9883 |
 | **v2** mix_closest, random_fully_masked | Occluded | 421.7 | 636.5 | 25.48 | 0.4587 | 0.0976 | 0.7420 |
@@ -80,13 +96,21 @@
 | **v2** asc+desc, random_clouds | Observed | 66.2 | 96.1 | 40.52 | 0.8095 | 0.0282 | 0.9894 |
 | **v3** mix_closest, random_clouds | Occluded | 406.1 | 585.0 | 25.54 | 0.3765 | 0.1065 | 0.7422 |
 | **v3** mix_closest, random_clouds | Observed | 68.9 | 100.0 | 40.19 | 0.8142 | 0.0298 | 0.9883 |
+| **v3** loss (L1+SSIM+L1_occ) | Occluded | 351.0 | 528.1 | 26.60 | 0.4860 | 0.0861 | 0.7850 |
+| **v3** loss (L1+SSIM+L1_occ) | Observed | 65.3 | 93.5 | 40.75 | 0.8428 | 0.0274 | 0.9898 |
+| **v3** wider | Occluded | 374.1 | 560.7 | 26.10 | 0.4633 | 0.0891 | 0.7654 |
+| **v3** wider | Observed | 64.2 | 92.9 | 40.79 | 0.8114 | 0.0267 | 0.9905 |
+| **v3** combined (wider+cyclic+loss) | Occluded | — | — | — | — | — | — |
+| **v3** combined (wider+cyclic+loss) | Observed | — | — | — | — | — | — |
+| **v3** cyclic | Occluded | 381.0 | 563.5 | 25.98 | 0.4270 | 0.0981 | 0.7623 |
+| **v3** cyclic | Observed | 56.7 | 82.4 | 41.80 | 0.8374 | 0.0237 | 0.9932 |
 
 ### Masquage : Consecutive Fully Masked
 
 | Modèle | Type | MAE | RMSE | PSNR | SSIM | SAM | R2 |
 |:---|:---|:---:|:---:|:---:|:---:|:---:|:---:|
-| **ALL_SAR_120_epochs** (mix_closest) | Occluded | 6485.9 | 6753.7 | 3.60 | 0.0820 | 0.2818 | 0.0316 |
-| **ALL_SAR_120_epochs** (mix_closest) | Observed | 70.1 | 100.6 | 40.05 | 0.8078 | 0.0291 | 0.9907 |
+| **ALL_SAR_120_epochs** (mix_closest) | Occluded | 594.2 | 880.5 | 22.20 | 0.2190 | 0.1284 | 0.5547 |
+| **ALL_SAR_120_epochs** (mix_closest) | Observed | 69.4 | 99.4 | 40.16 | 0.8098 | 0.0289 | 0.9910 |
 | asc+desc, random_fully_masked, DA | Occluded | 698.2 | 1026.0 | 22.28 | 0.2904 | 0.1122 | 0.5836 |
 | asc+desc, random_fully_masked, DA | Observed | 67.9 | 98.5 | 40.31 | 0.8272 | 0.0290 | 0.9890 |
 | coherence_only | Occluded | 2665.8 | 2955.5 | 10.97 | 0.1041 | 0.5966 | 0.1401 |
@@ -101,6 +125,14 @@
 | **v2** asc+desc, random_clouds | Observed | 66.4 | 96.4 | 40.48 | 0.8088 | 0.0283 | 0.9893 |
 | **v3** mix_closest, random_clouds | Occluded | 626.4 | 907.3 | 21.91 | 0.2504 | 0.1291 | 0.5601 |
 | **v3** mix_closest, random_clouds | Observed | 69.2 | 100.4 | 40.15 | 0.8135 | 0.0298 | 0.9883 |
+| **v3** loss (L1+SSIM+L1_occ) | Occluded | 568.2 | 855.1 | 22.60 | 0.3146 | 0.1093 | 0.5880 |
+| **v3** loss (L1+SSIM+L1_occ) | Observed | 65.6 | 94.0 | 40.70 | 0.8422 | 0.0275 | 0.9897 |
+| **v3** wider | Occluded | 619.6 | 926.9 | 21.83 | 0.2896 | 0.1141 | 0.5720 |
+| **v3** wider | Observed | 64.6 | 93.4 | 40.74 | 0.8106 | 0.0268 | 0.9904 |
+| **v3** combined (wider+cyclic+loss) | Occluded | 521.7 | 829.7 | 22.99 | 0.3176 | 0.1063 | 0.5993 |
+| **v3** combined (wider+cyclic+loss) | Observed | 69.5 | 99.8 | 40.17 | 0.8299 | 0.0280 | 0.9887 |
+| **v3** cyclic | Occluded | — | — | — | — | — | — |
+| **v3** cyclic | Observed | — | — | — | — | — | — |
 
 ## 4. Meilleurs modèles — Métriques Occluded
 
@@ -110,21 +142,21 @@
 
 | # | Modèle | Score | MAE | RMSE | PSNR | SSIM | SAM | R2 |
 |:---:|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| 1 | **v2** mix_closest, random_clouds | 1.22 | 360.5 | 538.3 | 26.36 | 0.4566 | 0.0903 | 0.7770 |
-| 2 | **v2** asc+desc, random_clouds | 2.22 | 379.2 | 556.4 | 26.01 | 0.4229 | 0.0965 | 0.7644 |
-| 3 | **v3** mix_closest, random_clouds | 3.44 | 406.1 | 585.0 | 25.54 | 0.3765 | 0.1065 | 0.7422 |
-| 4 | **v2** mix_closest, random_fully_masked | 3.67 | 421.7 | 636.5 | 25.48 | 0.4587 | 0.0976 | 0.7420 |
-| 5 | **v2** asc+desc, random_fully_masked | 4.44 | 432.5 | 651.6 | 25.34 | 0.4591 | 0.0980 | 0.7394 |
+| 1 | **v3** loss (L1+SSIM+L1_occ) | 1.56 | 351.0 | 528.1 | 26.60 | 0.4860 | 0.0861 | 0.7850 |
+| 2 | **ALL_SAR_120_epochs** (mix_closest) | 1.89 | 352.7 | 520.1 | 26.70 | 0.4409 | 0.0886 | 0.7902 |
+| 3 | **v2** mix_closest, random_clouds | 3.33 | 360.5 | 538.3 | 26.36 | 0.4566 | 0.0903 | 0.7770 |
+| 4 | **v3** wider | 3.89 | 374.1 | 560.7 | 26.10 | 0.4633 | 0.0891 | 0.7654 |
+| 5 | **v2** asc+desc, random_clouds | 5.11 | 379.2 | 556.4 | 26.01 | 0.4229 | 0.0965 | 0.7644 |
 
-#### Détail par bande du meilleur modèle : **v2** mix_closest, random_clouds
+#### Détail par bande du meilleur modèle : **v3** loss (L1+SSIM+L1_occ)
 
 | Métrique | B2 | B3 | B4 | B5 | B6 | B7 | B8 | B8A | B11 | B12 |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| MAE | 209.0 | 221.9 | 292.8 | 284.3 | 400.8 | 478.0 | 509.1 | 480.7 | 375.2 | 353.0 |
-| RMSE | 335.6 | 349.1 | 447.9 | 424.4 | 550.2 | 644.7 | 679.5 | 645.2 | 512.2 | 485.9 |
-| PSNR | 32.55 | 31.66 | 28.77 | 29.24 | 26.16 | 24.65 | 24.11 | 24.60 | 26.52 | 27.09 |
-| SSIM | 0.3661 | 0.4102 | 0.4067 | 0.4740 | 0.4865 | 0.4885 | 0.4686 | 0.4997 | 0.4937 | 0.4721 |
-| R2 | 0.4490 | 0.5062 | 0.4971 | 0.5012 | 0.5062 | 0.5218 | 0.5210 | 0.5419 | 0.5152 | 0.5252 |
+| MAE | 222.0 | 227.6 | 289.0 | 282.7 | 388.6 | 460.6 | 488.6 | 463.4 | 354.5 | 333.3 |
+| RMSE | 348.9 | 355.9 | 444.0 | 424.4 | 540.1 | 630.3 | 663.2 | 631.2 | 488.1 | 467.7 |
+| PSNR | 32.37 | 31.70 | 29.00 | 29.36 | 26.39 | 24.89 | 24.39 | 24.84 | 26.97 | 27.49 |
+| SSIM | 0.4186 | 0.4620 | 0.4566 | 0.4938 | 0.5035 | 0.5049 | 0.4952 | 0.5136 | 0.5139 | 0.4975 |
+| R2 | 0.4701 | 0.5230 | 0.5214 | 0.5185 | 0.5263 | 0.5417 | 0.5409 | 0.5576 | 0.5521 | 0.5559 |
 
 ### Consecutive Fully Masked
 
@@ -132,21 +164,21 @@
 
 | # | Modèle | Score | MAE | RMSE | PSNR | SSIM | SAM | R2 |
 |:---:|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| 1 | **v2** mix_closest, random_clouds | 1.89 | 542.1 | 847.0 | 22.71 | 0.2766 | 0.1151 | 0.5809 |
-| 2 | asc+desc, random_fully_masked, DA | 3.00 | 698.2 | 1026.0 | 22.28 | 0.2904 | 0.1122 | 0.5836 |
-| 3 | **v2** asc+desc, random_clouds | 3.22 | 567.2 | 858.5 | 22.49 | 0.2374 | 0.1191 | 0.5722 |
-| 4 | **v2** mix_closest, random_fully_masked | 3.67 | 704.1 | 1036.2 | 22.24 | 0.3089 | 0.1106 | 0.5790 |
-| 5 | **v3** mix_closest, random_clouds | 4.56 | 626.4 | 907.3 | 21.91 | 0.2504 | 0.1291 | 0.5601 |
+| 1 | **v3** combined (wider+cyclic+loss) | 1.00 | 521.7 | 829.7 | 22.99 | 0.3176 | 0.1063 | 0.5993 |
+| 2 | **v3** loss (L1+SSIM+L1_occ) | 2.89 | 568.2 | 855.1 | 22.60 | 0.3146 | 0.1093 | 0.5880 |
+| 3 | **v2** mix_closest, random_clouds | 3.56 | 542.1 | 847.0 | 22.71 | 0.2766 | 0.1151 | 0.5809 |
+| 4 | **v2** asc+desc, random_clouds | 5.22 | 567.2 | 858.5 | 22.49 | 0.2374 | 0.1191 | 0.5722 |
+| 5 | asc+desc, random_fully_masked, DA | 5.89 | 698.2 | 1026.0 | 22.28 | 0.2904 | 0.1122 | 0.5836 |
 
-#### Détail par bande du meilleur modèle : **v2** mix_closest, random_clouds
+#### Détail par bande du meilleur modèle : **v3** combined (wider+cyclic+loss)
 
 | Métrique | B2 | B3 | B4 | B5 | B6 | B7 | B8 | B8A | B11 | B12 |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| MAE | 387.5 | 395.8 | 456.7 | 463.1 | 614.7 | 695.0 | 727.2 | 709.5 | 516.4 | 454.6 |
-| RMSE | 741.8 | 717.1 | 771.7 | 762.6 | 874.1 | 953.4 | 987.4 | 965.6 | 691.7 | 614.9 |
-| PSNR | 26.04 | 25.89 | 24.64 | 24.59 | 22.42 | 21.42 | 21.04 | 21.23 | 23.70 | 24.76 |
-| SSIM | 0.2018 | 0.2304 | 0.2403 | 0.2770 | 0.2991 | 0.3060 | 0.2901 | 0.3136 | 0.3112 | 0.2961 |
-| R2 | 0.2062 | 0.2555 | 0.3012 | 0.2817 | 0.2395 | 0.2634 | 0.2745 | 0.2748 | 0.3254 | 0.3512 |
+| MAE | 381.2 | 386.0 | 447.1 | 455.7 | 585.6 | 661.6 | 689.6 | 676.3 | 496.8 | 437.4 |
+| RMSE | 738.7 | 713.8 | 768.6 | 762.7 | 850.5 | 926.1 | 957.2 | 937.2 | 673.5 | 605.1 |
+| PSNR | 26.16 | 26.04 | 24.78 | 24.68 | 22.78 | 21.77 | 21.41 | 21.56 | 23.99 | 24.98 |
+| SSIM | 0.2546 | 0.2854 | 0.2900 | 0.3188 | 0.3365 | 0.3412 | 0.3273 | 0.3474 | 0.3429 | 0.3320 |
+| R2 | 0.2245 | 0.2743 | 0.3203 | 0.2957 | 0.2780 | 0.3008 | 0.3140 | 0.3107 | 0.3471 | 0.3720 |
 
 ## 5. Disponibilité des résultats
 
@@ -155,7 +187,7 @@
 | **ALL_SAR_120_epochs** (mix_closest) | ✅ | ✅ |
 | asc+desc, random_clouds, DA | ❌ | ❌ |
 | asc+desc, random_clouds | ❌ | ❌ |
-| asc+desc, random_fully_masked, DA | ❌ | ✅ |
+| asc+desc, random_fully_masked, DA | ✅ | ✅ |
 | mix_closest, random_fully_masked | ❌ | ❌ |
 | mix_closest, random_fully_masked, DA | ❌ | ❌ |
 | coherence_only | ✅ | ✅ |
@@ -164,10 +196,10 @@
 | **v2** asc+desc, random_fully_masked | ✅ | ✅ |
 | **v2** asc+desc, random_clouds | ✅ | ✅ |
 | **v3** mix_closest, random_clouds | ✅ | ✅ |
-| **v3** loss (L1+SSIM+L1_occ) | ❌ | ❌ |
-| **v3** wider | ❌ | ❌ |
-| **v3** combined (wider+cyclic+loss) | ❌ | ❌ |
-| **v3** cyclic | ❌ | ❌ |
+| **v3** loss (L1+SSIM+L1_occ) | ✅ | ✅ |
+| **v3** wider | ✅ | ✅ |
+| **v3** combined (wider+cyclic+loss) | ❌ | ✅ |
+| **v3** cyclic | ✅ | ❌ |
 
 ## 6. Métriques à la Parcelle (RPG)
 
@@ -178,9 +210,9 @@
 | **ALL_SAR_120_epochs** (mix_closest) | Global | 1116.8 | 2113.2 | 21.58 | 0.6394 | 0.0739 | 0.4569 |
 | **ALL_SAR_120_epochs** (mix_closest) | Occluded | 6419.1 | 6743.0 | 3.59 | 0.0806 | 0.3005 | 0.0218 |
 | **ALL_SAR_120_epochs** (mix_closest) | Observed | 70.2 | 100.3 | 40.08 | 0.8085 | 0.0287 | 0.9912 |
-| **v2** mix_closest, random_clouds | Global | — | — | — | — | — | — |
-| **v2** mix_closest, random_clouds | Occluded | — | — | — | — | — | — |
-| **v2** mix_closest, random_clouds | Observed | — | — | — | — | — | — |
+| **v2** mix_closest, random_clouds | Global | 108.8 | 208.3 | 35.62 | 0.7326 | 0.0351 | 0.9526 |
+| **v2** mix_closest, random_clouds | Occluded | 368.0 | 549.8 | 26.16 | 0.4566 | 0.0916 | 0.7763 |
+| **v2** mix_closest, random_clouds | Observed | 59.2 | 84.5 | 41.61 | 0.8306 | 0.0242 | 0.9931 |
 
 ### Masquage : Consecutive Fully Masked
 
@@ -203,9 +235,6 @@ Comparaison des métriques **avant** et **après** exclusion des pixels où tout
 | Modèle | Masquage | Version | MAE | RMSE | PSNR | SSIM | SAM | R2 |
 |:---|:---|:---|:---:|:---:|:---:|:---:|:---:|:---:|
 | **ALL_SAR_120_epochs** (mix_closest) | Random Fully Masked | Sans filtrage | — | — | — | — | — | — |
-| **ALL_SAR_120_epochs** (mix_closest) | Random Fully Masked | Avec filtrage | — | — | — | — | — | — |
+| **ALL_SAR_120_epochs** (mix_closest) | Random Fully Masked | Avec filtrage | 352.7 | 520.1 | 26.70 | 0.4409 | 0.0886 | 0.7902 |
 | **ALL_SAR_120_epochs** (mix_closest) | Consecutive Fully Masked | Sans filtrage | — | — | — | — | — | — |
-| **ALL_SAR_120_epochs** (mix_closest) | Consecutive Fully Masked | Avec filtrage | — | — | — | — | — | — |
-
-_Aucune comparaison nodata disponible._
-
+| **ALL_SAR_120_epochs** (mix_closest) | Consecutive Fully Masked | Avec filtrage | 594.2 | 880.5 | 22.20 | 0.2190 | 0.1284 | 0.5547 |
