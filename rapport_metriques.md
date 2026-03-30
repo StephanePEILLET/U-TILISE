@@ -18,7 +18,7 @@
 | **v3** mix_closest, random_clouds | 122.6 | 226.6 | 34.66 | 0.7039 | 0.0420 | 0.9432 |
 | **v3** loss (L1+SSIM+L1_occ) | 110.8 | 206.7 | 35.46 | 0.7482 | 0.0368 | 0.9520 |
 | **v3** wider | 113.3 | 215.5 | 35.22 | 0.7194 | 0.0366 | 0.9480 |
-| **v3** combined (wider+cyclic+loss) | — | — | — | — | — | — |
+| **v3** combined (wider+cyclic+loss) | 114.1 | 211.1 | 35.14 | 0.7377 | 0.0374 | 0.9502 |
 | **v3** cyclic | 108.0 | 210.1 | 35.62 | 0.7319 | 0.0355 | 0.9511 |
 
 ### Masquage : Consecutive Fully Masked
@@ -36,7 +36,7 @@
 | **v3** loss (L1+SSIM+L1_occ) | 125.2 | 269.3 | 33.87 | 0.6987 | 0.0377 | 0.9219 |
 | **v3** wider | 130.6 | 287.7 | 33.45 | 0.6702 | 0.0376 | 0.9139 |
 | **v3** combined (wider+cyclic+loss) | 122.9 | 266.0 | 33.82 | 0.6901 | 0.0377 | 0.9241 |
-| **v3** cyclic | — | — | — | — | — | — |
+| **v3** cyclic | 119.1 | 273.0 | 34.09 | 0.6826 | 0.0354 | 0.9201 |
 
 ## 2. Métriques sur pixels reconstruits (Occluded)
 
@@ -54,7 +54,7 @@
 | **v3** mix_closest, random_clouds | 406.1 | 585.0 | 25.54 | 0.3765 | 0.1065 | 0.7422 |
 | **v3** loss (L1+SSIM+L1_occ) | 351.0 | 528.1 | 26.60 | 0.4860 | 0.0861 | 0.7850 |
 | **v3** wider | 374.1 | 560.7 | 26.10 | 0.4633 | 0.0891 | 0.7654 |
-| **v3** combined (wider+cyclic+loss) | — | — | — | — | — | — |
+| **v3** combined (wider+cyclic+loss) | 353.2 | 532.8 | 26.48 | 0.4803 | 0.0869 | 0.7823 |
 | **v3** cyclic | 381.0 | 563.5 | 25.98 | 0.4270 | 0.0981 | 0.7623 |
 
 ### Masquage : Consecutive Fully Masked
@@ -72,7 +72,7 @@
 | **v3** loss (L1+SSIM+L1_occ) | 568.2 | 855.1 | 22.60 | 0.3146 | 0.1093 | 0.5880 |
 | **v3** wider | 619.6 | 926.9 | 21.83 | 0.2896 | 0.1141 | 0.5720 |
 | **v3** combined (wider+cyclic+loss) | 521.7 | 829.7 | 22.99 | 0.3176 | 0.1063 | 0.5993 |
-| **v3** cyclic | — | — | — | — | — | — |
+| **v3** cyclic | 583.8 | 894.3 | 22.18 | 0.2528 | 0.1187 | 0.5675 |
 
 ## 3. Occluded vs Observed (détail)
 
@@ -100,8 +100,8 @@
 | **v3** loss (L1+SSIM+L1_occ) | Observed | 65.3 | 93.5 | 40.75 | 0.8428 | 0.0274 | 0.9898 |
 | **v3** wider | Occluded | 374.1 | 560.7 | 26.10 | 0.4633 | 0.0891 | 0.7654 |
 | **v3** wider | Observed | 64.2 | 92.9 | 40.79 | 0.8114 | 0.0267 | 0.9905 |
-| **v3** combined (wider+cyclic+loss) | Occluded | — | — | — | — | — | — |
-| **v3** combined (wider+cyclic+loss) | Observed | — | — | — | — | — | — |
+| **v3** combined (wider+cyclic+loss) | Occluded | 353.2 | 532.8 | 26.48 | 0.4803 | 0.0869 | 0.7823 |
+| **v3** combined (wider+cyclic+loss) | Observed | 69.1 | 99.3 | 40.21 | 0.8307 | 0.0280 | 0.9887 |
 | **v3** cyclic | Occluded | 381.0 | 563.5 | 25.98 | 0.4270 | 0.0981 | 0.7623 |
 | **v3** cyclic | Observed | 56.7 | 82.4 | 41.80 | 0.8374 | 0.0237 | 0.9932 |
 
@@ -131,8 +131,8 @@
 | **v3** wider | Observed | 64.6 | 93.4 | 40.74 | 0.8106 | 0.0268 | 0.9904 |
 | **v3** combined (wider+cyclic+loss) | Occluded | 521.7 | 829.7 | 22.99 | 0.3176 | 0.1063 | 0.5993 |
 | **v3** combined (wider+cyclic+loss) | Observed | 69.5 | 99.8 | 40.17 | 0.8299 | 0.0280 | 0.9887 |
-| **v3** cyclic | Occluded | — | — | — | — | — | — |
-| **v3** cyclic | Observed | — | — | — | — | — | — |
+| **v3** cyclic | Occluded | 583.8 | 894.3 | 22.18 | 0.2528 | 0.1187 | 0.5675 |
+| **v3** cyclic | Observed | 57.0 | 82.8 | 41.76 | 0.8367 | 0.0237 | 0.9932 |
 
 ## 4. Meilleurs modèles — Métriques Occluded
 
@@ -143,10 +143,10 @@
 | # | Modèle | Score | MAE | RMSE | PSNR | SSIM | SAM | R2 |
 |:---:|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | 1 | **v3** loss (L1+SSIM+L1_occ) | 1.56 | 351.0 | 528.1 | 26.60 | 0.4860 | 0.0861 | 0.7850 |
-| 2 | **ALL_SAR_120_epochs** (mix_closest) | 1.89 | 352.7 | 520.1 | 26.70 | 0.4409 | 0.0886 | 0.7902 |
-| 3 | **v2** mix_closest, random_clouds | 3.33 | 360.5 | 538.3 | 26.36 | 0.4566 | 0.0903 | 0.7770 |
-| 4 | **v3** wider | 3.89 | 374.1 | 560.7 | 26.10 | 0.4633 | 0.0891 | 0.7654 |
-| 5 | **v2** asc+desc, random_clouds | 5.11 | 379.2 | 556.4 | 26.01 | 0.4229 | 0.0965 | 0.7644 |
+| 2 | **ALL_SAR_120_epochs** (mix_closest) | 2.11 | 352.7 | 520.1 | 26.70 | 0.4409 | 0.0886 | 0.7902 |
+| 3 | **v3** combined (wider+cyclic+loss) | 2.78 | 353.2 | 532.8 | 26.48 | 0.4803 | 0.0869 | 0.7823 |
+| 4 | **v2** mix_closest, random_clouds | 4.33 | 360.5 | 538.3 | 26.36 | 0.4566 | 0.0903 | 0.7770 |
+| 5 | **v3** wider | 4.89 | 374.1 | 560.7 | 26.10 | 0.4633 | 0.0891 | 0.7654 |
 
 #### Détail par bande du meilleur modèle : **v3** loss (L1+SSIM+L1_occ)
 
@@ -167,8 +167,8 @@
 | 1 | **v3** combined (wider+cyclic+loss) | 1.00 | 521.7 | 829.7 | 22.99 | 0.3176 | 0.1063 | 0.5993 |
 | 2 | **v3** loss (L1+SSIM+L1_occ) | 2.89 | 568.2 | 855.1 | 22.60 | 0.3146 | 0.1093 | 0.5880 |
 | 3 | **v2** mix_closest, random_clouds | 3.56 | 542.1 | 847.0 | 22.71 | 0.2766 | 0.1151 | 0.5809 |
-| 4 | **v2** asc+desc, random_clouds | 5.22 | 567.2 | 858.5 | 22.49 | 0.2374 | 0.1191 | 0.5722 |
-| 5 | asc+desc, random_fully_masked, DA | 5.89 | 698.2 | 1026.0 | 22.28 | 0.2904 | 0.1122 | 0.5836 |
+| 4 | **v2** asc+desc, random_clouds | 5.44 | 567.2 | 858.5 | 22.49 | 0.2374 | 0.1191 | 0.5722 |
+| 5 | asc+desc, random_fully_masked, DA | 6.33 | 698.2 | 1026.0 | 22.28 | 0.2904 | 0.1122 | 0.5836 |
 
 #### Détail par bande du meilleur modèle : **v3** combined (wider+cyclic+loss)
 
@@ -198,8 +198,8 @@
 | **v3** mix_closest, random_clouds | ✅ | ✅ |
 | **v3** loss (L1+SSIM+L1_occ) | ✅ | ✅ |
 | **v3** wider | ✅ | ✅ |
-| **v3** combined (wider+cyclic+loss) | ❌ | ✅ |
-| **v3** cyclic | ✅ | ❌ |
+| **v3** combined (wider+cyclic+loss) | ✅ | ✅ |
+| **v3** cyclic | ✅ | ✅ |
 
 ## 6. Métriques à la Parcelle (RPG)
 
