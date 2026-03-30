@@ -64,7 +64,7 @@ metrics:
     sam: true
 
 misc:
-    num_workers: 4
+    num_workers: 0
     pin_memory: true
     run_mode: test
 
