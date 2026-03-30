@@ -184,6 +184,14 @@ PARCELLE_EXPERIMENTS: list[tuple[str, str, dict[str, str]]] = [
             "consecutive_fully_masked": "m_v2rc_cfm_parc",
         },
     ),
+    (
+        "**v3** combined (wider+cyclic+loss)",
+        "v3_combined",
+        {
+            "random_fully_masked": "m_v3_combined_rfm_parc",
+            "consecutive_fully_masked": "m_v3_combined_cfm_parc",
+        },
+    ),
 ]
 
 PARCELLE_MASK_SUFFIX = "_parcelle"  # appended to mask_mode for JSON subdir

@@ -13,8 +13,8 @@ data:
         return_valid_obs_only: true
 
 test_data:
-    checkpoint: /lustre/fsn1/worksf/projects/rech/tel/uug84ql/cloud_reconstruction/results/v2_mix_closest_random_clouds/2026-03-23_15-30/checkpoints/Model_best.pth
-    test_config: /lustre/fsn1/worksf/projects/rech/tel/uug84ql/cloud_reconstruction/results/v2_mix_closest_random_clouds/2026-03-23_15-30/config.yaml
+    checkpoint: /lustre/fsn1/worksf/projects/rech/tel/uug84ql/cloud_reconstruction/results/v3_mix_closest_random_clouds_combined/2026-03-26_16-17/checkpoints/Model_best.pth
+    test_config: /lustre/fsn1/worksf/projects/rech/tel/uug84ql/cloud_reconstruction/results/v3_mix_closest_random_clouds_combined/2026-03-26_16-17/config.yaml
     data_optique: /lustre/fsn1/projects/rech/tel/commun/Circa/optique_dataset
     data_radar: /lustre/fsn1/projects/rech/tel/commun/Circa/radar_dataset_v4
     mask_type: original_masks
@@ -70,5 +70,5 @@ misc:
     run_mode: test
 
 output:
-    save_dir: /lustre/fsn1/projects/rech/tel/uug84ql/cloud_reconstruction/inference/v2_mix_closest_random_clouds/
+    save_dir: /lustre/fsn1/projects/rech/tel/uug84ql/cloud_reconstruction/inference/v3_mix_closest_random_clouds_combined/
 
