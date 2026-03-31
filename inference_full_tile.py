@@ -30,6 +30,7 @@ GDAL_OPTIONS = {
     "bigtiff": "YES",  # Force BigTIFF to avoid issues with file size limits and re-writes
     "num_threads": "1",  # Restricted to 1 to prevent issues with locking/multiprocessing on clusters
     "interleave": "pixel",  # CRITICAL: PIXEL interleave prevents massive seeking when writing multi-band tiles
+    # TODO: à passer en interleave "Band" afin de faciliter la lecture par QGIS.
 }
 
 
@@ -156,6 +157,13 @@ def main(
 
         print(meta)
         print(GDAL_OPTIONS)
+
+        dictionnaire = {
+            'interleave': 'Band',
+            'tiled': True
+        }
+        GDAL_OPTIONS.update(dictionnaire)
+
         with rasterio.open(out_filename, "w", **meta, **GDAL_OPTIONS) as dst:
             converter = TypeConverter()
 

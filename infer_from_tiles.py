@@ -112,7 +112,14 @@ def inference_one_tile(
             print(f"Predictions for MGRS-C area {mgrs25} exist but are likely corrupted ({file_size_kb:.1f} KB). Re-processing...")
             out_filename.unlink()
 
-    mask_type = config.test_data.get("mask_type", "orignal_masks")
+    if (config.mask.mask_type == "random_fully_masked" or config.mask.mask_type == "consecutive_fully_masked"):
+        if config.test_data.data_masks is None:
+            raise ValueError(f"Mask type {config.mask.mask_type} requires a data_masks directory in the configuration.")
+        mask_type = "fully_masked"  # Nécessaire pour que le dataset applique les masques de reconstruction (aléatoires ou consécutifs) au lieu des masques d'origine
+        keep_all_dates = False  # On filtre les dates et on garde seulement les dates non nuageuses et les dates masquées.
+    else:
+        mask_type = "original_masks"  # Utilise les masques d'origine (nuages + masques de reconstruction) fournis dans les données d'entraînement
+        keep_all_dates = True  # En mode inférence, ne pas filtrer les dates nuageuses (sinon T varie par patch et ne correspond plus au nombre de bandes du fichier de sortie)
 
     ds = Dataset_from_files(
         mgrsc=mgrs25,
@@ -124,10 +131,10 @@ def inference_one_tile(
         mask_type=mask_type,
         data_masks=data_masks,
         use_sar=config.data.get("use_sar", "mix_closest"),
+        keep_all_dates=keep_all_dates,
     )
-    # En mode inférence, ne pas filtrer les dates nuageuses (sinon T varie par patch
-    # et ne correspond plus au nombre de bandes du fichier de sortie)
-    ds.keep_all_dates = True
+
+    # ds.keep_all_dates = True
     meta = ds.s2_meta.copy()
     output_type = meta["dtype"]
     mgrs25_dataloader = DataLoader(ds, batch_size=1, shuffle=False, pin_memory=pin_memory, num_workers=num_workers)
@@ -157,8 +164,36 @@ def inference_one_tile(
                 # Unpacking direct de la fenêtre pour gagner des variables
                 x, y, w, h = batch["window"][0].item(), batch["window"][1].item(), batch["window"][2].item(), batch["window"][3].item()
 
-                # Appel de la fonction utilitaire
-                final_patch = _prepare_patch_for_writing(y_pred, batch, converter, output_type)
+                if keep_all_dates:
+                    # Appel de la fonction utilitaire
+                    final_patch = _prepare_patch_for_writing(y_pred, batch, converter, output_type)
+                    # En mode inférence, le nombre de bandes doit être constant et égal à T*12 (T dates, 12 bandes par date)
+                else:
+                    full_s2 = batch["full_s2"].squeeze(axis=0).cpu().numpy()  # (T, 10, h, w)
+                    full_s2_data, s2_masks = full_s2[:, :10, ...], full_s2[:, 10:, ...]  # Séparer les données S2 des masques d'origine
+                    idx_kept = batch["idx_kept"].squeeze(axis=0).cpu().numpy()  # (T_kept,)
+                    # t_effective = batch["t_effective"].squeeze(axis=0).cpu().numpy()  # Indices des dates gardées (clean + synthétiques) dans la série temporelle filtrée
+                    assert len(idx_kept) == y_pred.shape[1], f"Mismatch between number of kept dates ({len(idx_kept)}) and model output time dimension ({y_pred.shape[1]})."
+
+                    denorm_pred = SentinelDataProcessor.reverse_process_MS(
+                        y_pred, intensity_max=MAX_PIXEL_INTENSITY_USED_FOR_REVERSE
+                    )
+                    # Get prediction (T, 10, h, w) on CPU
+                    pred_patch = denorm_pred.squeeze(axis=0).cpu().numpy()
+
+                    # Restore the original temporal order with zeros for the dropped dates
+                    full_pred = full_s2_data
+                    full_pred[idx_kept, ...] = pred_patch
+
+                    # Concatenate (T, 12, h, w)
+                    full_patch = np.concatenate([full_pred, s2_masks], axis=1)
+
+                    # 4. Reshape to flattened channels (T*12, h, w)
+                    final_patch = full_patch.reshape(
+                        full_patch.shape[0] * full_patch.shape[1], full_patch.shape[2], full_patch.shape[3]
+                    )
+                    # 5. Convert to output type (e.g., uint16)
+                    final_patch = converter.from_type("float32").to_type(output_type).convert(final_patch)
 
                 # Validation du nombre de bandes AVANT écriture
                 if final_patch.shape[0] != expected_bands:

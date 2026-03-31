@@ -42,6 +42,7 @@ class Dataset_from_files(Dataset):
         fill_value: float = 1.0,
         mask_type: str = "orignal_masks",  # orignal_masks, fully_masked
         data_masks: str | Path | None = None,
+        keep_all_dates: bool = False,  # Mode inférence : ne pas filtrer les dates nuageuses
     ):
         """
         Initializes the dataset.
@@ -74,7 +75,7 @@ class Dataset_from_files(Dataset):
         self.fill_value = fill_value
         self.mask_type = mask_type
         self.data_masks = Path(data_masks) if data_masks is not None else None
-        self.keep_all_dates = False  # Mode inférence : ne pas filtrer les dates nuageuses
+        self.keep_all_dates = keep_all_dates
         self.setup()
 
     def __len__(self) -> int:
@@ -370,6 +371,306 @@ class Dataset_from_files(Dataset):
         """
         return [el.decode("utf-8") for el in dates]
 
+    def get_item_from_mgrsc(
+        self,
+        mgrsc: str,
+        x: int,
+        y: int,
+        width: int,
+        height: int,
+        t_sampled: list | None = None,
+    ) -> dict[str, np.ndarray | str | list[str]]:
+        """
+        Retrieves cropped data for a given MGRSC zone using pixel coordinates.
+
+        Parameters:
+        - mgrsc (str): MGRS25 zone identifier (e.g. '31TCJ_25_100').
+        - x (int): Column offset (pixel) for the crop window.
+        - y (int): Row offset (pixel) for the crop window.
+        - width (int): Width of the crop window in pixels.
+        - height (int): Height of the crop window in pixels.
+        - t_sampled (list | None): Optional list of temporal indices to sample.
+
+        Returns:
+        - Dict with the same structure as __getitem__.
+        """
+        mgrs_parts = mgrsc.split("_")
+        mgrs_name = mgrs_parts[0]
+        mgrs25_name = mgrsc
+
+        mgrs25_optique_dir = self.data_optique / mgrs_name / ("MGRS25-" + mgrs25_name)
+        mgrs25_radar_dir = self.data_radar / mgrs_name / ("MGRS25-" + mgrs25_name)
+
+        if not mgrs25_optique_dir.exists():
+            raise FileNotFoundError(f"Optical data directory not found: {mgrs25_optique_dir}")
+
+        list_tifs_optique = sorted(mgrs25_optique_dir.rglob("*.tif"))
+        list_jsons_optique = sorted(mgrs25_optique_dir.rglob("*.json"))
+        s2_file = list_tifs_optique[0]
+        dates_S2 = json.load(open(list_jsons_optique[0]))
+
+        s1_asc_file, s1_desc_file = None, None
+        dates_S1_asc, dates_S1_desc = None, None
+        if self.use_sar:
+            if not mgrs25_radar_dir.exists():
+                raise FileNotFoundError(f"Radar data directory not found: {mgrs25_radar_dir}")
+            list_tifs_radar = sorted(mgrs25_radar_dir.rglob("*.tif"))
+            list_jsons_radar = sorted(mgrs25_radar_dir.rglob("*.json"))
+            for file in list_tifs_radar:
+                if file.stem.endswith("ASC"):
+                    s1_asc_file = file
+                else:
+                    s1_desc_file = file
+            for file in list_jsons_radar:
+                orbit = file.stem.split("_")[-1]
+                dates = json.load(open(file))
+                if orbit == "ASC":
+                    dates_S1_asc = dates
+                else:
+                    dates_S1_desc = dates
+
+        crop_window = (x, y, width, height)
+
+        S2_N_CHANNELS = 12
+        S1_N_CHANNELS = 4
+
+        if t_sampled is not None:
+            bands_s2 = []
+            for t in t_sampled:
+                bands_s2.extend([t * S2_N_CHANNELS + c + 1 for c in range(S2_N_CHANNELS)])
+            with rasterio.open(s2_file) as src_S2:
+                patch_S2_array = src_S2.read(bands_s2, window=Window(*crop_window))
+            patch_S2_array = patch_S2_array.reshape(
+                len(t_sampled), S2_N_CHANNELS, patch_S2_array.shape[-2], patch_S2_array.shape[-1]
+            )
+        else:
+            with rasterio.open(s2_file) as src_S2:
+                patch_S2_array = src_S2.read(window=Window(*crop_window))
+            T = patch_S2_array.shape[0] // S2_N_CHANNELS
+            patch_S2_array = patch_S2_array.reshape(
+                T, S2_N_CHANNELS, patch_S2_array.shape[-2], patch_S2_array.shape[-1]
+            )
+
+        patch_S2_array = torch.from_numpy(patch_S2_array.astype(np.float32))
+
+        data_s2 = patch_S2_array[:, 0:10, ...]
+        data_s2 = SentinelDataProcessor.process_MS(data_s2)
+
+        if self.mask_file is not None:
+            S2_N_CHANNELS_MASK = 12  # Assuming mask file has the same number of channels per time step as S2 data
+            if t_sampled is not None:
+                bands_mask = []
+                for t in t_sampled:
+                    bands_mask.extend([t * S2_N_CHANNELS_MASK + c + 1 for c in range(10, 12)])
+                with rasterio.open(self.mask_file) as src_mask:
+                    mask_array = src_mask.read(bands_mask, window=Window(*crop_window))
+                mask_array = mask_array.reshape(len(t_sampled), 2, mask_array.shape[-2], mask_array.shape[-1])
+            else:
+                mask_bands = []
+                T_mask = patch_S2_array.shape[0]
+                for t in range(T_mask):
+                    mask_bands.extend([t * S2_N_CHANNELS_MASK + c + 1 for c in range(10, 12)])
+                with rasterio.open(self.mask_file) as src_mask:
+                    mask_array = src_mask.read(mask_bands, window=Window(*crop_window))
+                mask_array = mask_array.reshape(T_mask, 2, mask_array.shape[-2], mask_array.shape[-1])
+            original_masks = torch.from_numpy(mask_array.astype(np.float32))
+        else:
+            original_masks = patch_S2_array[:, 10:, ...]
+        # Est-ce que ce n'est pas 1 plutôt que 0 pour les masques de nuages ? A vérifier dans les données
+        cloud_probs = original_masks[:, 0, ...].clone().unsqueeze(axis=1)
+        missing_data_mask = torch.all(data_s2 == 0, dim=1, keepdim=True)
+        cloud_probs[missing_data_mask] = 1.0
+        cloud_masks = (cloud_probs > 0).float()
+
+        dates_s2_list = [self.str2date(d) for d in dates_S2]
+        dates_s2_np = np.array(dates_s2_list)
+        days = get_position_for_positional_encoding(dates_s2_np, "day-within-sequence")
+        position_days = get_position_for_positional_encoding(dates_s2_np, self.pe_strategy)
+
+        data_s1 = None
+        dates_s1_sampled = None
+        closest_matches = None
+        if self.use_sar:
+            closest_matches = SentinelDataProcessor.get_pairedS1_closest_matches(
+                dates_S2=dates_S2,
+                dates_S1_asc=dates_S1_asc,
+                dates_S1_desc=dates_S1_desc,
+            )
+
+            s1_tile, s1_dates = [], []
+            indices_s2 = t_sampled if t_sampled is not None else range(len(closest_matches))
+
+            asc_bands, desc_bands = [], []
+            asc_indices_map, desc_indices_map = {}, {}
+
+            for index_s2 in indices_s2:
+                _, date_s1, index_s1, orbit_type = closest_matches[index_s2]
+                if orbit_type == "ASC":
+                    if index_s1 not in asc_indices_map:
+                        asc_indices_map[index_s1] = True
+                        asc_bands.extend([index_s1 * S1_N_CHANNELS + c + 1 for c in range(S1_N_CHANNELS)])
+                elif index_s1 not in desc_indices_map:
+                    desc_indices_map[index_s1] = True
+                    desc_bands.extend([index_s1 * S1_N_CHANNELS + c + 1 for c in range(S1_N_CHANNELS)])
+
+            asc_bands = sorted(set(asc_bands))
+            desc_bands = sorted(set(desc_bands))
+
+            s1_tile_asc_dict = {}
+            if len(asc_bands) > 0:
+                with rasterio.open(s1_asc_file) as src_s1:
+                    asc_data = src_s1.read(asc_bands, window=Window(*crop_window))
+                    for i, band in enumerate(asc_bands):
+                        idx = (band - 1) // S1_N_CHANNELS
+                        c = (band - 1) % S1_N_CHANNELS
+                        if idx not in s1_tile_asc_dict:
+                            s1_tile_asc_dict[idx] = np.zeros(
+                                (S1_N_CHANNELS, asc_data.shape[-2], asc_data.shape[-1]), dtype=asc_data.dtype
+                            )
+                        s1_tile_asc_dict[idx][c] = asc_data[i]
+
+            s1_tile_desc_dict = {}
+            if len(desc_bands) > 0:
+                with rasterio.open(s1_desc_file) as src_s1:
+                    desc_data = src_s1.read(desc_bands, window=Window(*crop_window))
+                    for i, band in enumerate(desc_bands):
+                        idx = (band - 1) // S1_N_CHANNELS
+                        c = (band - 1) % S1_N_CHANNELS
+                        if idx not in s1_tile_desc_dict:
+                            s1_tile_desc_dict[idx] = np.zeros(
+                                (S1_N_CHANNELS, desc_data.shape[-2], desc_data.shape[-1]), dtype=desc_data.dtype
+                            )
+                        s1_tile_desc_dict[idx][c] = desc_data[i]
+
+            for index_s2 in indices_s2:
+                _, date_s1, index_s1, orbit_type = closest_matches[index_s2]
+                s1_band = s1_tile_asc_dict[index_s1] if orbit_type == "ASC" else s1_tile_desc_dict[index_s1]
+                s1_tile.append(s1_band)
+                s1_dates.append(date_s1)
+
+            s1_tile = np.stack(s1_tile, axis=0)
+            s1_tile = torch.from_numpy(s1_tile.astype(np.float32))
+            dates_s1_sampled = np.array([self.str2date(date) for date in s1_dates])
+            data_s1 = SentinelDataProcessor.process_SAR(s1_tile)
+
+        idx_kept = None
+
+        if self.mask_type == "fully_masked":
+            cloud_probs_fm = original_masks[:, 0, ...].clone().unsqueeze(axis=1)
+            snow_probs = original_masks[:, 1, ...].clone().unsqueeze(axis=1)
+
+            if self.mask_file is not None:
+                SYNTHETIC_THRESHOLD = 100
+                is_synthetic = cloud_probs_fm.squeeze(1).mean(dim=(1, 2)) > SYNTHETIC_THRESHOLD
+                idx_synthetic = np.where(is_synthetic.numpy())[0]
+
+                cloud_orig = cloud_probs_fm.clone()
+                snow_orig = snow_probs.clone()
+                cloud_orig[is_synthetic] -= 150
+                snow_orig[is_synthetic] -= 150
+                cloud_orig.clamp_(min=0)
+                snow_orig.clamp_(min=0)
+
+                if not self.keep_all_dates:
+                    masks_to_filter = np.concatenate([snow_orig.numpy(), cloud_orig.numpy()], axis=1)
+                    masks_to_filter = masks_to_filter.transpose(0, 2, 3, 1)
+                    idx_clean = SentinelDataProcessor.filter_dates(masks_to_filter)
+                    idx_kept = np.sort(np.union1d(idx_clean, idx_synthetic))
+
+                    data_s2 = data_s2[idx_kept]
+                    original_masks = original_masks[idx_kept]
+                    cloud_masks = cloud_masks[idx_kept]
+                    if self.use_sar:
+                        data_s1 = data_s1[idx_kept]
+                        dates_s1_sampled = dates_s1_sampled[idx_kept]
+
+                    is_synth_in_kept = np.isin(idx_kept, idx_synthetic)
+                    images_masked = data_s2.clone()
+                    masks = torch.zeros(data_s2.shape[0], 1, data_s2.shape[2], data_s2.shape[3])
+                    for i in np.where(is_synth_in_kept)[0]:
+                        images_masked[i] = self.fill_value
+                        masks[i] = self.fill_value
+                else:
+                    images_masked, masks = masks_init_filling(
+                        seq=data_s2.clone(),
+                        masks=cloud_masks.clone(),
+                        fill_type="fill_value",
+                        fill_value=self.fill_value,
+                        dilate_cloud_masks=False,
+                    )
+                    for i in idx_synthetic:
+                        images_masked[i] = self.fill_value
+                        masks[i] = self.fill_value
+            else:
+                images_masked, masks = masks_init_filling(
+                    seq=data_s2.clone(),
+                    masks=cloud_masks.clone(),
+                    fill_type="fill_value",
+                    fill_value=self.fill_value,
+                    dilate_cloud_masks=False,
+                )
+        else:
+            images_masked, masks = masks_init_filling(
+                seq=data_s2.clone(),
+                masks=cloud_masks.clone(),
+                fill_type="fill_value",
+                fill_value=self.fill_value,
+                dilate_cloud_masks=False,
+            )
+
+        frames_input = torch.cat((images_masked, data_s1), dim=1) if self.use_sar else images_masked
+
+        if self.use_sar and masks is not None:
+            frames_input = frames_input.masked_fill(masks == 1.0, self.fill_value)
+
+        frames_target = data_s2.clone()
+        masks_valid_obs = torch.ones(frames_input.shape[0], dtype=torch.uint8)
+
+        if idx_kept is not None:
+            t_effective = idx_kept if t_sampled is None else np.array([t_sampled[i] for i in idx_kept])
+        elif t_sampled is not None:
+            t_effective = np.array(t_sampled)
+        else:
+            t_effective = None
+
+        if t_effective is not None:
+            out = {
+                "x": frames_input,
+                "y": frames_target,
+                "masks": masks,
+                "masks_valid_obs": masks_valid_obs,
+                "position_days": position_days[t_effective],
+                "days": days[t_effective] - days[t_effective][0],
+                "sample_index": 0,
+                "c_index_rgb": self.c_index_rgb,
+                "c_index_nir": self.c_index_nir,
+                "S2_dates": [dates_s2_np[i].strftime("%Y-%m-%d") for i in t_effective],
+                "original_masks": original_masks,
+                "cloud_mask": cloud_masks,
+                "window": crop_window,
+            }
+            if self.use_sar:
+                out["S1_dates"] = [date.strftime("%Y-%m-%d") for date in dates_s1_sampled]
+        else:
+            out = {
+                "x": frames_input,
+                "y": frames_target,
+                "masks": masks,
+                "masks_valid_obs": masks_valid_obs,
+                "position_days": position_days,
+                "days": days - days[0],
+                "sample_index": 0,
+                "c_index_rgb": self.c_index_rgb,
+                "c_index_nir": self.c_index_nir,
+                "S2_dates": [date.strftime("%Y-%m-%d") for date in dates_s2_np],
+                "original_masks": original_masks,
+                "cloud_mask": cloud_masks,
+                "window": crop_window,
+            }
+            if self.use_sar:
+                out["S1_dates"] = [date.strftime("%Y-%m-%d") for date in dates_s1_sampled]
+        return out
+
     def __getitem__(self, item: int, t_sampled: list | None = None) -> dict[str, np.ndarray | str | list[str]]:
         """
         Retrieves an item from the dataset.
@@ -427,7 +728,6 @@ class Dataset_from_files(Dataset):
             original_masks = torch.from_numpy(mask_array.astype(np.float32))
         else:
             original_masks = patch_S2_array[:, 10:, ...]
-
         cloud_probs = original_masks[:, 0, ...].clone().unsqueeze(axis=1)
 
         # FIX: Identifier les pixels sans données (No Data = 0 sur tous les canaux S2) et les ajouter au masque de nuages / à reconstruire
@@ -642,4 +942,11 @@ class Dataset_from_files(Dataset):
             }
             if self.use_sar:
                 out["S1_dates"] = [date.strftime("%Y-%m-%d") for date in dates_s1_sampled]
+
+        if self.keep_all_dates is False:
+            out["t_effective"] = t_effective  # Indices des dates gardées (clean + synthétiques) dans la série temporelle filtrée
+            out["idx_kept"] = idx_kept  # Indices des dates gardées (clean + synthétiques) dans la série originale
+            # out["is_synthetic"] = idx_synthetic
+            # out["is_synth_in_kept"] = is_synth_in_kept
+            out["full_s2"] = SentinelDataProcessor.process_MS(patch_S2_array)
         return out

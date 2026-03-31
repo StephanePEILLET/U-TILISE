@@ -24,7 +24,7 @@ test_data:
     split: test
 
 mask:
-    mask_type: fully_masked
+    mask_type: consecutive_fully_masked
     ratio_masked_frames: 0.5
     ratio_fully_masked_frames: 0.0
     fixed_masking_ratio: false
