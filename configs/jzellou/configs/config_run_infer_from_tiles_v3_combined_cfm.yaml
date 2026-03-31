@@ -17,6 +17,7 @@ test_data:
     test_config: /mnt/common/hdd/home/SPeillet/outputs/U-TILISE/v3_mix_closest_random_clouds_combined/2026-03-26_16-17/config.yaml
     data_optique: /mnt/stores/store-DAI/projets/pac/3str/EXP_2/Data_Raster/optique_dataset
     data_radar: /mnt/stores/store-DAI/projets/pac/3str/EXP_2/Data_Raster/radar_dataset_v4
+    data_masks: /mnt/stores/store-DAI/projets/pac/3str/EXP_2/Data_Raster/test_v3/consecutif
     mask_type: fully_masked
     test_tiles: "./data/MGRSC_test.json"
     mode: null
