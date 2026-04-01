@@ -3,6 +3,7 @@ import gc
 import json
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -29,8 +30,13 @@ def _worker_init_fn(worker_id):
 
     With 'spawn' start method, workers don't inherit the parent's sharing
     strategy and default to file_descriptor (POSIX shm → /dev/shm).
+    Also redirect tempfile to disk-backed storage (not tmpfs).
     """
     torch.multiprocessing.set_sharing_strategy('file_system')
+    # Ensure temp files go to the same disk-backed dir as the parent
+    _tmp = os.environ.get("TMPDIR", None)
+    if _tmp:
+        tempfile.tempdir = _tmp
 
 
 GDAL_OPTIONS = {
@@ -298,10 +304,19 @@ def main(
     # ==============================================================================
     # FIX POUR L'ERREUR "Bus error / out of shared memory" SUR SLURM
     # ==============================================================================
-    # Force PyTorch à utiliser le système de fichiers plutôt que /dev/shm
-    # pour le transfert des tenseurs entre les workers du DataLoader
+    # 1. Stratégie file_system : utilise des fichiers temporaires au lieu de /dev/shm
     mp.set_sharing_strategy('file_system')
-    # slurm ne permet pas l'utilisation de /dev/shm pour les workers du DataLoader, ce qui peut entraîner des erreurs de mémoire partagée. En utilisant 'file_system', PyTorch utilisera des fichiers temporaires pour le partage de données, ce qui est plus compatible avec les environnements SLURM.
+    # 2. Rediriger les fichiers temporaires vers un stockage disque (pas un tmpfs/ramdisk)
+    #    Sur Jean Zay : $JOBSCRATCH ou $SCRATCH sont sur disque, /tmp est un tmpfs en RAM
+    for scratch_var in ("JOBSCRATCH", "SCRATCH", "SLURM_TMPDIR"):
+        scratch_dir = os.environ.get(scratch_var)
+        if scratch_dir and os.path.isdir(scratch_dir):
+            os.environ["TMPDIR"] = scratch_dir
+            tempfile.tempdir = scratch_dir
+            print(f"[shared memory fix] TMPDIR redirigé vers ${scratch_var}={scratch_dir}")
+            break
+    else:
+        print("[shared memory fix] Aucun répertoire scratch trouvé, TMPDIR inchangé.")
     # ==============================================================================
 
     image_size = [256, 256]
@@ -315,8 +330,9 @@ def main(
     # 3. Limit GDAL Cache to avoid OOM on write or heavy flushing issues
     os.environ["GDAL_CACHEMAX"] = "512"  # 512 MB
 
-    # AMÉLIORATION : Plus de workers pour charger les données en parallèle pendant le calcul GPU
-    num_workers = config.misc.num_workers  # Essayez 4 ou 8 selon votre CPU
+    # Pour l'inférence, limiter les workers pour éviter la saturation de la mémoire partagée.
+    # Chaque worker sérialise des tenseurs volumineux (T×14×256×256) vers le parent.
+    num_workers = min(config.misc.num_workers, 2)  # Max 2 workers en inférence
     # Sécuriser GDAL pour les environnements multithread/multiprocess
     # Removing VSI_CACHE as it might cause issues with high-throughput writing or network drives ("dirty block" errors)
     # os.environ["VSI_CACHE"] = "TRUE"
