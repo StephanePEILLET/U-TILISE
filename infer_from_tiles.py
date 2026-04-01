@@ -22,6 +22,17 @@ from lib.arguments import eval_parser
 from lib.eval_tools import Imputation
 
 MAX_PIXEL_INTENSITY_USED_FOR_REVERSE = 10_000
+
+
+def _worker_init_fn(worker_id):
+    """Propagate file_system sharing strategy to spawned DataLoader workers.
+
+    With 'spawn' start method, workers don't inherit the parent's sharing
+    strategy and default to file_descriptor (POSIX shm → /dev/shm).
+    """
+    torch.multiprocessing.set_sharing_strategy('file_system')
+
+
 GDAL_OPTIONS = {
     "compress": "LZW",
     "tiled": True,
@@ -137,7 +148,7 @@ def inference_one_tile(
     # ds.keep_all_dates = True
     meta = ds.s2_meta.copy()
     output_type = meta["dtype"]
-    mgrs25_dataloader = DataLoader(ds, batch_size=1, shuffle=False, pin_memory=pin_memory, num_workers=num_workers)
+    mgrs25_dataloader = DataLoader(ds, batch_size=1, shuffle=False, pin_memory=pin_memory, num_workers=num_workers, worker_init_fn=_worker_init_fn)
 
     # Get the imputation model
     imputation = Imputation(
