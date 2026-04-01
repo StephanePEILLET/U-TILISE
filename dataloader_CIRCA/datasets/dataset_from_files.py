@@ -379,6 +379,7 @@ class Dataset_from_files(Dataset):
         width: int,
         height: int,
         t_sampled: list | None = None,
+        dates_to_mask: list[int] | None = None,
     ) -> dict[str, np.ndarray | str | list[str]]:
         """
         Retrieves cropped data for a given MGRSC zone using pixel coordinates.
@@ -390,6 +391,10 @@ class Dataset_from_files(Dataset):
         - width (int): Width of the crop window in pixels.
         - height (int): Height of the crop window in pixels.
         - t_sampled (list | None): Optional list of temporal indices to sample.
+        - dates_to_mask (list[int] | None): Optional list of temporal indices (0-based,
+          within the loaded sequence) to fully mask. When provided, overrides mask_type:
+          original cloud masks are applied, plus the specified dates are entirely replaced
+          by fill_value. The model must reconstruct these dates.
 
         Returns:
         - Dict with the same structure as __getitem__.
@@ -555,7 +560,34 @@ class Dataset_from_files(Dataset):
 
         idx_kept = None
 
-        if self.mask_type == "fully_masked":
+        if dates_to_mask is not None:
+            # Manual date masking: filter out cloudy dates, keep only clean ones,
+            # then fully mask the user-specified dates (like fully_masked mode but
+            # with manually chosen dates instead of pre-computed mask files).
+            cloud_probs_manual = original_masks[:, 0, ...].clone().unsqueeze(axis=1)
+            snow_probs_manual = original_masks[:, 1, ...].clone().unsqueeze(axis=1)
+            masks_to_filter = np.concatenate([snow_probs_manual.numpy(), cloud_probs_manual.numpy()], axis=1)
+            masks_to_filter = masks_to_filter.transpose(0, 2, 3, 1)
+            idx_clean = SentinelDataProcessor.filter_dates(masks_to_filter)
+
+            # Keep clean dates + ensure dates_to_mask are included
+            idx_kept = np.sort(np.union1d(idx_clean, dates_to_mask))
+
+            data_s2 = data_s2[idx_kept]
+            original_masks = original_masks[idx_kept]
+            cloud_masks = cloud_masks[idx_kept]
+            if self.use_sar:
+                data_s1 = data_s1[idx_kept]
+                dates_s1_sampled = dates_s1_sampled[idx_kept]
+
+            # Clean dates: no masking. Only dates_to_mask are fully masked.
+            images_masked = data_s2.clone()
+            masks = torch.zeros(data_s2.shape[0], 1, data_s2.shape[2], data_s2.shape[3])
+            is_to_mask = np.isin(idx_kept, dates_to_mask)
+            for i in np.where(is_to_mask)[0]:
+                images_masked[i] = self.fill_value
+                masks[i] = self.fill_value
+        elif self.mask_type == "fully_masked":
             cloud_probs_fm = original_masks[:, 0, ...].clone().unsqueeze(axis=1)
             snow_probs = original_masks[:, 1, ...].clone().unsqueeze(axis=1)
 
