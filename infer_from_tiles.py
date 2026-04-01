@@ -156,6 +156,13 @@ def inference_one_tile(
     write_errors = 0
     patches_written = 0
 
+    # Test de la modification afin de pouvoir passer les inférences en interleave à la place de pixel (pour faciliter la lecture dans QGIS et éviter les problèmes de lecture des bandes dans certains logiciels SIG)
+    dictionnaire = {
+        'interleave': 'Band',
+        'tiled': True
+    }
+    GDAL_OPTIONS.update(dictionnaire)
+
     with rasterio.open(out_filename, "w", **meta, **GDAL_OPTIONS) as dst:
         with torch.no_grad():
             for batch_in in tqdm(mgrs25_dataloader, leave=False, total=len(ds), desc="Patches"):
