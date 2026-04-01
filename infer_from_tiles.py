@@ -193,24 +193,23 @@ def inference_one_tile(
                     final_patch = _prepare_patch_for_writing(y_pred, batch, converter, output_type)
                     # En mode inférence, le nombre de bandes doit être constant et égal à T*12 (T dates, 12 bandes par date)
                 else:
-                    full_s2 = batch["full_s2"].squeeze(axis=0).cpu().numpy()  # (T, 10, h, w)
-                    full_s2_data, s2_masks = full_s2[:, :10, ...], full_s2[:, 10:, ...]  # Séparer les données S2 des masques d'origine
+                    full_s2 = batch["full_s2"].squeeze(axis=0).cpu().numpy()  # (T_all, 12, h, w) raw values
+                    full_s2_data, s2_masks = full_s2[:, :10, ...], full_s2[:, 10:, ...]  # Séparer les données S2 (raw) des masques (raw)
                     idx_kept = batch["idx_kept"].squeeze(axis=0).cpu().numpy()  # (T_kept,)
-                    # t_effective = batch["t_effective"].squeeze(axis=0).cpu().numpy()  # Indices des dates gardées (clean + synthétiques) dans la série temporelle filtrée
                     assert len(idx_kept) == y_pred.shape[1], f"Mismatch between number of kept dates ({len(idx_kept)}) and model output time dimension ({y_pred.shape[1]})."
 
                     denorm_pred = SentinelDataProcessor.reverse_process_MS(
                         y_pred, intensity_max=MAX_PIXEL_INTENSITY_USED_FOR_REVERSE
                     )
-                    # Get prediction (T, 10, h, w) on CPU
+                    # Get prediction (T_kept, 10, h, w) on CPU — denormalized to [0, 10000]
                     pred_patch = denorm_pred.squeeze(axis=0).cpu().numpy()
 
-                    # Restore the original temporal order with zeros for the dropped dates
-                    full_pred = full_s2_data
-                    full_pred[idx_kept, ...] = pred_patch
+                    # Restore the original temporal order: predictions for kept dates,
+                    # raw S2 data (same scale) for dropped dates (really cloudy)
+                    full_s2_data[idx_kept, ...] = pred_patch
 
-                    # Concatenate (T, 12, h, w)
-                    full_patch = np.concatenate([full_pred, s2_masks], axis=1)
+                    # Concatenate (T_all, 12, h, w) — raw mask values preserved
+                    full_patch = np.concatenate([full_s2_data, s2_masks], axis=1)
 
                     # 4. Reshape to flattened channels (T*12, h, w)
                     final_patch = full_patch.reshape(

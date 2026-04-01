@@ -946,7 +946,5 @@ class Dataset_from_files(Dataset):
         if self.keep_all_dates is False:
             out["t_effective"] = t_effective  # Indices des dates gardées (clean + synthétiques) dans la série temporelle filtrée
             out["idx_kept"] = idx_kept  # Indices des dates gardées (clean + synthétiques) dans la série originale
-            # out["is_synthetic"] = idx_synthetic
-            # out["is_synth_in_kept"] = is_synth_in_kept
-            out["full_s2"] = SentinelDataProcessor.process_MS(patch_S2_array)
+            out["full_s2"] = patch_S2_array  # Raw S2 data (T, 12, h, w) — NOT normalized, for direct writing back to raster
         return out
