@@ -42,11 +42,13 @@ class Imputation:
         temporal_window: int | None = None,
         device: torch.device | None = None,
         num_channels: int = 10,
+        blend_mode: str = "switch",
     ):
         self.method = Method(method)
         self.mode = Mode(mode)
         self.checkpoint = checkpoint
         self.config_file_train = config_file_train
+        self.blend_mode = blend_mode
 
         if self.method == Method.TRIVIAL and self.mode == Mode.NONE:
             raise ValueError(f"No mode specified. Choose among {[mode.value for mode in Mode]}.")
@@ -126,11 +128,17 @@ class Imputation:
         if isinstance(self.model, MODELS["utilise"]):
             batch = data_utils.to_device(batch, self.device)
             if return_att:
-                y_pred, att = impute_sequence(self.model, batch, self.temporal_window, return_att=True)
+                y_pred, att = impute_sequence(
+                    self.model, batch, self.temporal_window,
+                    return_att=True, blend_mode=self.blend_mode,
+                )
                 if att is not None:
                     att = att.cpu()
             else:
-                y_pred = impute_sequence(self.model, batch, self.temporal_window, return_att=False)
+                y_pred = impute_sequence(
+                    self.model, batch, self.temporal_window,
+                    return_att=False, blend_mode=self.blend_mode,
+                )
             batch = data_utils.to_device(batch, "cpu")
             y_pred = y_pred.cpu()
         else:
@@ -148,11 +156,32 @@ class Imputation:
         del checkpoint
 
 
+def _center_weights(window_size: int, device: torch.device) -> Tensor:
+    """Triangular weights peaking at the center of the window.
+
+    For window_size=5: [1, 2, 3, 2, 1] (normalized so they sum to 1).
+    """
+    half = window_size / 2.0
+    w = torch.arange(window_size, dtype=torch.float32, device=device)
+    w = 1.0 + torch.min(w, torch.tensor(window_size, device=device) - 1.0 - w)
+    return w / w.sum()
+
+
 def impute_sequence(
-    model, batch: dict[str, Any], temporal_window: int, return_att: bool = False
+    model,
+    batch: dict[str, Any],
+    temporal_window: int,
+    return_att: bool = False,
+    blend_mode: str = "switch",
 ) -> Tensor | tuple[Tensor, Tensor]:
     """
     Sliding-window imputation of satellite image time series.
+
+    Args:
+        blend_mode: ``"switch"`` (default) uses the original hard-switch at the
+            frame with minimum prediction error between overlapping windows.
+            ``"center"`` uses center-weighted blending where predictions from the
+            middle of each window contribute more than those at the edges.
 
     Assumption: `batch` consists of a single sample.
     """
@@ -168,7 +197,48 @@ def impute_sequence(
             y_pred, att = model(x, batch_positions=positions, return_att=True)
         else:
             y_pred = model(x, batch_positions=positions)
+    elif blend_mode == "center":
+        # ── Center-weighted blending ─────────────────────────────────────
+        if return_att:
+            att = None
+        B, T, _, H, W = x.shape
+        cloud_coverage = torch.mean(batch["masks"], dim=(0, 2, 3, 4))
+
+        y_accum: Tensor | None = None
+        w_accum: Tensor | None = None
+
+        t_start = 0
+        t_end = temporal_window
+        t_max = T
+        reached_end = False
+
+        while not reached_end:
+            y_pred_chunk = model(
+                x[:, t_start:t_end], batch_positions=positions[:, t_start:t_end]
+            )
+
+            if y_accum is None:
+                C = y_pred_chunk.shape[2]
+                y_accum = torch.zeros((B, T, C, H, W), device=x.device)
+                w_accum = torch.zeros((1, T, 1, 1, 1), device=x.device)
+
+            chunk_len = t_end - t_start
+            weights = _center_weights(chunk_len, x.device)  # (chunk_len,)
+            weights = weights.view(1, chunk_len, 1, 1, 1)   # broadcastable
+
+            y_accum[:, t_start:t_end] += y_pred_chunk * weights
+            w_accum[:, t_start:t_end] += weights
+
+            if t_end == t_max:
+                reached_end = True
+            else:
+                t_start, t_end = move_temporal_window_next(
+                    t_start, t_max, temporal_window, cloud_coverage
+                )
+
+        y_pred = y_accum / w_accum.clamp(min=1e-8)
     else:
+        # ── Original hard-switch blending ────────────────────────────────
         if return_att:
             att = None
 

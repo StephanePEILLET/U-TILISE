@@ -13,8 +13,8 @@ data:
 
 test_data:
     # ⚠ ADAPTER le sous-dossier daté après le training (ex: 2026-04-01_12-00)
-    checkpoint: /mnt/common/hdd/home/SPeillet/outputs/U-TILISE/v4_mix_closest_random_clouds_combined_ndvi_r2/YYYY-MM-DD_HH-MM/checkpoints/Model_best.pth
-    test_config: /mnt/common/hdd/home/SPeillet/outputs/U-TILISE/v4_mix_closest_random_clouds_combined_ndvi_r2/YYYY-MM-DD_HH-MM/config.yaml
+    checkpoint: /mnt/common/hdd/home/SPeillet/outputs/U-TILISE/v4_mix_closest_random_clouds_combined_ndvi_r2/2026-04-02_18-38/checkpoints/Model_best.pth
+    test_config: /mnt/common/hdd/home/SPeillet/outputs/U-TILISE/v4_mix_closest_random_clouds_combined_ndvi_r2/2026-04-02_18-38/config.yaml
     hdf5_file: /var/data/datasets/CIRCA_CR_merged.hdf5
     mode: null
     split: test

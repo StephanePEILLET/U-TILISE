@@ -5,6 +5,7 @@ data:
     channels: all
     use_sar: mix_closest_without_coherence
     subset: False
+    mask_sar: true
     max_seq_length: 14
     filter_settings:
         type: cloud-free

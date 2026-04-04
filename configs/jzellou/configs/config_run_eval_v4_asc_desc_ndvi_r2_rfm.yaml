@@ -13,8 +13,8 @@ data:
 
 test_data:
     # ⚠ ADAPTER le sous-dossier daté après le training (ex: 2026-04-01_12-00)
-    checkpoint: /mnt/common/hdd/home/SPeillet/outputs/U-TILISE/v4_asc_desc_random_clouds_combined_ndvi_r2/YYYY-MM-DD_HH-MM/checkpoints/Model_best.pth
-    test_config: /mnt/common/hdd/home/SPeillet/outputs/U-TILISE/v4_asc_desc_random_clouds_combined_ndvi_r2/YYYY-MM-DD_HH-MM/config.yaml
+    checkpoint: /mnt/common/hdd/home/SPeillet/outputs/U-TILISE/v4_asc_desc_random_clouds_combined_ndvi_r2/2026-04-02_18-30/checkpoints/Model_best.pth
+    test_config: /mnt/common/hdd/home/SPeillet/outputs/U-TILISE/v4_asc_desc_random_clouds_combined_ndvi_r2/2026-04-02_18-30/config.yaml
     hdf5_file: /var/data/datasets/CIRCA_CR_merged.hdf5
     mode: null
     split: test
@@ -66,6 +66,6 @@ misc:
     run_mode: test
 
 output:
-    save_dir: /mnt/common/hdd/home/SPeillet/outputs/U-TILISE/metrics/v4_asc_desc_random_clouds_combined_ndvi_r2/random_fully_masked
+    save_dir: /mnt/common/hdd/home/SPeillet/outputs/U-TILISE/metrics/v4_asc_desc_random_clouds_combined_ndvi_r2/random_fully_masked/2026-04-02_18-30
     suffix:
     plot_model_txt: true

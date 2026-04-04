@@ -156,6 +156,40 @@ EXPERIMENTS: list[tuple[str, str, dict[str, str]]] = [
             "consecutive_fully_masked": "metrics_v3_cyclic_cfm",
         },
     ),
+    # ── V4 models (combined architecture, 120 epochs) ──
+    (
+        "**v4** asc+desc, combined",
+        "v4_asc_desc_random_clouds_combined",
+        {
+            "random_fully_masked": "metrics_v4_asc_desc_rfm",
+            "consecutive_fully_masked": "metrics_v4_asc_desc_cfm",
+        },
+    ),
+    (
+        "**v4** mix_closest, combined",
+        "v4_mix_closest_random_clouds_combined",
+        {
+            "random_fully_masked": "metrics_v4_mix_closest_rfm",
+            "consecutive_fully_masked": "metrics_v4_mix_closest_cfm",
+        },
+    ),
+    # ── V4 models + NDVI & R² loss ──
+    (
+        "**v4** asc+desc, combined, NDVI+R²",
+        "v4_asc_desc_random_clouds_combined_ndvi_r2",
+        {
+            "random_fully_masked": "metrics_v4_asc_desc_ndvi_r2_rfm",
+            "consecutive_fully_masked": "metrics_v4_asc_desc_ndvi_r2_cfm",
+        },
+    ),
+    (
+        "**v4** mix_closest, combined, NDVI+R²",
+        "v4_mix_closest_random_clouds_combined_ndvi_r2",
+        {
+            "random_fully_masked": "metrics_v4_mix_closest_ndvi_r2_rfm",
+            "consecutive_fully_masked": "metrics_v4_mix_closest_ndvi_r2_cfm",
+        },
+    ),
 ]
 
 MASK_MODES = ["random_fully_masked", "consecutive_fully_masked"]
