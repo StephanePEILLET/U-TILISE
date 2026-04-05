@@ -43,12 +43,14 @@ class Imputation:
         device: torch.device | None = None,
         num_channels: int = 10,
         blend_mode: str = "switch",
+        center_only_n_keep: int = 2,
     ):
         self.method = Method(method)
         self.mode = Mode(mode)
         self.checkpoint = checkpoint
         self.config_file_train = config_file_train
         self.blend_mode = blend_mode
+        self.center_only_n_keep = center_only_n_keep
 
         if self.method == Method.TRIVIAL and self.mode == Mode.NONE:
             raise ValueError(f"No mode specified. Choose among {[mode.value for mode in Mode]}.")
@@ -131,6 +133,7 @@ class Imputation:
                 y_pred, att = impute_sequence(
                     self.model, batch, self.temporal_window,
                     return_att=True, blend_mode=self.blend_mode,
+                    center_only_n_keep=self.center_only_n_keep,
                 )
                 if att is not None:
                     att = att.cpu()
@@ -138,6 +141,7 @@ class Imputation:
                 y_pred = impute_sequence(
                     self.model, batch, self.temporal_window,
                     return_att=False, blend_mode=self.blend_mode,
+                    center_only_n_keep=self.center_only_n_keep,
                 )
             batch = data_utils.to_device(batch, "cpu")
             y_pred = y_pred.cpu()
@@ -167,12 +171,88 @@ def _center_weights(window_size: int, device: torch.device) -> Tensor:
     return w / w.sum()
 
 
+def _impute_center(model, batch: dict[str, Any], temporal_window: int) -> Tensor:
+    """Run center-weighted blending and return the full-length prediction."""
+    x = batch["x"]
+    positions = batch["position_days"]
+    B, T, _, H, W = x.shape
+    cloud_coverage = torch.mean(batch["masks"], dim=(0, 2, 3, 4))
+
+    y_accum: Tensor | None = None
+    w_accum: Tensor | None = None
+
+    t_start = 0
+    t_end = temporal_window
+    t_max = T
+    reached_end = False
+
+    while not reached_end:
+        y_pred_chunk = model(
+            x[:, t_start:t_end], batch_positions=positions[:, t_start:t_end]
+        )
+        if y_accum is None:
+            C = y_pred_chunk.shape[2]
+            y_accum = torch.zeros((B, T, C, H, W), device=x.device)
+            w_accum = torch.zeros((1, T, 1, 1, 1), device=x.device)
+
+        chunk_len = t_end - t_start
+        weights = _center_weights(chunk_len, x.device).view(1, chunk_len, 1, 1, 1)
+        y_accum[:, t_start:t_end] += y_pred_chunk * weights
+        w_accum[:, t_start:t_end] += weights
+
+        if t_end == t_max:
+            reached_end = True
+        else:
+            t_start, t_end = move_temporal_window_next(
+                t_start, t_max, temporal_window, cloud_coverage
+            )
+
+    return y_accum / w_accum.clamp(min=1e-8)
+
+
+def _compute_iterative_passes(masks: Tensor, temporal_window: int) -> int:
+    """Determine how many iterative passes are needed.
+
+    Analyses the mask tensor to find the longest run of consecutive fully-masked
+    dates, then returns ``ceil(longest_gap / (temporal_window // 2))``, capped
+    at 6. A single pass is always returned when there is no gap longer than
+    half the temporal window.
+
+    Args:
+        masks: (B, T, 1, H, W) with 1 = masked.
+        temporal_window: sliding-window size used during inference.
+
+    Returns:
+        Number of passes (>= 1).
+    """
+    # A date is "fully masked" when its spatial average >= 0.99
+    coverage = masks[0, :, 0].mean(dim=(-2, -1))  # (T,)
+    is_masked = (coverage >= 0.99)
+
+    # Find the longest consecutive run of True
+    longest = 0
+    current = 0
+    for m in is_masked.tolist():
+        if m:
+            current += 1
+            longest = max(longest, current)
+        else:
+            current = 0
+
+    half_win = temporal_window // 2
+    if longest <= half_win:
+        return 1
+    n_passes = math.ceil(longest / half_win)
+    return min(n_passes, 6)
+
+
 def impute_sequence(
     model,
     batch: dict[str, Any],
     temporal_window: int,
     return_att: bool = False,
     blend_mode: str = "switch",
+    center_only_n_keep: int = 2,
 ) -> Tensor | tuple[Tensor, Tensor]:
     """
     Sliding-window imputation of satellite image time series.
@@ -182,6 +262,16 @@ def impute_sequence(
             frame with minimum prediction error between overlapping windows.
             ``"center"`` uses center-weighted blending where predictions from the
             middle of each window contribute more than those at the edges.
+            ``"center_only"`` keeps only the ``center_only_n_keep`` central frames
+            from each window (default 2). The stride equals ``n_keep``, so many
+            more inference passes are required, but every date is predicted from
+            the most central position possible — ideal for long cloudy stretches.
+            ``"iterative"`` runs multiple center-weighted passes; after each pass
+            the predictions are injected back into masked S2 channels so the
+            next pass sees them as observed data. The number of passes is
+            computed dynamically from the longest consecutive masked gap.
+        center_only_n_keep: number of central frames to keep per window when
+            ``blend_mode="center_only"`` (default 2).
 
     Assumption: `batch` consists of a single sample.
     """
@@ -197,46 +287,97 @@ def impute_sequence(
             y_pred, att = model(x, batch_positions=positions, return_att=True)
         else:
             y_pred = model(x, batch_positions=positions)
-    elif blend_mode == "center":
-        # ── Center-weighted blending ─────────────────────────────────────
+    elif blend_mode == "center_only":
+        # ── Center-only: keep only n_keep central frames per window ──────
         if return_att:
             att = None
         B, T, _, H, W = x.shape
-        cloud_coverage = torch.mean(batch["masks"], dim=(0, 2, 3, 4))
+        n_keep = min(center_only_n_keep, temporal_window)
+        stride = n_keep  # advance by exactly n_keep frames each pass
 
-        y_accum: Tensor | None = None
-        w_accum: Tensor | None = None
-
+        y_pred_init = False
         t_start = 0
-        t_end = temporal_window
-        t_max = T
-        reached_end = False
 
-        while not reached_end:
+        while t_start + temporal_window <= T:
+            t_end = t_start + temporal_window
+
             y_pred_chunk = model(
                 x[:, t_start:t_end], batch_positions=positions[:, t_start:t_end]
             )
 
-            if y_accum is None:
+            if not y_pred_init:
                 C = y_pred_chunk.shape[2]
-                y_accum = torch.zeros((B, T, C, H, W), device=x.device)
-                w_accum = torch.zeros((1, T, 1, 1, 1), device=x.device)
+                y_pred = torch.zeros((B, T, C, H, W), device=x.device)
+                y_pred_init = True
 
-            chunk_len = t_end - t_start
-            weights = _center_weights(chunk_len, x.device)  # (chunk_len,)
-            weights = weights.view(1, chunk_len, 1, 1, 1)   # broadcastable
+            # Central n_keep indices within the chunk
+            mid = temporal_window // 2
+            half_keep = n_keep // 2
+            c_start = mid - half_keep
+            c_end = c_start + n_keep
 
-            y_accum[:, t_start:t_end] += y_pred_chunk * weights
-            w_accum[:, t_start:t_end] += weights
+            # Map back to global indices
+            g_start = t_start + c_start
+            g_end = t_start + c_end
+            y_pred[:, g_start:g_end] = y_pred_chunk[:, c_start:c_end]
 
-            if t_end == t_max:
-                reached_end = True
-            else:
-                t_start, t_end = move_temporal_window_next(
-                    t_start, t_max, temporal_window, cloud_coverage
+            t_start += stride
+
+        # ── Handle remaining frames at the edges ─────────────────────────
+        # Left edge: frames [0, c_start_of_first_window) from the first pass
+        first_c_start = (temporal_window // 2) - (n_keep // 2)
+        if first_c_start > 0:
+            y_pred_chunk = model(
+                x[:, :temporal_window], batch_positions=positions[:, :temporal_window]
+            )
+            y_pred[:, :first_c_start] = y_pred_chunk[:, :first_c_start]
+
+        # Right edge: use the last possible window covering remaining frames
+        last_g_end = t_start + (temporal_window // 2) - (n_keep // 2) + n_keep - stride
+        # More simply: find which frames at the end are still zero
+        if t_start < T:
+            # Need to cover frames from (last written g_end) to T
+            t_start_last = T - temporal_window
+            t_end_last = T
+            y_pred_chunk = model(
+                x[:, t_start_last:t_end_last],
+                batch_positions=positions[:, t_start_last:t_end_last],
+            )
+            # Fill only the frames not yet written
+            already_written_up_to = t_start + (temporal_window // 2) - (n_keep // 2)
+            fill_from = max(already_written_up_to, t_start_last)
+            y_pred[:, fill_from:T] = y_pred_chunk[:, (fill_from - t_start_last):]
+    elif blend_mode == "iterative":
+        # ── Iterative multi-pass reconstruction ──────────────────────────
+        # Dynamically compute how many passes are needed based on the
+        # longest consecutive masked gap.
+        if return_att:
+            att = None
+
+        n_passes = _compute_iterative_passes(batch["masks"], temporal_window)
+        n_s2 = 10  # number of S2 channels in x
+
+        # Work on clones so the original batch is not modified
+        x_iter = batch["x"].clone()
+        masks_iter = batch["masks"].clone()
+
+        for p in range(n_passes):
+            iter_batch = {**batch, "x": x_iter, "masks": masks_iter}
+            y_pred = _impute_center(model, iter_batch, temporal_window)
+
+            if p < n_passes - 1:
+                # Inject predictions into masked S2 channels for the next pass
+                mask_broad = masks_iter.expand_as(x_iter[:, :, :n_s2])
+                x_iter[:, :, :n_s2] = torch.where(
+                    mask_broad.bool(), y_pred, x_iter[:, :, :n_s2]
                 )
-
-        y_pred = y_accum / w_accum.clamp(min=1e-8)
+                # Clear the mask so the model sees these as "observed"
+                masks_iter = torch.zeros_like(masks_iter)
+    elif blend_mode == "center":
+        # ── Center-weighted blending ─────────────────────────────────────
+        if return_att:
+            att = None
+        y_pred = _impute_center(model, batch, temporal_window)
     else:
         # ── Original hard-switch blending ────────────────────────────────
         if return_att:

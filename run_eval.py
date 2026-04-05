@@ -202,7 +202,8 @@ class Evaluator:
             # temporal_window=MAX_SAMPLES_ON_GPU,
             num_channels=self.dset.num_channels,
             device=device,
-            blend_mode=self.config.data.get("blend_mode", "switch"),  # "switch" or "average"
+            blend_mode=self.config.data.get("blend_mode", "switch"),  # "switch", "center", "center_only" or "iterative"
+            center_only_n_keep=self.config.data.get("center_only_n_keep", 2),
         )
         # Parcel mask generator (optional)
         parcel_gpkg = self.config.data.get("parcel_gpkg", None)

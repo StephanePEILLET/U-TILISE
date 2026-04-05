@@ -4,9 +4,10 @@ data:
     load_transforms: ./data/CIRCA_patches_datasets_with_transforms.json
     # parcel_gpkg: /mnt/stores/store_dai/projets/pac/3str/EXP_2/Data_Vecteur/CIRCA+_parcels_full.gpkg  # Path to parcel GPKG. Set to null to disable parcel-only evaluation.
     channels: all
-    use_sar: mix_closest # asc /desc/ mix_closest / asc+desc
-    subset: false   
-    max_seq_length: 5                     # Maximum temporal sequence length. Set to None to skip temporal trimming.
+    use_sar: asc+desc # asc /desc/ mix_closest / asc+desc
+    subset: false  
+    blend_mode: center
+    max_seq_length: 14                     # Maximum temporal sequence length. Set to None to skip temporal trimming.
     return_windows: true
     filter_settings:
         type: cloud-free

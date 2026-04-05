@@ -173,6 +173,33 @@ EXPERIMENTS: list[tuple[str, str, dict[str, str]]] = [
             "consecutive_fully_masked": "metrics_v4_mix_closest_cfm",
         },
     ),
+    # ── V4 models + blend center ──
+    (
+        "**v4** asc+desc, combined, blend",
+        "v4_asc_desc_random_clouds_combined_blend",
+        {
+            "random_fully_masked": "metrics_v4_asc_desc_rfm_blend",
+            "consecutive_fully_masked": "metrics_v4_asc_desc_cfm_blend",
+        },
+    ),
+    # ── V4 models + center_only (n_keep=2) ──
+    (
+        "**v4** asc+desc, combined, center_only",
+        "v4_asc_desc_random_clouds_combined_center_only",
+        {
+            "random_fully_masked": "metrics_v4_asc_desc_rfm_center_only",
+            "consecutive_fully_masked": "metrics_v4_asc_desc_cfm_center_only",
+        },
+    ),
+    # ── V4 models + iterative multi-pass ──
+    (
+        "**v4** asc+desc, combined, iterative",
+        "v4_asc_desc_random_clouds_combined_iterative",
+        {
+            "random_fully_masked": "metrics_v4_asc_desc_rfm_iterative",
+            "consecutive_fully_masked": "metrics_v4_asc_desc_cfm_iterative",
+        },
+    ),
     # ── V4 models + NDVI & R² loss ──
     (
         "**v4** asc+desc, combined, NDVI+R²",
