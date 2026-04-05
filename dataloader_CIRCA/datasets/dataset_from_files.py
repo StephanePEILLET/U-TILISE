@@ -15,7 +15,10 @@ from tqdm.auto import tqdm
 
 from dataloader_CIRCA.tools.data_processor import SentinelDataProcessor
 from dataloader_CIRCA.tools.mask_generation import masks_init_filling
-from dataloader_CIRCA.tools.positional_encoding import get_position_for_positional_encoding
+from dataloader_CIRCA.tools.positional_encoding import (
+    get_pairwise_representative_dates,
+    get_position_for_positional_encoding,
+)
 
 ChannelType = Literal["all", "bgr-nir"]
 
@@ -199,11 +202,24 @@ class Dataset_from_files(Dataset):
     def setup_s1_dates(self) -> None:
         self.dates_s1_asc = self.dates_dict[self.mgrsc]["S1"]["ASC"]
         self.dates_s1_desc = self.dates_dict[self.mgrsc]["S1"]["DESC"]
-        self.closest_dates_matches = SentinelDataProcessor.get_pairedS1_closest_matches(
-            dates_S2=self.dates_s2,
-            dates_S1_asc=self.dates_s1_asc,
-            dates_S1_desc=self.dates_s1_desc,
-        )
+        if self.use_sar == "asc+desc":
+            # Precompute closest ASC and closest DESC independently for each S2 date
+            dts_s2 = SentinelDataProcessor.get_datetime_or_format(self.dates_s2)
+            dts_s1_asc = SentinelDataProcessor.get_datetime_or_format(self.dates_s1_asc)
+            dts_s1_desc = SentinelDataProcessor.get_datetime_or_format(self.dates_s1_desc)
+            self.asc_match_indices = []
+            self.desc_match_indices = []
+            for dt_s2 in dts_s2:
+                deltas_asc = [abs((dt_s2 - d).days) for d in dts_s1_asc]
+                self.asc_match_indices.append(int(np.argmin(deltas_asc)))
+                deltas_desc = [abs((dt_s2 - d).days) for d in dts_s1_desc]
+                self.desc_match_indices.append(int(np.argmin(deltas_desc)))
+        else:
+            self.closest_dates_matches = SentinelDataProcessor.get_pairedS1_closest_matches(
+                dates_S2=self.dates_s2,
+                dates_S1_asc=self.dates_s1_asc,
+                dates_S1_desc=self.dates_s1_desc,
+            )
 
     def load_exported_data(self, path_data: str | Path) -> None:
         """
@@ -496,67 +512,135 @@ class Dataset_from_files(Dataset):
         dates_s1_sampled = None
         closest_matches = None
         if self.use_sar:
-            closest_matches = SentinelDataProcessor.get_pairedS1_closest_matches(
-                dates_S2=dates_S2,
-                dates_S1_asc=dates_S1_asc,
-                dates_S1_desc=dates_S1_desc,
-            )
+            if self.use_sar == "asc+desc":
+                # asc+desc: load BOTH ASC and DESC for each S2 date → 8 SAR channels
+                dts_s2 = SentinelDataProcessor.get_datetime_or_format(dates_S2)
+                dts_s1_asc = SentinelDataProcessor.get_datetime_or_format(dates_S1_asc)
+                dts_s1_desc = SentinelDataProcessor.get_datetime_or_format(dates_S1_desc)
 
-            s1_tile, s1_dates = [], []
-            indices_s2 = t_sampled if t_sampled is not None else range(len(closest_matches))
+                asc_match_indices = []
+                desc_match_indices = []
+                for dt_s2 in dts_s2:
+                    deltas_asc = [abs((dt_s2 - d).days) for d in dts_s1_asc]
+                    asc_match_indices.append(int(np.argmin(deltas_asc)))
+                    deltas_desc = [abs((dt_s2 - d).days) for d in dts_s1_desc]
+                    desc_match_indices.append(int(np.argmin(deltas_desc)))
 
-            asc_bands, desc_bands = [], []
-            asc_indices_map, desc_indices_map = {}, {}
+                indices_s2 = t_sampled if t_sampled is not None else range(len(dts_s2))
 
-            for index_s2 in indices_s2:
-                _, date_s1, index_s1, orbit_type = closest_matches[index_s2]
-                if orbit_type == "ASC":
-                    if index_s1 not in asc_indices_map:
-                        asc_indices_map[index_s1] = True
-                        asc_bands.extend([index_s1 * S1_N_CHANNELS + c + 1 for c in range(S1_N_CHANNELS)])
-                elif index_s1 not in desc_indices_map:
-                    desc_indices_map[index_s1] = True
-                    desc_bands.extend([index_s1 * S1_N_CHANNELS + c + 1 for c in range(S1_N_CHANNELS)])
+                asc_indices_needed = sorted({asc_match_indices[i] for i in indices_s2})
+                desc_indices_needed = sorted({desc_match_indices[i] for i in indices_s2})
 
-            asc_bands = sorted(set(asc_bands))
-            desc_bands = sorted(set(desc_bands))
+                asc_bands = sorted({idx * S1_N_CHANNELS + c + 1 for idx in asc_indices_needed for c in range(S1_N_CHANNELS)})
+                desc_bands = sorted({idx * S1_N_CHANNELS + c + 1 for idx in desc_indices_needed for c in range(S1_N_CHANNELS)})
 
-            s1_tile_asc_dict = {}
-            if len(asc_bands) > 0:
-                with rasterio.open(s1_asc_file) as src_s1:
-                    asc_data = src_s1.read(asc_bands, window=Window(*crop_window))
-                    for i, band in enumerate(asc_bands):
-                        idx = (band - 1) // S1_N_CHANNELS
-                        c = (band - 1) % S1_N_CHANNELS
-                        if idx not in s1_tile_asc_dict:
-                            s1_tile_asc_dict[idx] = np.zeros(
-                                (S1_N_CHANNELS, asc_data.shape[-2], asc_data.shape[-1]), dtype=asc_data.dtype
-                            )
-                        s1_tile_asc_dict[idx][c] = asc_data[i]
+                s1_tile_asc_dict = {}
+                if asc_bands:
+                    with rasterio.open(s1_asc_file) as src_s1:
+                        asc_data = src_s1.read(asc_bands, window=Window(*crop_window))
+                        for i, band in enumerate(asc_bands):
+                            idx = (band - 1) // S1_N_CHANNELS
+                            c = (band - 1) % S1_N_CHANNELS
+                            if idx not in s1_tile_asc_dict:
+                                s1_tile_asc_dict[idx] = np.zeros(
+                                    (S1_N_CHANNELS, asc_data.shape[-2], asc_data.shape[-1]), dtype=asc_data.dtype
+                                )
+                            s1_tile_asc_dict[idx][c] = asc_data[i]
 
-            s1_tile_desc_dict = {}
-            if len(desc_bands) > 0:
-                with rasterio.open(s1_desc_file) as src_s1:
-                    desc_data = src_s1.read(desc_bands, window=Window(*crop_window))
-                    for i, band in enumerate(desc_bands):
-                        idx = (band - 1) // S1_N_CHANNELS
-                        c = (band - 1) % S1_N_CHANNELS
-                        if idx not in s1_tile_desc_dict:
-                            s1_tile_desc_dict[idx] = np.zeros(
-                                (S1_N_CHANNELS, desc_data.shape[-2], desc_data.shape[-1]), dtype=desc_data.dtype
-                            )
-                        s1_tile_desc_dict[idx][c] = desc_data[i]
+                s1_tile_desc_dict = {}
+                if desc_bands:
+                    with rasterio.open(s1_desc_file) as src_s1:
+                        desc_data = src_s1.read(desc_bands, window=Window(*crop_window))
+                        for i, band in enumerate(desc_bands):
+                            idx = (band - 1) // S1_N_CHANNELS
+                            c = (band - 1) % S1_N_CHANNELS
+                            if idx not in s1_tile_desc_dict:
+                                s1_tile_desc_dict[idx] = np.zeros(
+                                    (S1_N_CHANNELS, desc_data.shape[-2], desc_data.shape[-1]), dtype=desc_data.dtype
+                                )
+                            s1_tile_desc_dict[idx][c] = desc_data[i]
 
-            for index_s2 in indices_s2:
-                _, date_s1, index_s1, orbit_type = closest_matches[index_s2]
-                s1_band = s1_tile_asc_dict[index_s1] if orbit_type == "ASC" else s1_tile_desc_dict[index_s1]
-                s1_tile.append(s1_band)
-                s1_dates.append(date_s1)
+                s1_tile = []
+                s1_dates_asc_list, s1_dates_desc_list = [], []
+                for index_s2 in indices_s2:
+                    asc_idx = asc_match_indices[index_s2]
+                    desc_idx = desc_match_indices[index_s2]
+                    asc_band = s1_tile_asc_dict[asc_idx]
+                    desc_band = s1_tile_desc_dict[desc_idx]
+                    s1_tile.append(np.concatenate([asc_band, desc_band], axis=0))  # (8, H, W)
+                    s1_dates_asc_list.append(dates_S1_asc[asc_idx])
+                    s1_dates_desc_list.append(dates_S1_desc[desc_idx])
 
-            s1_tile = np.stack(s1_tile, axis=0)
-            s1_tile = torch.from_numpy(s1_tile.astype(np.float32))
-            dates_s1_sampled = np.array([self.str2date(date) for date in s1_dates])
-            data_s1 = SentinelDataProcessor.process_SAR(s1_tile)
+                s1_tile = np.stack(s1_tile, axis=0)  # (T, 8, H, W)
+                s1_tile = torch.from_numpy(s1_tile.astype(np.float32))
+                dates_s1_sampled = get_pairwise_representative_dates(
+                    asc_dates=np.array([self.str2date(d) for d in s1_dates_asc_list]),
+                    desc_dates=np.array([self.str2date(d) for d in s1_dates_desc_list]),
+                )
+                data_s1 = SentinelDataProcessor.process_SAR(s1_tile)
+            else:
+                # mix_closest / asc / desc: load ONE orbit per S2 date → 4 SAR channels
+                closest_matches = SentinelDataProcessor.get_pairedS1_closest_matches(
+                    dates_S2=dates_S2,
+                    dates_S1_asc=dates_S1_asc,
+                    dates_S1_desc=dates_S1_desc,
+                )
+
+                s1_tile, s1_dates = [], []
+                indices_s2 = t_sampled if t_sampled is not None else range(len(closest_matches))
+
+                asc_bands, desc_bands = [], []
+                asc_indices_map, desc_indices_map = {}, {}
+
+                for index_s2 in indices_s2:
+                    _, date_s1, index_s1, orbit_type = closest_matches[index_s2]
+                    if orbit_type == "ASC":
+                        if index_s1 not in asc_indices_map:
+                            asc_indices_map[index_s1] = True
+                            asc_bands.extend([index_s1 * S1_N_CHANNELS + c + 1 for c in range(S1_N_CHANNELS)])
+                    elif index_s1 not in desc_indices_map:
+                        desc_indices_map[index_s1] = True
+                        desc_bands.extend([index_s1 * S1_N_CHANNELS + c + 1 for c in range(S1_N_CHANNELS)])
+
+                asc_bands = sorted(set(asc_bands))
+                desc_bands = sorted(set(desc_bands))
+
+                s1_tile_asc_dict = {}
+                if len(asc_bands) > 0:
+                    with rasterio.open(s1_asc_file) as src_s1:
+                        asc_data = src_s1.read(asc_bands, window=Window(*crop_window))
+                        for i, band in enumerate(asc_bands):
+                            idx = (band - 1) // S1_N_CHANNELS
+                            c = (band - 1) % S1_N_CHANNELS
+                            if idx not in s1_tile_asc_dict:
+                                s1_tile_asc_dict[idx] = np.zeros(
+                                    (S1_N_CHANNELS, asc_data.shape[-2], asc_data.shape[-1]), dtype=asc_data.dtype
+                                )
+                            s1_tile_asc_dict[idx][c] = asc_data[i]
+
+                s1_tile_desc_dict = {}
+                if len(desc_bands) > 0:
+                    with rasterio.open(s1_desc_file) as src_s1:
+                        desc_data = src_s1.read(desc_bands, window=Window(*crop_window))
+                        for i, band in enumerate(desc_bands):
+                            idx = (band - 1) // S1_N_CHANNELS
+                            c = (band - 1) % S1_N_CHANNELS
+                            if idx not in s1_tile_desc_dict:
+                                s1_tile_desc_dict[idx] = np.zeros(
+                                    (S1_N_CHANNELS, desc_data.shape[-2], desc_data.shape[-1]), dtype=desc_data.dtype
+                                )
+                            s1_tile_desc_dict[idx][c] = desc_data[i]
+
+                for index_s2 in indices_s2:
+                    _, date_s1, index_s1, orbit_type = closest_matches[index_s2]
+                    s1_band = s1_tile_asc_dict[index_s1] if orbit_type == "ASC" else s1_tile_desc_dict[index_s1]
+                    s1_tile.append(s1_band)
+                    s1_dates.append(date_s1)
+
+                s1_tile = np.stack(s1_tile, axis=0)
+                s1_tile = torch.from_numpy(s1_tile.astype(np.float32))
+                dates_s1_sampled = np.array([self.str2date(date) for date in s1_dates])
+                data_s1 = SentinelDataProcessor.process_SAR(s1_tile)
 
         idx_kept = None
 
@@ -769,57 +853,109 @@ class Dataset_from_files(Dataset):
         cloud_masks = (cloud_probs > 0).float()  # Binarization of cloud masks
 
         if self.use_sar:
-            s1_tile, s1_dates = [], []
-            indices_s2 = t_sampled if t_sampled is not None else range(len(self.closest_dates_matches))
+            if self.use_sar == "asc+desc":
+                # asc+desc: load BOTH ASC and DESC for each S2 date → 8 SAR channels
+                indices_s2 = t_sampled if t_sampled is not None else range(len(self.asc_match_indices))
 
-            asc_bands, desc_bands = [], []
-            asc_indices_map, desc_indices_map = {}, {}
+                asc_indices_needed = sorted({self.asc_match_indices[i] for i in indices_s2})
+                desc_indices_needed = sorted({self.desc_match_indices[i] for i in indices_s2})
 
-            for index_s2 in indices_s2:
-                _, date_s1, index_s1, orbit_type = self.closest_dates_matches[index_s2]
-                if orbit_type == "ASC":
-                    if index_s1 not in asc_indices_map:
-                        asc_indices_map[index_s1] = True
-                        asc_bands.extend([index_s1 * S1_N_CHANNELS + c + 1 for c in range(S1_N_CHANNELS)])
-                elif index_s1 not in desc_indices_map:
-                    desc_indices_map[index_s1] = True
-                    desc_bands.extend([index_s1 * S1_N_CHANNELS + c + 1 for c in range(S1_N_CHANNELS)])
+                asc_bands = sorted({idx * S1_N_CHANNELS + c + 1 for idx in asc_indices_needed for c in range(S1_N_CHANNELS)})
+                desc_bands = sorted({idx * S1_N_CHANNELS + c + 1 for idx in desc_indices_needed for c in range(S1_N_CHANNELS)})
 
-            asc_bands = sorted(set(asc_bands))
-            desc_bands = sorted(set(desc_bands))
+                s1_tile_asc_dict = {}
+                if asc_bands:
+                    with rasterio.open(self.s1_asc_file) as src_s1:
+                        asc_data = src_s1.read(asc_bands, window=Window(*patch_data.window))
+                        for i, band in enumerate(asc_bands):
+                            idx = (band - 1) // S1_N_CHANNELS
+                            c = (band - 1) % S1_N_CHANNELS
+                            if idx not in s1_tile_asc_dict:
+                                s1_tile_asc_dict[idx] = np.zeros((S1_N_CHANNELS, asc_data.shape[-2], asc_data.shape[-1]), dtype=asc_data.dtype)
+                            s1_tile_asc_dict[idx][c] = asc_data[i]
 
-            s1_tile_asc_dict = {}
-            if len(asc_bands) > 0:
-                with rasterio.open(self.s1_asc_file) as src_s1:
-                    asc_data = src_s1.read(asc_bands, window=Window(*patch_data.window))
-                    for i, band in enumerate(asc_bands):
-                        idx = (band - 1) // S1_N_CHANNELS
-                        c = (band - 1) % S1_N_CHANNELS
-                        if idx not in s1_tile_asc_dict:
-                            s1_tile_asc_dict[idx] = np.zeros((S1_N_CHANNELS, asc_data.shape[-2], asc_data.shape[-1]), dtype=asc_data.dtype)
-                        s1_tile_asc_dict[idx][c] = asc_data[i]
+                s1_tile_desc_dict = {}
+                if desc_bands:
+                    with rasterio.open(self.s1_desc_file) as src_s1:
+                        desc_data = src_s1.read(desc_bands, window=Window(*patch_data.window))
+                        for i, band in enumerate(desc_bands):
+                            idx = (band - 1) // S1_N_CHANNELS
+                            c = (band - 1) % S1_N_CHANNELS
+                            if idx not in s1_tile_desc_dict:
+                                s1_tile_desc_dict[idx] = np.zeros((S1_N_CHANNELS, desc_data.shape[-2], desc_data.shape[-1]), dtype=desc_data.dtype)
+                            s1_tile_desc_dict[idx][c] = desc_data[i]
 
-            s1_tile_desc_dict = {}
-            if len(desc_bands) > 0:
-                with rasterio.open(self.s1_desc_file) as src_s1:
-                    desc_data = src_s1.read(desc_bands, window=Window(*patch_data.window))
-                    for i, band in enumerate(desc_bands):
-                        idx = (band - 1) // S1_N_CHANNELS
-                        c = (band - 1) % S1_N_CHANNELS
-                        if idx not in s1_tile_desc_dict:
-                            s1_tile_desc_dict[idx] = np.zeros((S1_N_CHANNELS, desc_data.shape[-2], desc_data.shape[-1]), dtype=desc_data.dtype)
-                        s1_tile_desc_dict[idx][c] = desc_data[i]
+                s1_tile = []
+                s1_dates_asc_list, s1_dates_desc_list = [], []
+                for index_s2 in indices_s2:
+                    asc_idx = self.asc_match_indices[index_s2]
+                    desc_idx = self.desc_match_indices[index_s2]
+                    asc_band = s1_tile_asc_dict[asc_idx]
+                    desc_band = s1_tile_desc_dict[desc_idx]
+                    s1_tile.append(np.concatenate([asc_band, desc_band], axis=0))  # (8, H, W)
+                    s1_dates_asc_list.append(self.dates_s1_asc[asc_idx])
+                    s1_dates_desc_list.append(self.dates_s1_desc[desc_idx])
 
-            for index_s2 in indices_s2:
-                _, date_s1, index_s1, orbit_type = self.closest_dates_matches[index_s2]
-                s1_band = s1_tile_asc_dict[index_s1] if orbit_type == "ASC" else s1_tile_desc_dict[index_s1]
-                s1_tile.append(s1_band)
-                s1_dates.append(date_s1)
+                s1_tile = np.stack(s1_tile, axis=0)  # (T, 8, H, W)
+                s1_tile = torch.from_numpy(s1_tile.astype(np.float32))
+                dates_s1_sampled = get_pairwise_representative_dates(
+                    asc_dates=np.array([self.str2date(d) for d in s1_dates_asc_list]),
+                    desc_dates=np.array([self.str2date(d) for d in s1_dates_desc_list]),
+                )
+                data_s1 = SentinelDataProcessor.process_SAR(s1_tile)
+            else:
+                # mix_closest / asc / desc: load ONE orbit per S2 date → 4 SAR channels
+                s1_tile, s1_dates = [], []
+                indices_s2 = t_sampled if t_sampled is not None else range(len(self.closest_dates_matches))
 
-            s1_tile = np.stack(s1_tile, axis=0)
-            s1_tile = torch.from_numpy(s1_tile.astype(np.float32))
-            dates_s1_sampled = np.array([self.str2date(date) for date in s1_dates])
-            data_s1 = SentinelDataProcessor.process_SAR(s1_tile)
+                asc_bands, desc_bands = [], []
+                asc_indices_map, desc_indices_map = {}, {}
+
+                for index_s2 in indices_s2:
+                    _, date_s1, index_s1, orbit_type = self.closest_dates_matches[index_s2]
+                    if orbit_type == "ASC":
+                        if index_s1 not in asc_indices_map:
+                            asc_indices_map[index_s1] = True
+                            asc_bands.extend([index_s1 * S1_N_CHANNELS + c + 1 for c in range(S1_N_CHANNELS)])
+                    elif index_s1 not in desc_indices_map:
+                        desc_indices_map[index_s1] = True
+                        desc_bands.extend([index_s1 * S1_N_CHANNELS + c + 1 for c in range(S1_N_CHANNELS)])
+
+                asc_bands = sorted(set(asc_bands))
+                desc_bands = sorted(set(desc_bands))
+
+                s1_tile_asc_dict = {}
+                if len(asc_bands) > 0:
+                    with rasterio.open(self.s1_asc_file) as src_s1:
+                        asc_data = src_s1.read(asc_bands, window=Window(*patch_data.window))
+                        for i, band in enumerate(asc_bands):
+                            idx = (band - 1) // S1_N_CHANNELS
+                            c = (band - 1) % S1_N_CHANNELS
+                            if idx not in s1_tile_asc_dict:
+                                s1_tile_asc_dict[idx] = np.zeros((S1_N_CHANNELS, asc_data.shape[-2], asc_data.shape[-1]), dtype=asc_data.dtype)
+                            s1_tile_asc_dict[idx][c] = asc_data[i]
+
+                s1_tile_desc_dict = {}
+                if len(desc_bands) > 0:
+                    with rasterio.open(self.s1_desc_file) as src_s1:
+                        desc_data = src_s1.read(desc_bands, window=Window(*patch_data.window))
+                        for i, band in enumerate(desc_bands):
+                            idx = (band - 1) // S1_N_CHANNELS
+                            c = (band - 1) % S1_N_CHANNELS
+                            if idx not in s1_tile_desc_dict:
+                                s1_tile_desc_dict[idx] = np.zeros((S1_N_CHANNELS, desc_data.shape[-2], desc_data.shape[-1]), dtype=desc_data.dtype)
+                            s1_tile_desc_dict[idx][c] = desc_data[i]
+
+                for index_s2 in indices_s2:
+                    _, date_s1, index_s1, orbit_type = self.closest_dates_matches[index_s2]
+                    s1_band = s1_tile_asc_dict[index_s1] if orbit_type == "ASC" else s1_tile_desc_dict[index_s1]
+                    s1_tile.append(s1_band)
+                    s1_dates.append(date_s1)
+
+                s1_tile = np.stack(s1_tile, axis=0)
+                s1_tile = torch.from_numpy(s1_tile.astype(np.float32))
+                dates_s1_sampled = np.array([self.str2date(date) for date in s1_dates])
+                data_s1 = SentinelDataProcessor.process_SAR(s1_tile)
 
         # Variable pour tracker la sous-sélection temporelle (masques synthétiques)
         idx_kept = None
