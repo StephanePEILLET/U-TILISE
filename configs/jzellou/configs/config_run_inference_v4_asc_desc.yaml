@@ -1,7 +1,7 @@
 data:
   dataset: circa
   hdf5_file: ${oc.env:HDF5_FILE}
-  load_transforms: ${oc.env:LOAD_TRANSFORMS,./data/patches_with_transforms.json}
+  load_transforms: ${oc.env:LOAD_TRANSFORMS,./metadata/patches_with_transforms.json}
   channels: all
   use_sar: asc+desc
   subset: false
@@ -17,7 +17,7 @@ test_data:
   data_optique: ${oc.env:DATA_OPTIQUE}
   data_radar: ${oc.env:DATA_RADAR}
   mask_type: original_masks
-  test_tiles: ./data/test_tiles.json
+  test_tiles: ./metadata/test_tiles.json
   mode: null
   split: test
 mask:

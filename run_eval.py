@@ -21,11 +21,11 @@ from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
 from dataloader.tools.data_processor import SentinelDataProcessor
+from dataloader.tools.parcel_mask import ParcelMaskGenerator
 from src import config_utils
 from src.arguments import eval_parser
 from src.data_utils import get_dataset
 from src.eval_tools import Imputation
-from dataloader.tools.parcel_mask import ParcelMaskGenerator
 
 THRESHOLD = 0.5
 MAX_PIXEL_INTENSITY_USED_FOR_REVERSE = 10_000
@@ -96,8 +96,8 @@ class Evaluator:
             "sam": True,
         }
 
-        from src.metrics.cloud_removal import CloudRemovalMetrics
         from src.metrics.aggregation import CloudRemovalDatasetMetrics
+        from src.metrics.cloud_removal import CloudRemovalMetrics
 
         list_available_metrics = [l.value for l in CloudRemovalMetrics.MetricType]
         # metrics = (
@@ -119,8 +119,6 @@ class Evaluator:
             clean_gt_cloudy_pixels=True,
             max_pixel_intensity=MAX_PIXEL_INTENSITY_USED_FOR_REVERSE,
         )
-
-        # self.compute_metrics = EvalMetrics(self.args_metrics)
 
         _ = torch.set_grad_enabled(False)
 

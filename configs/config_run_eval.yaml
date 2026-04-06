@@ -6,7 +6,7 @@
 data:
     dataset: circa                         # Nom du dataset. ['circa']
     hdf5_file: ${oc.env:HDF5_FILE}         # Chemin HDF5 (variable .env)
-    load_transforms: ${oc.env:LOAD_TRANSFORMS,./data/patches_with_transforms.json}  # JSON des transformations géométriques.
+    load_transforms: ${oc.env:LOAD_TRANSFORMS,./metadata/patches_with_transforms.json}  # JSON des transformations géométriques.
     channels: all                          # Bandes spectrales. ['all', 'rgb', 'bgr_nir', liste d'indices]
     use_sar: asc+desc                      # Mode SAR. [false, 'asc', 'desc', 'mix_closest', 'asc+desc']
     subset: false                          # Entier = sous-ensemble de N patches, false = tout.

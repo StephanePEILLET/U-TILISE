@@ -7,11 +7,6 @@ Contient la classe Imputation qui gère :
 - La visualisation des résultats et masques d'attention
 """
 
-import sys
-from pathlib import Path
-
-sys.path.append(str(Path(__file__).parents[1]))
-
 import math
 import os
 from enum import Enum

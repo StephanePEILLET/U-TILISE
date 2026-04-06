@@ -7,7 +7,6 @@ Gère les différences entre splits train/val (dates filtrées) et test (toutes 
 
 import datetime as dt
 import json
-import sys
 from pathlib import Path
 from typing import (
     Dict,  # noqa: F401
@@ -20,8 +19,6 @@ import pandas as pd
 import torch
 from numpy.typing import NDArray
 from torch.utils.data import Dataset
-
-sys.path.append(str(Path(__file__).parents[2]))
 
 from dataloader.datasets.constants import GEOGRAPHIC_SPLITS
 
@@ -501,7 +498,7 @@ if __name__ == "__main__":
         shuffle=False,
         channels="all",
         use_sar="asc+desc",
-        load_transforms="./data/patches_with_transforms.json",
+        load_transforms="./metadata/patches_with_transforms.json",
     )
     # Get a sample
     sample = next(iter(dataset))

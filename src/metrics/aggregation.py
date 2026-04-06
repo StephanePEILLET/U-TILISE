@@ -1,7 +1,3 @@
-import sys
-from pathlib import Path
-
-sys.path.append(str(Path(__file__).parents[2]))
 import math
 from typing import Dict
 from typing import List

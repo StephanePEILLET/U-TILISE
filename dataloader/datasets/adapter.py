@@ -6,10 +6,7 @@ masks, position_days, etc. Gère l'échantillonnage temporel, le masquage
 synthétique et les augmentations spatiales.
 """
 
-import sys
 from pathlib import Path
-
-sys.path.append(str(Path(__file__).parents[2]))
 
 import numpy as np
 import torch

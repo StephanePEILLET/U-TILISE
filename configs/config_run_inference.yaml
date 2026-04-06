@@ -5,7 +5,7 @@
 data:
     dataset: circa                         # Nom du dataset. ['circa']
     hdf5_file: ${oc.env:HDF5_FILE}         # Chemin HDF5 (variable .env)
-    load_transforms: ${oc.env:LOAD_TRANSFORMS,./data/patches_with_transforms.json}  # JSON des transformations géométriques.
+    load_transforms: ${oc.env:LOAD_TRANSFORMS,./metadata/patches_with_transforms.json}  # JSON des transformations géométriques.
     channels: all                          # Bandes spectrales. ['all', 'rgb', 'bgr_nir', liste d'indices]
     use_sar: mix_closest                   # Mode SAR. [false, 'asc', 'desc', 'mix_closest', 'asc+desc']
     subset: false                          # Entier = sous-ensemble, false = tout.
@@ -17,7 +17,7 @@ test_data:
     test_config: ${oc.env:TRAIN_CONFIG}    # Config sauvegardée durant l'entraînement.
     data_optique: ${oc.env:DATA_OPTIQUE}   # Répertoire des GeoTIFF Sentinel-2.
     data_radar: ${oc.env:DATA_RADAR}       # Répertoire des GeoTIFF Sentinel-1.
-    test_tiles: "./data/test_tiles.json"   # JSON listant les tuiles MGRS-C à traiter.
+    test_tiles: "./metadata/test_tiles.json"   # JSON listant les tuiles MGRS-C à traiter.
     mode: null                             # Mode d'inférence. [null]
     split: test                            # Split du dataset. ['train', 'val', 'test']
 

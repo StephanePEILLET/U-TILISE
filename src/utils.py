@@ -157,7 +157,7 @@ def get_model(config: DictConfig, input_dim: int, logger: logging.Logger | None 
     else:
         model = MODELS[model_type](**args_model)
 
-    # Collect default values (if not specified in config) in order to log them in wandb
+    # Collect default values (if not specified in config) in order to log them
     get_default_model_settings(model, args_model)
 
     return model, args_model
@@ -294,33 +294,26 @@ def get_trainer(
     args.save_dir = config.output.experiment_folder
     args.checkpoint_dir = config.output.checkpoint_dir
 
-    if "wandb" in args:
-        args.wandb.dir = config.output.experiment_folder
-
     if args.get("resume", False) and args.get("pretrained_path", None) is not None:
         # Get the logs directory of the pretrained model
         experiment_directory = Path(args.pretrained_path).parent.parent
 
-        if "wandb" in args:
-            # Pretrained model logged in wandb
-            # Find the previous training log file and copy it to the new experiments output folder
-            log_file = experiment_directory / "training.log"
-            if os.path.exists(log_file):
-                shutil.copy(log_file, Path(args.save_dir) / "training.log")
+        # Find the previous training log file and copy it to the new experiments output folder
+        log_file = experiment_directory / "training.log"
+        if os.path.exists(log_file):
+            shutil.copy(log_file, Path(args.save_dir) / "training.log")
 
-            # Copy the best model weights so far
-            path_model = Path(args.pretrained_path).parents[0] / "Model_best.pth"
-            if os.path.exists(path_model):
-                shutil.copy(path_model, Path(args.checkpoint_dir) / "Model_best.pth")
-        else:
-            # Pretrained model logged in tensorboard
-            experiment_tboard_log_dir = experiment_directory.parent / "logs" / experiment_directory.name
+        # Copy the best model weights so far
+        path_model = Path(args.pretrained_path).parents[0] / "Model_best.pth"
+        if os.path.exists(path_model):
+            shutil.copy(path_model, Path(args.checkpoint_dir) / "Model_best.pth")
 
-            # Find the previous tensorboard files and copy them to the new experiments output folder
-            if os.path.isdir(experiment_tboard_log_dir):
-                tb_files = glob.glob(os.path.join(experiment_tboard_log_dir, "events.*"))
-                for tb_file in tb_files:
-                    shutil.copy(tb_file, Path(args.checkpoint_dir) / Path(tb_file).name)
+        # Copy previous tensorboard files to the new experiments output folder
+        experiment_tboard_log_dir = experiment_directory.parent / "logs" / experiment_directory.name
+        if os.path.isdir(experiment_tboard_log_dir):
+            tb_files = glob.glob(os.path.join(experiment_tboard_log_dir, "events.*"))
+            for tb_file in tb_files:
+                shutil.copy(tb_file, Path(args.checkpoint_dir) / Path(tb_file).name)
     else:
         args.resume = False
         args.pretrained_path = None

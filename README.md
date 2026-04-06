@@ -108,7 +108,9 @@ U-TILISE/
 │   ├── trainer.py                #   Boucle d'entraînement (train/val)
 │   ├── loss.py                   #   Fonctions de perte (L1, SSIM, NDVI, R²)
 │   ├── eval_tools.py             #   Imputation fenêtre glissante + fusion
-│   ├── metrics.py                #   Fonctions métriques utilitaires
+│   ├── metrics/                  #   Métriques d'évaluation
+│   │   ├── cloud_removal.py      #     Métriques par échantillon (MAE, PSNR, SSIM, SAM…)
+│   │   └── aggregation.py        #     Agrégation par dataset (moyennes)
 │   ├── data_utils.py             #   Chargement datasets / dataloaders
 │   ├── config_utils.py           #   Lecture/écriture configs (OmegaConf + .env)
 │   ├── utils.py                  #   Instanciation modèle, optimiseur, scheduler
@@ -132,7 +134,7 @@ U-TILISE/
 │       ├── writer.py             #   Écriture de prédictions (GeoTIFF)
 │       └── positional_encoding.py#   Encodage positionnel
 │
-├── data/                         # Métadonnées des patches
+├── metadata/                     # Métadonnées des patches
 ├── envs/                         # Environnement conda
 │   └── cloud_reconstruction.yml  #   Définition de l'environnement
 ├── notebooks/                    # Notebooks de démonstration

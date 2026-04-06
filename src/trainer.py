@@ -3,7 +3,7 @@
 Gère le cycle train/val par epoch avec :
 - Accumulation de gradients (gradient_accumulation_steps)
 - Sauvegarde du meilleur modèle et checkpoints réguliers
-- Logging TensorBoard et Weights & Biases
+- Logging TensorBoard
 - Évaluation automatique en fin d'entraînement (3 masquages)
 """
 
@@ -16,7 +16,6 @@ import numpy as np
 import prodict
 import torch
 import torchvision.utils
-import wandb
 from omegaconf import DictConfig, ListConfig, OmegaConf
 from prodict import Prodict
 from torch import Tensor
@@ -77,7 +76,6 @@ class Trainer:
         device: torch.device = None,
     ):
         self.args = args
-        self.use_wandb = bool("wandb" in args)
         if device is not None:
             self.device = device
         else:
@@ -124,26 +122,9 @@ class Trainer:
             log_file=os.path.join(args.save_dir, "training.log"),
         )
 
-        # Set up wandb
-        if self.use_wandb:
-            os.makedirs(self.args.wandb.dir, exist_ok=True)
-            wandb.init(**self.args.wandb, settings=wandb.Settings(start_method="fork"))
-            wandb.config.update(OmegaConf.to_container(self.args))
-            self.writer = None
-
-            # Define the wandb summary metrics
-            for key, value in self.args.metrics.items():
-                if key == "masked_metrics":
-                    pass
-                elif value:
-                    wandb.define_metric(f"train_metrics/{key}", summary=OBJECTIVE[key])
-                    wandb.define_metric(f"val_metrics/{key}", summary=OBJECTIVE[key])
-
-            wandb.define_metric("train/total_loss", summary=OBJECTIVE["total_loss"])
-            wandb.define_metric("val/total_loss", summary=OBJECTIVE["total_loss"])
-        else:
-            os.makedirs(os.path.join(self.args.save_dir, "tb"), exist_ok=True)
-            self.writer = SummaryWriter(log_dir=os.path.join(self.args.save_dir, "tb"))
+        # Set up TensorBoard
+        os.makedirs(os.path.join(self.args.save_dir, "tb"), exist_ok=True)
+        self.writer = SummaryWriter(log_dir=os.path.join(self.args.save_dir, "tb"))
 
         # Resume training
         if self.args.resume and self.args.pretrained_path:
@@ -205,24 +186,7 @@ class Trainer:
         torch.save(state, filepath)
 
     def _log_stats_meter(self, phase: str) -> None:
-        if self.use_wandb:
-            if phase == "train":
-                wandb.log(
-                    {"train_losses/" + k: v.avg for k, v in self.train_stats.items()},
-                    step=self.iter,
-                )
-                wandb.log(
-                    {"train_metrics/" + k: v.avg for k, v in self.train_metrics.items()},
-                    step=self.iter,
-                )
-            else:
-                stats = {"val_losses/" + k: v.avg for k, v in self.val_stats.items()}
-                stats["epoch"] = self.epoch
-                wandb.log(stats, step=self.iter)
-
-                stats = {"val_metrics/" + k: v.avg for k, v in self.val_metrics.items()}
-                wandb.log(stats, step=self.iter)
-        elif phase == "train":
+        if phase == "train":
             for k, v in self.train_stats.items():
                 self.writer.add_scalar("train_losses/" + k, v.avg, self.iter)
             for k, v in self.train_metrics.items():
@@ -242,19 +206,10 @@ class Trainer:
             )
 
     def _log_iter_epoch(self) -> None:
-        if self.use_wandb:
-            wandb.log({"epoch": self.epoch}, step=self.iter)
-        else:
-            self.writer.add_scalar("epoch", self.epoch, self.iter)
+        self.writer.add_scalar("epoch", self.epoch, self.iter)
 
     def _log_learning_rate(self) -> None:
-        if self.use_wandb:
-            wandb.log(
-                {"log_lr": np.log10(self._get_lr()), "epoch": self.epoch},
-                step=self.iter,
-            )
-        else:
-            self.writer.add_scalar("log_lr", np.log10(self._get_lr()), self.epoch)
+        self.writer.add_scalar("log_lr", np.log10(self._get_lr()), self.epoch)
 
     def _stats_dict(self, stats_type: str) -> prodict.Prodict:
         stats = Prodict()
@@ -286,11 +241,10 @@ class Trainer:
             meters[key] = AverageMeter()
         return meters
 
-    def _visualize_sample_wandb(self, sample_index: int | None = None) -> None:
+    def _visualize_sample(self, sample_index: int | None = None) -> None:
         if sample_index is None:
             # Get one random batch
             batch = next(iter(self.dataloader["val"]))
-
         else:
             # Get specific sample and introduce batch dimension
             batch = self.dataset["val"].__getitem__(sample_index)
@@ -317,63 +271,39 @@ class Trainer:
 
         title = "examples_val" if sample_index is None else f"sample_{sample_index}"
 
-        wandb.log(
-            {
-                f"{title}_true_color_RGB": wandb.Image(
-                    torchvision.utils.make_grid(
-                        [
-                            # gallery (grid of frames) reshaped from (H x W x C) to (C x H x W)
-                            visutils.gallery(x[:, indices_rgb, :, :], ncols=ncols).permute(2, 0, 1),
-                            visutils.gallery(y_pred[:, indices_rgb, :, :], ncols=ncols).permute(2, 0, 1),
-                            visutils.gallery(y[:, indices_rgb, :, :], ncols=ncols).permute(2, 0, 1),
-                        ],
-                        nrow=1,
-                    ),
-                    caption=f"Epoch {self.epoch}, validation Sample {batch['sample_index'][0]}\n"
-                    "top: input, middle: prediction, bottom: observed",
-                )
-            },
-            step=self.iter,
+        # True color RGB grid: input / prediction / observed
+        grid_rgb = torchvision.utils.make_grid(
+            [
+                visutils.gallery(x[:, indices_rgb, :, :], ncols=ncols).permute(2, 0, 1),
+                visutils.gallery(y_pred[:, indices_rgb, :, :], ncols=ncols).permute(2, 0, 1),
+                visutils.gallery(y[:, indices_rgb, :, :], ncols=ncols).permute(2, 0, 1),
+            ],
+            nrow=1,
         )
+        self.writer.add_image(f"{title}_true_color_RGB", grid_rgb, global_step=self.iter)
 
+        # False color NIR-R-G grid (if NIR band available)
         if not np.isnan(index_nir):
-            wandb.log(
-                {
-                    f"{title}_false_color_NIRRG": wandb.Image(
-                        torchvision.utils.make_grid(
-                            [
-                                # gallery reshaped from (H x W x C) to (C x H x W)
-                                visutils.gallery(
-                                    compute_false_color(x, index_rgb=indices_rgb, index_nir=index_nir),
-                                    ncols=ncols,
-                                ).permute(2, 0, 1),
-                                visutils.gallery(
-                                    compute_false_color(
-                                        y_pred,
-                                        index_rgb=indices_rgb,
-                                        index_nir=index_nir,
-                                    ),
-                                    ncols=ncols,
-                                ).permute(2, 0, 1),
-                                visutils.gallery(
-                                    compute_false_color(y, index_rgb=indices_rgb, index_nir=index_nir),
-                                    ncols=ncols,
-                                ).permute(2, 0, 1),
-                            ],
-                            nrow=1,
-                        ),
-                        caption=f"Epoch {self.epoch}, validation Sample {batch['sample_index'][0]}\n"
-                        "top: input, middle: prediction, bottom: observed",
-                    )
-                },
-                step=self.iter,
+            grid_fc = torchvision.utils.make_grid(
+                [
+                    visutils.gallery(
+                        compute_false_color(x, index_rgb=indices_rgb, index_nir=index_nir),
+                        ncols=ncols,
+                    ).permute(2, 0, 1),
+                    visutils.gallery(
+                        compute_false_color(y_pred, index_rgb=indices_rgb, index_nir=index_nir),
+                        ncols=ncols,
+                    ).permute(2, 0, 1),
+                    visutils.gallery(
+                        compute_false_color(y, index_rgb=indices_rgb, index_nir=index_nir),
+                        ncols=ncols,
+                    ).permute(2, 0, 1),
+                ],
+                nrow=1,
             )
+            self.writer.add_image(f"{title}_false_color_NIRRG", grid_fc, global_step=self.iter)
 
     def train(self) -> None:
-        # Log gradients and model parameters
-        if self.use_wandb and self.args.get("log_gradients", False):
-            wandb.watch(self.model, log="all")
-
         # Log validation metrics before training starts (to log initial improvement)
         if not (self.args.resume and self.args.pretrained_path):
             self.validate_epoch()
@@ -408,9 +338,6 @@ class Trainer:
                         self.epoch_best_loss = self.epoch
                         self.early_stop_counter = 0
                         self._save_checkpoint(self.args.path_model_best)
-                        if self.use_wandb:
-                            wandb.run.summary["best_loss"] = self.val_stats.total_loss.avg
-                            wandb.run.summary["epoch_best_loss"] = self.epoch
                     else:
                         self.early_stop_counter += 1
 
@@ -425,15 +352,15 @@ class Trainer:
                         break
 
                     # Plot inference
-                    if (self.epoch + 1) % self.args.plot_every_n_epochs == 0 and self.use_wandb:
-                        self._visualize_sample_wandb()  # Plot a random validation sample
+                    if (self.epoch + 1) % self.args.plot_every_n_epochs == 0:
+                        self._visualize_sample()  # Plot a random validation sample
                         if self.args.get("plot_val_sample", None) is not None:
                             # Plot specific validation sample(s)
                             if isinstance(self.args.plot_val_sample, int):
-                                self._visualize_sample_wandb(sample_index=self.args.plot_val_sample)
+                                self._visualize_sample(sample_index=self.args.plot_val_sample)
                             elif isinstance(self.args.plot_val_sample, (list, ListConfig)):
                                 for idx in self.args.plot_val_sample:
-                                    self._visualize_sample_wandb(sample_index=idx)
+                                    self._visualize_sample(sample_index=idx)
 
                 # After the epoch if finished, update the learning rate scheduler
                 if self.scheduler is not None:
@@ -460,8 +387,7 @@ class Trainer:
         # Save the last model
         self._save_checkpoint(self.args.path_model_last)
 
-        if self.use_wandb:
-            wandb.finish()
+        self.writer.close()
 
     def train_epoch(self, tnr=None) -> None:
         # Initialize stats meter
