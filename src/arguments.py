@@ -52,5 +52,5 @@ eval_parser.add_argument(
     "--test-data.mode",
     type=str,
     required=False,
-    help="Mode (baselines non-apprises uniquement)",
+    help="Phase du dataset (test, val, train)",
 )

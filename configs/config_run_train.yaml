@@ -10,7 +10,7 @@ data:
     max_seq_length: 5                      # Longueur max de séquence temporelle.
     channels: all                          # Bandes spectrales. ['all', 'rgb', 'bgr_nir', liste d'indices]
     use_sar: mix_closest                   # Mode SAR. [false, 'asc', 'desc', 'mix_closest', 'asc+desc']
-    subset: true                          # Entier = sous-ensemble de N patches, false = tout le dataset.
+    subset: false                          # Entier = sous-ensemble de N patches, false = tout le dataset.
     filter_settings:
         type: cloud-free                   # Stratégie de filtrage des observations nuageuses.
         min_length: 3                      # Longueur minimale de séquence après filtrage.

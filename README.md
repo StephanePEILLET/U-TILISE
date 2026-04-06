@@ -95,7 +95,6 @@ U-TILISE/
 │   │   ├── utilise.py            #     Encodeur spatial + LTAE + décodeur
 │   │   ├── ltae_transformer.py   #     Lightweight Temporal Attention Encoder
 │   │   ├── positional_encoding.py#     Encodage positionnel temporel
-│   │   ├── interpolator.py       #     Interpolation triviale (baseline)
 │   │   ├── make_layers.py        #     Constructeurs de couches
 │   │   ├── weight_init.py        #     Initialisation des poids
 │   │   └── parameters.py         #     Enums (activation, normalisation)
@@ -313,7 +312,7 @@ Le script fusionne automatiquement `configs/default.yaml` + `configs/config_run_
 ### 3. Évaluation
 
 ```bash
-python run_eval.py configs/jzellou/configs/config_run_eval_v4_asc_desc_rfm.yaml utilise
+python run_eval.py configs/jzellou/configs/config_run_eval_v4_asc_desc_rfm.yaml
 ```
 
 Paramètres de la config d'évaluation :
@@ -329,7 +328,7 @@ Paramètres de la config d'évaluation :
 ### 4. Inférence à la tuile
 
 ```bash
-python run_inference.py configs/config_run_inference.yaml utilise
+python run_inference.py configs/config_run_inference.yaml
 ```
 
 Produit des GeoTIFF de reconstruction pour chaque tuile MGRSC. Le script :

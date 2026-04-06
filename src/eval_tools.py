@@ -57,7 +57,7 @@ class Imputation:
 
         if config_file_test is not None:
             test_config = config_utils.read_config(config_file_test)
-            # Training config provides base (architecture, method, etc.),
+            # Training config provides base (architecture, hyperparameters),
             # eval config overrides what it specifies (data, mask, etc.)
             self.config = OmegaConf.merge(test_config, self.config)
         # Extract the temporal window size and the number of channels used during training
