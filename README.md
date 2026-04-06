@@ -1,289 +1,324 @@
-<p align="center">
-    <h1>U-TILISE: A Sequence-to-sequence Model for Cloud Removal in Optical Satellite Time Series</h1>
-</p>
+# U-TILISE — Reconstruction sans nuages de séries temporelles Sentinel-2
 
-<p align="center">
-    <h3 align="center"> <strong><sup>1</sup>Corinne Stucker,   <sup>2</sup>Vivien Sainte Fare Garnot,   <sup>1</sup>Konrad Schindler</strong>  </h3>
-</p>
+Adaptation du modèle [U-TILISE](https://doi.org/10.1109/TGRS.2023.3333391) (Stucker et al., 2023)
+pour la reconstruction de séries temporelles optiques **Sentinel-2** sur le territoire français,
+avec guidage **Sentinel-1 SAR** (orbites ascendante + descendante).
 
-<p align="center">
-    <strong><sup>1</sup> Chair of Photogrammetry and Remote Sensing, ETH Zurich</strong><br>
-    <strong><sup>2</sup> Institute for Computational Science, University of Zurich</strong>
-</p>
+Le pipeline complet permet de :
+1. **Créer un fichier HDF5** à partir de données raster Sentinel-1/2 (GeoTIFF)
+2. **Entraîner** le modèle U-TILISE (architecture v4, SAR asc+desc)
+3. **Évaluer** les performances avec différentes stratégies de masquage et de fusion temporelle
+4. **Inférer** à la tuile pour produire des séries temporelles complètes
 
-<p align="center">
-    <h3 align="center">[<a href="https://doi.org/10.1109/TGRS.2023.3333391">Paper</a>] [<a href="https://arxiv.org/abs/2305.13277">ArXiv</a>]</h3>
-</p>
+---
 
+## Table des matières
 
-Satellite image time series in the optical and infrared spectrum suffer from frequent data gaps due to cloud cover, cloud shadows, and temporary sensor outages. It has been a long-standing problem of remote sensing research how to best reconstruct the missing pixel values and obtain complete, cloud&#8209;free image sequences. We approach that problem from the perspective of representation learning and develop U&#8209;TILISE, an efficient neural model that is able to implicitly capture spatio-temporal patterns of the spectral intensities, and that can therefore be trained to map a cloud&#8209;masked input sequence to a cloud&#8209;free output sequence. The model consists of a convolutional *spatial encoder* that maps each individual frame of the input sequence to a latent encoding; an attention-based *temporal encoder* that captures dependencies between those per-frame encodings and lets them exchange information along the time dimension; and a convolutional *spatial decoder* that decodes the latent embeddings back into multi-spectral images. We experimentally evaluate the proposed model on EarthNet2021, a dataset of Sentinel-2 time series acquired all over Europe, and demonstrate its superior ability to reconstruct the missing pixels. Compared to a standard interpolation baseline, it increases the PSNR by 1.8 dB at previously seen locations and by 1.3 dB at unseen locations.
+- [Installation](#installation)
+- [Structure du projet](#structure-du-projet)
+- [Données](#données)
+  - [Format HDF5](#format-hdf5-mode-principal)
+  - [Fichiers à plat](#fichiers-à-plat-mode-alternatif)
+  - [Bandes spectrales](#bandes-spectrales)
+- [Pipeline complet](#pipeline-complet)
+  - [1. Création du HDF5](#1-création-du-hdf5)
+  - [2. Entraînement](#2-entraînement)
+  - [3. Évaluation](#3-évaluation)
+  - [4. Inférence à la tuile](#4-inférence-à-la-tuile)
+- [Modes de masquage](#modes-de-masquage)
+- [Modes de fusion temporelle (blend)](#modes-de-fusion-temporelle-blend)
+- [Utilisation sur cluster (SLURM)](#utilisation-sur-cluster-slurm)
+- [Références](#références)
 
-<image src="docs/teaser.png"/>
+---
 
+## Installation
 
-## Setup
+### Environnement conda
 
-### Dependencies
-This code was developed using Ubuntu 22.04, Python 3.10, PyTorch 1.13, and CUDA 11.6.
-For an optimal experience, we recommend creating a new conda environment and installing the required dependencies with the following commands:
 ```bash
-conda env create -f environment.yml
-conda activate u-tilise
+conda env create -f envs/cr.yml
+conda activate cr
 ```
 
-After setting up the environment, establish a corresponding IPython kernel named ``, . This is necessary to execute the demo Jupyter Notebook [demo.ipynb](demo.ipynb):
-```bash
-ipython kernel install --user --name=u-tilise
+L'environnement nécessite Python 3.10+, PyTorch 2.x et CUDA 11.8+.
+
+---
+
+## Structure du projet
+
+```
+U-TILISE/
+├── run_train.py                  # Point d'entrée : entraînement
+├── run_eval.py                   # Point d'entrée : évaluation (métriques)
+├── infer_from_tiles.py           # Point d'entrée : inférence sur tuiles complètes
+├── aggregate_metrics.py          # Agrégation des résultats d'évaluation
+│
+├── configs/                      # Configurations YAML
+│   ├── default.yaml              #   Paramètres par défaut du modèle
+│   ├── config_run_train.yaml     #   Config de base pour l'entraînement
+│   ├── config_run_eval.yaml      #   Config de base pour l'évaluation
+│   ├── config_run_infer_*.yaml   #   Configs inférence tuile
+│   └── jzellou/                  #   Configs spécifiques au cluster
+│       ├── configs/              #     Configs YAML (train, eval, inférence)
+│       └── slurms/               #     Scripts SLURM de soumission
+│
+├── lib/                          # Bibliothèque principale U-TILISE
+│   ├── models/                   #   Architecture du modèle
+│   │   ├── utilise.py            #     Encodeur spatial + LTAE + décodeur
+│   │   ├── ltae_transformer.py   #     Lightweight Temporal Attention Encoder
+│   │   ├── positional_encoding.py#     Encodage positionnel temporel
+│   │   ├── make_layers.py        #     Constructeurs de couches
+│   │   ├── weight_init.py        #     Initialisation des poids
+│   │   └── parameters.py         #     Enums (activation, normalisation)
+│   ├── datasets/                 #   Registre des datasets
+│   │   ├── dataset_tools.py      #     Détection de frames nuageuses
+│   │   └── mask_generation.py    #     Masques synthétiques
+│   ├── trainer.py                #   Boucle d'entraînement (train/val)
+│   ├── loss.py                   #   Fonctions de perte (L1, SSIM, NDVI, R²)
+│   ├── eval_tools.py             #   Imputation fenêtre glissante + fusion
+│   ├── metrics.py                #   Métriques (MAE, RMSE, PSNR, SSIM, SAM)
+│   ├── data_utils.py             #   Chargement datasets / dataloaders
+│   ├── config_utils.py           #   Lecture/écriture configs (OmegaConf)
+│   ├── utils.py                  #   Instanciation modèle, optimiseur, scheduler
+│   ├── torch_transforms.py       #   Augmentations (rotation, flip, bruit)
+│   ├── parcel_mask.py            #   Masques parcellaires agricoles (GPKG)
+│   ├── visutils.py               #   Visualisation (galeries, colormaps)
+│   ├── logger.py                 #   Logging et statistiques
+│   └── formatter.py              #   Formatage des logs
+│
+├── dataloader_CIRCA/             # Chargement des données CIRCA
+│   ├── datasets/
+│   │   ├── hdf5_creator.py       #   Création HDF5 (scan, écriture, fusion)
+│   │   ├── CIRCA_hdf5_reader.py  #   Lecture HDF5 pour train/eval
+│   │   ├── UTILISE_adapter.py    #   Adaptation CIRCA → format U-TILISE
+│   │   ├── dataset_from_files.py #   Chargement direct depuis TIF
+│   │   ├── CIRCA_constants.py    #   Splits train/val/test (zones MGRSC)
+│   │   ├── cr_metrics_nina.py    #   Métriques de reconstruction (sample)
+│   │   └── cr_torchmetrics.py    #   Agrégation métriques (dataset)
+│   ├── tools/
+│   │   ├── data_processor.py     #   Lecture rasters (rasterio)
+│   │   ├── mask_generation.py    #   Utilitaires de masquage
+│   │   ├── sampling.py           #   Échantillonnage temporel
+│   │   ├── torch_transforms.py   #   Transformations PyTorch
+│   │   ├── type_converter.py     #   Conversion float ↔ int16
+│   │   ├── writer.py             #   Écriture de prédictions (GeoTIFF)
+│   │   └── positional_encoding.py#   Encodage positionnel
+│   └── viz/
+│       └── ts_vis.py             #   Visualisation séries temporelles
+│
+├── utils_hdf5/                   # Outils d'inspection HDF5
+│   ├── explore_hdf5.py           #   Explorateur interactif
+│   └── compute_stats.py          #   Statistiques par bande
+│
+├── data/                         # Métadonnées des patches
+├── envs/                         # Environnement conda (cr.yml)
+├── notebooks/demo.ipynb          # Notebook de démonstration
+└── scripts/                      # Scripts utilitaires
 ```
 
-### Checkpoints
-You can download our pretrained model checkpoints [here](https://share.phys.ethz.ch/~pf/stuckercdata//checkpoints/).
-If you prefer an automated approach, execute the script below to download and extract all checkpoints to the `./checkpoints/` directory:
-```bash
-bash ./scripts/download_checkpoints.sh
-``` 
+---
 
-We provide the following model checkpoints:
-* `utilise_earthnet2021.pth`: model weights for  trained on the [EarthNet2021](https://www.earthnet.tech/en21/quick-start-guide/) dataset.
-* `utilise_sen12mscrts_wo_s1.pth`: model weights for U&#8209;TILISE trained on the [SEN12MS-CR-TS](https://patricktum.github.io/cloud_removal/sen12mscr/) dataset, *without* SAR guidance.
-* `utilise_sen12mscrts_w_s1.pth`: model weights for U&#8209;TILISE trained on the [SEN12MS-CR-TS](https://patricktum.github.io/cloud_removal/sen12mscr/) dataset, *with* SAR guidance.
+## Données
 
+### Format HDF5 (mode principal)
 
-### Sample data
-For demonstration purposes, we offer the preprocessed *iid* test split of the EarthNet2021 dataset. To download this data, execute the following command:
-```bash
-bash ./scripts/download_data_earthnet2021.sh
+Le fichier HDF5 (`CIRCA_CR_merged.hdf5`) organise les données par hiérarchie géographique :
+
+```
+CIRCA_CR_merged.hdf5
+└── MGRS_ID/                          # Zone UTM 10 km (ex: "31UDP_row-3_col-2")
+    └── MGRSC_ID/                     # Sous-tuile 100 m (ex: "31UDP0307")
+        └── window_x_y_w_h/           # Patch 256×256 pixels
+            ├── S2/
+            │   ├── S2              [T, 10, 256, 256]  int16   # 10 bandes S2
+            │   ├── S2_dates        [T]                bytes   # Dates YYYYMMDD
+            │   ├── cloud_mask      [T, 256, 256]      uint8   # Masque binaire
+            │   └── cloud_prob      [T, 256, 256]      float32 # Proba nuageuse
+            ├── S1/
+            │   ├── S1_asc          [T_a, 4, 256, 256] int16   # SAR ascendant
+            │   ├── S1_desc         [T_d, 4, 256, 256] int16   # SAR descendant
+            │   ├── S1_dates_asc    [T_a]              bytes   # Dates ASC
+            │   ├── S1_dates_desc   [T_d]              bytes   # Dates DESC
+            │   └── S2_S1_pairing   JSON                       # Appariement S2↔S1
+            ├── valid_obs           [T] ou [N]         int     # Observation valides
+            ├── idx_good_frames     [N]                int     # Frames claires
+            └── idx_cloudy_frames   [N]                int     # Frames nuageuses
 ```
 
-This will download and unpack the data (~ 14 GB) into the `./data/` directory. The provided data sets are:
-* `earthnet_iid_test_split.hdf5`: The original 30-frames time series with actual data gaps.
-* `earthnet_iid_test_split_simulation.hdf5`: The corresponding cloud&#8209;free time series with synthetically added data gaps.
+**Différence train/val vs test** :
+- **Train/Val** : seules les dates cloud-free sont stockées dans S2 → fichier plus compact.
+  `valid_obs` est un vecteur binaire `[1, 1, ..., 1]` de taille N_valid.
+- **Test** : toutes les dates sont stockées → nécessaire pour l'inférence en mode produit.
+  `valid_obs` contient les indices des dates claires dans la séquence complète.
 
+### Fichiers à plat (mode alternatif)
 
-## Data
+Le module `dataset_from_files.py` permet de charger les données directement depuis des
+répertoires de GeoTIFF, sans passer par le HDF5. Utile pour le prototypage ou l'inférence
+sur de nouvelles zones.
 
-### EarthNet2021
-[EarthNet2021](https://www.earthnet.tech/en21/quick-start-guide/)[^1] provides Sentinel&#8209;2 satellite image time
-series collected over Central and Western Europe from November 2016 to May 2020. Each time series comprises 
-30 images with Level-1C top-of-atmosphere (TOA) reflectances. The images are acquired in a regular temporal interval of 
-five days. Every image is composed of the four spectral bands B2 (blue), B3 (green), B4 (red), and B8 (near-infrared) 
-and covers a spatial extent of 128&times;128 pixels (2.56&times;2.56 km in scene space), resampled to the resolution of 
-20 m. Furthermore, the dataset includes pixel-wise cloud probability maps (training data only) and binary cloud (and cloud shadow) masks.
+### Bandes spectrales
 
+| Capteur | Bandes | Nombre |
+|---------|--------|--------|
+| **Sentinel-2** | B02, B03, B04, B05, B06, B07, B08, B08A, B11, B12 | 10 |
+| **Sentinel-1** (par orbite) | VV, VH, Cohérence VV, Cohérence VH | 4 |
 
-### SEN12MS-CR-TS
-[SEN12MS-CR-TS](https://patricktum.github.io/cloud_removal/sen12mscr/)[^2] provides globally sampled Sentinel&#8209;2 satellite image time
-series from 2018 with a spatial extent of 256&times;256 pixels (2.56&times;2.56 km in scene space). Each time series
-contains 30 images. The images encompass all 13 spectral bands, upsampled to 10 m resolution. Furthermore, every optical image 
-is paired with a spatially co-registered, temporally close (but not synchronous) C-band SAR image with two channels representing 
-the $\sigma_0$ backscatter coefficients in the VV and VH polarizations, in units of decibels (dB). Furthermore, the dataset 
-includes pixel-wise cloud probabilities and binary cloud masks.
+En mode `asc+desc`, les 8 bandes SAR (4 ASC + 4 DESC) sont concaténées aux 10 bandes S2,
+soit **18 canaux d'entrée** au total. Le modèle produit **10 canaux de sortie** (bandes S2
+reconstruites).
 
-### Simulation of data gaps
-To train and quantitatively assess U&#8209;TILISE's performance, we use gap&#8209;free (cloud&#8209;free) Sentinel&#8209;2 satellite image time series.
-Our preprocessing steps are as follows:
-1. We first identify all images with partially occluded pixels or images that are occluded/missing entirely by applying 
-a threshold to the cloud probability maps (if available) or the binary cloud masks. We then remove all images with data gaps to produce 
-cloud&#8209;free time series that exhibit a valid observation for every spatio-temporal location.
-2. We discard time series with less than five remaining images, as we deem such sequences too short for learning spatio-temporal patterns.
-3. To generate synthetic data gaps, we randomly sample real cloud masks from other acquisition times and/or locations within the same Sentinel-2 tile
-   and superimpose those masks onto the gap-free time series by setting the reflectance of occluded pixels (according to the masks) to the maximum value~1.
+---
 
+## Pipeline complet
 
-### Custom dataset and data loader
-Ensure the output of your custom data loader meets the following minimum requirements:
+### 1. Création du HDF5
 
-- `x`: (Masked) input time series, of shape $(T \times C \times H \times W)$.
-- `masks`: Masks used to mark occluded/missing pixels in `y` with dimensions $(T \times 1 \times H \times W)$.
-- `position_days`: Positions used for positional encoding, of shape $(T, )$.
-- `y`: Observed/Target time series, of shape $(T \times C \times H \times W)$.
+Le module `dataloader_CIRCA/datasets/hdf5_creator.py` consolide toute la chaîne de
+préparation des données :
 
-For visualization during training in Weights & Biases:
-- Include `c_index_rgb`, `c_index_nir`, and `sample_index`.
+```python
+from dataloader_CIRCA.datasets.hdf5_creator import CIRCA_HDF5_Maker, merge_hdf5_files
 
-For visualization in [demo.ipynb](demo.ipynb):
-- Include `c_index_rgb`.
+# Étape 1 : Créer les HDF5 individuels par zone MGRS
+maker = CIRCA_HDF5_Maker(
+    data_optique="chemin/vers/optique_dataset/",
+    data_radar="chemin/vers/radar_dataset_v4/",
+    image_size=[256, 256],
+    hdf5_folder="chemin/vers/sortie_hdf5/",
+    use_sar=True,
+    channels="all",
+    filter_settings={"type": "cloud-free", "min_length": 5},
+)
+maker.load_items_to_hdf5()
 
-
-## Preprocessing
-
-:warning: **Note:** Skip this section if you don't intend to retrain U&#8209;TILISE on the EarthNet2021 or the SEN12MS&#8209;CR&#8209;TS dataset.
-
-To train U&#8209;TILISE on the EarthNet2021 or the SEN12MS&#8209;CR&#8209;TS dataset, you will need to complete several steps:
-downloading the dataset, converting it from its native format to one compatible with our data loaders, and running a simulation to 
-generate cloud&#8209;free sequences with synthetically added data gaps. Here's a step-by-step guide:
-
-**EarthNet2021**
-1. **Dataset download**
-   
-   Obtain the dataset by following the download instructions available [here](https://www.earthnet.tech/en21/ds-download/).
-
-2. **Data conversion**
-   
-   The EarthNet2021 dataset comprises two .npz files for every time series. We aggregate the data of each data split
-   (i.e., train, iid, ood) into a single HDF5 file for further use. To run the npz-to-HDF5 conversion, execute the commands below:
-
-   ```bash
-   python ./toolbox/EarthNet2021_npz2hdf5.py --root_source <data_directory> --root_dest <output_directory> --split train --mode train
-   python ./toolbox/EarthNet2021_npz2hdf5.py --root_source <data_directory> --root_dest <output_directory> --split train --mode val
-   python ./toolbox/EarthNet2021_npz2hdf5.py --root_source <data_directory> --root_dest <output_directory> --split iid
-   python ./toolbox/EarthNet2021_npz2hdf5.py --root_source <data_directory> --root_dest <output_directory> --split ood
-   ```
-    
-   Replace `data_directory` with the root directory where you have saved your downloaded data and `output_directory` with
-   your preferred destination for the HDF5 files.
-   
-   Upon executing the above commands, you should find the following HDF5 files in `output_directory`:
-   - `train.hdf5`
-   - `iid_test_split.hdf5`
-   - `ood_test_split.hdf5`
-   
-   Besides the npz-to-HDF5 conversion, the script also stores the indices of unavailable frames and identifies all frames with partially
-   or fully occluded pixels for each time series in the respective data split.
-
-
-3. **Preprocessing of the validation split**
-
-   To generate time series with artificial data gaps for training, run the following command:
-   
-   ```bash
-   python ./toolbox/simulate_dataset.py --config_file ./data/configs/config_earthnet2021_simulation_val.yaml --out_dir <output_directory> --out_hdf5_filename earthnet2021_val_simulation.hdf5
-   ```
-
-   Make sure to set `root` in the [config_earthnet2021_simulation_val.yaml](./data/configs/config_earthnet2021_simulation_val.yaml)
-   configuration file to match the `output_directory` used in step 2. Optionally, change `max_seq_length` to modify the fixed
-   maximal temporal length $T$.
-
-   This step creates a new HDF5 file `/output_directory/earthnet2021_val_simulation.hdf5`. Among others, this file contains the
-   temporally trimmed cloud&#8209;free validation time series, the corresponding time series with synthetically introduced data gaps, the masks
-   used for masking, and the acquisition dates. 
-
-
-4. **Preprocessing of the test splits**
-
-   To generate time series with artificial data gaps for testing and evaluation, execute the command below:
-   
-   ```bash
-   python ./toolbox/simulate_dataset.py --config_file ./data/configs/config_earthnet2021_simulation_test.yaml --out_dir <output_directory> --out_hdf5_filename earthnet2021_iid_test_split_simulation.hdf5
-   ```
-
-   Again, configure `root` in the [config_earthnet2021_simulation_test.yaml](./data/configs/config_earthnet2021_simulation_test.yaml)
-   configuration file to match the `output_directory` used in step 2. If you wish to process the *ood* test split instead, set the
-   `split` parameter to *ood* and adjust `--out_hdf5_filename` accordingly.
-
-   > Note that `max_seq_length` in the [config_earthnet2021_simulation_test.yaml](./data/configs/config_earthnet2021_simulation_test.yaml)
-   configuration file is set to None to skip the temporal trimming of the test time series.
-
-
-
-**SEN12MS-CR-TS**
-1. **Dataset download**
-
-   Follow the provided [instructions](https://patricktum.github.io/cloud_removal/sen12mscr/) to download the dataset.
-
-2. **Data conversion**
-
-   To convert and aggregate the .tif files from individual acquisitions into a single HDF5 file for each data split
-   (i.e., train, val, test), use the functionalities provided [here](https://github.com/PatrickTUM/SEN12MS-CR-TS/blob/master/util/hdf5converter/).
-
-3. **Detection of real data gaps**
-
-   Execute the following script to identify all frames that have partial or complete occlusions:
-
-   ```bash
-   python ./toolbox/SEN12MSCRTS_detect_cloudy_frames.py --root <data_directory> --split train
-   python ./toolbox/SEN12MSCRTS_detect_cloudy_frames.py --root <data_directory> --split val
-   python ./toolbox/SEN12MSCRTS_detect_cloudy_frames.py --root <data_directory> --split test
-   ```
-
-   Upon completion, the HDF5 files created in step 2 will be updated with indices corresponding to images exhibiting data gaps.
-
-4. **Preprocessing of the validation and test splits**
-
-   To generate time series with artificial data gaps for training and evaluation, execute the commands below:
-   
-   ```bash
-   python ./toolbox/simulate_dataset.py --config_file ./data/configs/config_sen12mscrts_simulation_val.yaml --out_dir <output_directory> --out_hdf5_filename sen12mscrts_val_simulation.hdf5
-   python ./toolbox/simulate_dataset.py --config_file ./data/configs/config_sen12mscrts_simulation_test.yaml --out_dir <output_directory> --out_hdf5_filename sen12mscrts_test_simulation.hdf5
-   ```
-
-   For detailed instructions on each parameter and step, refer to the instructions provided for the EarthNet2021 dataset above.
-
-
-
-## Training 
-
-To initiate training, execute the following command:
-```bash
-python run_train.py /path/to/config_file.yaml --save_dir <output_directory> 
+# Étape 2 : Fusionner les HDF5 individuels en un seul fichier
+merge_hdf5_files(
+    hdf5_folder="chemin/vers/sortie_hdf5/",
+    output_file="CIRCA_CR_merged.hdf5"
+)
 ```
 
-where:
+Les étapes internes du pipeline :
+1. **Scan** des répertoires TIF (Sentinel-2 + Sentinel-1)
+2. **Appariement** S2↔S1 : pour chaque date S2, sélection de la date S1 la plus proche (ASC et DESC séparément)
+3. **Filtrage** des frames nuageuses (basé sur le masque nuageux)
+4. **Écriture** en HDF5 par patch 256×256
+5. **Fusion** de tous les HDF5 individuels
 
-- `/path/to/config_file.yaml` is the YAML configuration file specifying all runtime arguments.
-- `--save_dir` specifies the output directory.
+### 2. Entraînement
 
-All training hyperparameters are predefined in [default.yaml](configs/default.yaml) and set to the values used
-in the main experiments of the paper. If a parameter is specified in `/path/to/config_file.yaml`, it will override the default value.
-
-To view all available training options, run:
 ```bash
-python run_train.py -h
+python run_train.py configs/jzellou/configs/train_v4_asc_desc_random_clouds_combined.yaml \
+    --save_dir /chemin/vers/sortie/
 ```
 
-**Example configuration files**
+Le script fusionne automatiquement `configs/default.yaml` + `configs/config_run_train.yaml`
++ la config spécifique fournie en argument.
 
-We provide a collection of configuration files within the `./configs/` directory:
-* `default.yaml`: Default parameter settings.
-* `config_earthnet2021_train.yaml`: Additional settings used to train on the EarthNet2021 dataset.
-* `config_sen12mscrts_train.yaml`: Additional settings used to train on the SEN12MS&#8209;CR&#8209;TS dataset.
-* `config_earthnet2021_test_simulation.yaml`: Test settings for the EarthNet2021 dataset (synthetic data gaps).
-* `config_earthnet2021_test.yaml`: Test settings for the EarthNet2021 dataset (actual data gaps).
+**Configuration v4 asc+desc (meilleur modèle)** :
+- Architecture élargie : encodeur `[64, 96, 128, 192, 256]`, décodeur `[96, 128, 192, 192, 256]`
+- 8 têtes d'attention, 8 groupes de normalisation
+- SAR asc+desc (18 canaux entrée, 10 canaux sortie)
+- Loss combinée : L1 + SSIM + L1 sur pixels masqués
+- Scheduler cyclique : CosineAnnealingWarmRestarts ($T_0 = 40$, $T_{mult} = 2$)
+- 200 epochs, batch_size=4, gradient accumulation=2
+- Séquences de 10 frames à l'entraînement
 
-Upon execution, the `run_train.py` script combines the `default.yaml` with the provided `--config_file`, 
-saving the resultant runtime configuration as a YAML file in the directory defined by `--save_dir`. As a point of reference, 
-you can find an example runtime configuration at [demo_train_config.yaml](configs/demo_train_config.yaml). We will use this YAML file below to 
-demonstrate the evaluation procedure.
+À la fin de l'entraînement, une évaluation automatique est lancée sur les 3 types de masquage.
 
+### 3. Évaluation
 
-## Evaluation
-
-To perform the evaluation, execute the `run_eval.py` script using the following command:
 ```bash
-python run_eval.py /path/to/config.yaml <method_name> --checkpoint <path_to_checkpoint> --test-data.data-dir <data_directory> --test-data.hdf5-file <hdf5_file_name> --test-data.split <data_split>
+python run_eval.py configs/jzellou/configs/config_run_eval_v4_asc_desc_rfm.yaml utilise
 ```
 
-To view all available input options, run:
+Paramètres de la config d'évaluation :
+- `checkpoint` : chemin vers le modèle entraîné (.pth)
+- `config_file` : config sauvegardée durant l'entraînement (pour l'architecture)
+- `mask_type` : type de masquage (voir section dédiée)
+- `max_seq_length` : fenêtre temporelle (14 par défaut en évaluation)
+- `blend_mode` : stratégie de fusion (voir section dédiée)
+- `save_dir` : répertoire de sortie des métriques
+
+**Métriques calculées** : MAE, MSE, RMSE, PSNR, SSIM, SAM, R².
+
+**Agrégation des résultats** :
 ```bash
-python run_eval.py -h
+python aggregate_metrics.py --results_dir /chemin/vers/resultats/
 ```
 
+### 4. Inférence à la tuile
 
-**Examples**
-
-1. To evaluate the *iid* test split of the EarthNet2021 dataset, use the following command:
 ```bash
-python run_eval.py ./configs/demo_train_config.yaml utilise --test-data.data-dir ./data/ --test-data.hdf5-file earthnet2021_iid_test_split_simulation.hdf5 --test-data.split iid --checkpoint ./checkpoints/utilise_earthnet2021.pth 
+python infer_from_tiles.py configs/jzellou/configs/config_run_infer_from_tiles_v4_asc_desc.yaml utilise
 ```
 
-2. Similarly, to evaluate the linear interpolation baseline, run:
+Produit des GeoTIFF de reconstruction pour chaque tuile MGRSC. Le script :
+- Découpe chaque tuile en patches de 256×256 avec chevauchement
+- Applique le modèle par fenêtre glissante
+- Fusionne les patches reconstruits en une tuile complète
+- Écrit les résultats en GeoTIFF géoréférencé
+
+---
+
+## Modes de masquage
+
+| Mode | Abréviation | Description | Usage |
+|------|-------------|-------------|-------|
+| `random_clouds` | rc | Masques nuageux aléatoires superposés | Entraînement |
+| `random_fully_masked` | rfm | Dates entières masquées aléatoirement | Évaluation |
+| `consecutive_fully_masked` | cfm | Bloc de dates consécutives masquées | Évaluation |
+| `real_clouds` | — | Masques nuageux réels du HDF5 | Inférence produit |
+
+---
+
+## Modes de fusion temporelle (blend)
+
+Lors de l'inférence, la séquence complète est traitée par **fenêtre glissante** de taille
+`max_seq_length` (14 frames en évaluation). Le `blend_mode` détermine comment les
+prédictions des fenêtres qui se chevauchent sont combinées :
+
+| Mode | Description |
+|------|-------------|
+| `switch` | Transition dure au frame minimisant l'erreur entre fenêtres adjacentes |
+| `center` | Pondération triangulaire favorisant le centre de chaque fenêtre |
+| `center_only` | Ne conserve que les N frames centrales par fenêtre |
+| `iterative` | Multi-passes : les prédictions sont réinjectées comme observations pour les passes suivantes. Le nombre de passes est calculé dynamiquement selon la plus longue lacune consécutive |
+
+---
+
+## Utilisation sur cluster (SLURM)
+
+Les scripts SLURM sont dans `configs/jzellou/slurms/`. Exemples :
+
 ```bash
-python run_eval.py ./configs/demo_train_config.yaml trivial --mode linear_interpolation --test-data.data-dir ./data/ --test-data.hdf5-file earthnet2021_iid_test_split_simulation.hdf5 --test-data.split iid
+# Entraînement
+sbatch configs/jzellou/slurms/train_v4_asc_desc_random_clouds_combined.slurm
+
+# Évaluation (rfm = random_fully_masked, cfm = consecutive_fully_masked)
+sbatch configs/jzellou/slurms/metrics_v4_asc_desc_rfm.slurm
+sbatch configs/jzellou/slurms/metrics_v4_asc_desc_cfm.slurm
+
+# Évaluation avec mode de fusion alternatif
+sbatch configs/jzellou/slurms/metrics_v4_asc_desc_rfm_blend.slurm
+sbatch configs/jzellou/slurms/metrics_v4_asc_desc_cfm_iterative.slurm
+
+# Inférence à la tuile
+sbatch configs/jzellou/slurms/infer_from_tiles_v4_asc_desc.slurm
 ```
 
+---
 
-## Demo
+## Références
 
-### Inference
+Ce code est une adaptation de U-TILISE pour le projet CIRCA (3STR — RPG).
 
-Check out the Jupyter Notebook [demo.ipynb](demo.ipynb), which provides a step-by-step demonstration of using U&#8209;TILISE to impute a 
-given time series and visualize the associated attention masks.
-
-
-## Citation
 ```bibtex
 @article{stucker2023u,
-  title={{U-TILISE}: A Sequence-to-sequence Model for Cloud Removal in Optical Satellite Time Series},
+  title={{U-TILISE}: A Sequence-to-sequence Model for Cloud Removal
+         in Optical Satellite Time Series},
   author={Stucker, Corinne and Garnot, Vivien Sainte Fare and Schindler, Konrad},
   journal={IEEE Transactions on Geoscience and Remote Sensing},
   year={2023},
@@ -291,12 +326,5 @@ given time series and visualize the associated attention masks.
 }
 ```
 
-## Acknowledgements
-U&#8209;TILISE extends the architecture of [U-TAE](https://github.com/VSainteuf/utae-paps) to a full 3D spatio-temporal sequence-to-sequence model that preserves the temporal dimension.
-
-We thank Vivien Sainte Fare Garnot for his efforts in open sourcing and maintaining U-TAE.[^3]
-
-
-[^1]: C. Requena-Mesa, V. Benson, M. Reichstein, J. Runge, and J. Denzler, *EarthNet2021 :A large-scale dataset and challenge for earth surface forecasting as a guided video prediction task*, in IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) Workshops, 2021, pp.1132–1142.
-[^2]: P. Ebel, Y. Xu, M. Schmitt, and X. X. Zhu, *SEN12MS-CR-TS: A remote-sensing dataset for multimodal multitemporal cloud removal*, IEEE Transactions on Geoscience and Remote Sensing, vol.60, pp. 1-14, 2022.
-[^3]: V.S.F. Garnot and L. Landrieu, *Panoptic segmentation of satellite image time series with convolutional temporal attention networks*, in IEEE/CVF International Conference on Computer Vision (ICCV), 2021, pp.4872–4881.
+U-TILISE étend l'architecture [U-TAE](https://github.com/VSainteuf/utae-paps) en un modèle
+séquence-à-séquence 3D spatio-temporel complet.

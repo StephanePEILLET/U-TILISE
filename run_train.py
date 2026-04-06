@@ -1,3 +1,13 @@
+"""Point d'entrée pour l'entraînement du modèle U-TILISE.
+
+Fusionne automatiquement configs/default.yaml + configs/config_run_train.yaml
++ la config spécifique fournie en argument. Lance la boucle d'entraînement
+avec validation par epoch, sauvegarde des checkpoints et évaluation finale.
+
+Usage:
+    python run_train.py <config.yaml> --save_dir <répertoire_sortie>
+"""
+
 import argparse
 import logging
 import os
@@ -283,98 +293,6 @@ def main(args: argparse.Namespace) -> None:
                 json.dump(results_test_metrics, outfile, indent=4)
             print("Test set metrics:")
             print(results_test_metrics)
-
-
-import pytorch_lightning as pl
-import torch
-from torchmetrics import MeanMetric
-
-from dataloader_CIRCA.datasets.cr_torchmetrics import CloudRemovalDatasetMetrics
-
-
-class SegmentationTask(pl.LightningModule):
-    def __init__(self, model, criterion, optimizer, scheduler):
-        super().__init__()
-        self.model = model
-        self.criterion = criterion
-        self.optimizer = optimizer
-        self.scheduler = scheduler
-
-    def setup(self, stage=None):
-        if stage == "fit":
-            self.train_epoch_loss, self.val_epoch_loss = None, None
-            self.train_epoch_metrics, self.val_epoch_metrics = None, None
-            self.train_metrics = CloudRemovalDatasetMetrics(eval_occluded_observed=True, clean_gt_cloudy_pixels=True)
-            self.val_metrics = CloudRemovalDatasetMetrics(eval_occluded_observed=True, clean_gt_cloudy_pixels=True)
-            self.train_loss = MeanMetric(nan_strategy="ignore")
-            self.val_loss = MeanMetric(nan_strategy="ignore")
-
-        elif stage == "validate":
-            self.val_epoch_loss, self.val_epoch_metrics = None, None
-            self.val_metrics = CloudRemovalDatasetMetrics(eval_occluded_observed=True, clean_gt_cloudy_pixels=True)
-            self.val_loss = MeanMetric(nan_strategy="ignore")
-
-    def forward(self, images):
-        logits = self.model(images)
-        return logits
-
-    def step(self, batch):
-        images, targets = batch["image"], batch["mask"]
-        logits = self.forward(images)
-        loss = self.criterion(logits, targets)
-        with torch.no_grad():
-            proba = torch.softmax(logits, dim=1)
-            preds = torch.argmax(proba, dim=1)
-            targets = torch.argmax(targets, dim=1)
-            # Change shapes and cast target to integer for metrics computation
-            preds = preds.flatten(start_dim=1)
-            targets = targets.flatten(start_dim=1).type(torch.int32)
-        return loss, preds, targets
-
-    def training_step(self, batch, batch_idx):
-        loss, preds, targets = self.step(batch)
-        self.train_loss.update(loss)
-        self.train_metrics.update(
-            preds=preds, target=targets, masks=batch["mask"], cloud_masks=batch.get("cloud_mask", None)
-        )
-        return loss
-
-    def training_epoch_end(self, outputs):
-        self.train_epoch_loss = self.train_loss.compute()
-        self.train_epoch_metrics = self.train_metrics.compute()
-        self.log("train_loss", self.train_epoch_loss, on_step=False, on_epoch=True, prog_bar=True, logger=False)
-        self.train_loss.reset()
-        self.train_metrics.reset()
-
-    def validation_step(self, batch, batch_idx):
-        loss, preds, targets = self.step(batch)
-        self.val_loss.update(loss)
-        self.val_metrics.update(
-            preds=preds, target=targets, masks=batch["mask"], cloud_masks=batch.get("cloud_mask", None)
-        )
-        return loss
-
-    def validation_epoch_end(self, outputs):
-        self.val_epoch_loss = self.val_loss.compute()
-        self.val_epoch_metrics = self.val_metrics.compute()
-        self.log("val_loss", self.val_epoch_loss, on_step=False, on_epoch=True, prog_bar=True, logger=False)
-        self.val_loss.reset()
-        self.val_metrics.reset()
-
-    def configure_optimizers(self):
-        lr_scheduler_config = {
-            "scheduler": self.scheduler,
-            "interval": "epoch",
-            "monitor": "val_loss",
-            "frequency": 1,
-            "strict": True,
-            "name": "LR Scheduler",
-        }
-        config = {
-            "optimizer": self.optimizer,
-            "lr_scheduler": lr_scheduler_config,
-        }
-        return config
 
 
 if __name__ == "__main__":

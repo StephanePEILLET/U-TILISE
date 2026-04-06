@@ -1,3 +1,12 @@
+"""Outils d'imputation pour l'évaluation et l'inférence U-TILISE.
+
+Contient la classe Imputation qui gère :
+- Le chargement du modèle à partir d'un checkpoint
+- L'inférence par fenêtre glissante (sliding window)
+- La fusion des prédictions (blend) : switch, center, center_only, iterative
+- La visualisation des résultats et masques d'attention
+"""
+
 import sys
 from pathlib import Path
 

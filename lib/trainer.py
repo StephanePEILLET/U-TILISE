@@ -1,3 +1,12 @@
+"""Boucle d'entraînement U-TILISE.
+
+Gère le cycle train/val par epoch avec :
+- Accumulation de gradients (gradient_accumulation_steps)
+- Sauvegarde du meilleur modèle et checkpoints réguliers
+- Logging TensorBoard et Weights & Biases
+- Évaluation automatique en fin d'entraînement (3 masquages)
+"""
+
 import logging
 import os
 import time
@@ -14,7 +23,7 @@ from torch import Tensor
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
-from dataloader_CIRCA.datasets.cr_metrics import CloudRemovalMetrics
+from dataloader_CIRCA.datasets.cr_metrics_nina import CloudRemovalMetrics
 from lib import logger, visutils
 from lib.data_utils import compute_false_color, extract_sample, to_device
 from lib.logger import AverageMeter

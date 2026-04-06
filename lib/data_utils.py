@@ -14,7 +14,7 @@ from torch import Tensor
 from torch.nn import functional as F
 from torch.utils.data import Dataset
 
-from lib.datasets import DATASETS, EarthNet2021Dataset, SEN12MSCRTSDataset
+from lib.datasets import DATASETS
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -186,11 +186,6 @@ def get_dataset(config: DictConfig, phase: str, logger: logging.Logger | None = 
 
     # Select the defined dataset
     Dataset = DATASETS[config.data.dataset]
-
-    if Dataset == EarthNet2021Dataset and phase != "test":
-        config.data.mode = phase
-    elif Dataset == SEN12MSCRTSDataset:
-        config.data.split = phase
 
     augment = config.data.get("augment", phase == "train")
     if "hdf5_file" in config.data and isinstance(config.data.hdf5_file, DictConfig):

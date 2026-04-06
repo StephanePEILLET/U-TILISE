@@ -1,3 +1,11 @@
+"""Adaptateur CIRCA → format U-TILISE.
+
+Encapsule CIRCA_from_HDF5 ou Dataset_from_files pour fournir les tenseurs
+dans le format attendu par U-TILISE : x (entrée masquée), y (cible),
+masks, position_days, etc. Gère l'échantillonnage temporel, le masquage
+synthétique et les augmentations spatiales.
+"""
+
 import sys
 from pathlib import Path
 

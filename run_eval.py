@@ -1,3 +1,13 @@
+"""Point d'entrée pour l'évaluation du modèle U-TILISE.
+
+Charge un checkpoint entraîné, applique l'imputation par fenêtre glissante
+sur le jeu de test, calcule les métriques (MAE, RMSE, PSNR, SSIM, SAM, R²)
+et sauvegarde les résultats en JSON.
+
+Usage:
+    python run_eval.py <config_eval.yaml> utilise
+"""
+
 import argparse
 import os
 import sys

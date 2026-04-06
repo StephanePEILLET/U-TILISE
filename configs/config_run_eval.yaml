@@ -1,13 +1,18 @@
+# ============================================================================
+# Config de base pour l'évaluation — surcharge les valeurs de default.yaml
+# Pour l'évaluation v4 asc+desc, utiliser les configs dans configs/jzellou/configs/
+# ============================================================================
+
 data:
-    dataset: circa         # Name of the dataset, ['earthnet2021', 'sen12mscrts']
-    hdf5_file: /mnt/DATA_10T/data_rpg/circa/hdf5/CIRCA_CR_merged.hdf5 #/mnt/DATA_10T/data_rpg/circa/hdf5/circa_cloud_removal.hdf5
+    dataset: circa         # Jeu de données. ['circa']
+    hdf5_file: /mnt/DATA_10T/data_rpg/circa/hdf5/CIRCA_CR_merged.hdf5
     load_transforms: ./data/CIRCA_patches_datasets_with_transforms.json
-    # parcel_gpkg: /mnt/stores/store_dai/projets/pac/3str/EXP_2/Data_Vecteur/CIRCA+_parcels_full.gpkg  # Path to parcel GPKG. Set to null to disable parcel-only evaluation.
+    # parcel_gpkg: chemin/vers/parcelles.gpkg  # Chemin vers le GPKG parcellaire (null = désactivé).
     channels: all
-    use_sar: asc+desc # asc /desc/ mix_closest / asc+desc
+    use_sar: asc+desc # Mode SAR : asc / desc / mix_closest / asc+desc
     subset: false  
-    blend_mode: center
-    max_seq_length: 14                     # Maximum temporal sequence length. Set to None to skip temporal trimming.
+    blend_mode: center                     # Mode de fusion : switch / center / center_only / iterative
+    max_seq_length: 14                     # Fenêtre temporelle (14 par défaut en évaluation).
     return_windows: true
     filter_settings:
         type: cloud-free
@@ -15,26 +20,22 @@ data:
         return_valid_obs_only: true
 
 test_data:
-    # checkpoint: /mnt/DATA_10T/data_rpg/outputs/U-TILISE/results/ALL_SAR_120_epochs_2025-07-11_16-56/checkpoints/Model_best.pth
-    # test_config: /mnt/DATA_10T/data_rpg/outputs/U-TILISE/results/ALL_SAR_120_epochs_2025-07-11_16-56/config.yaml
-    checkpoint: /home/SPeillet/data_rpg/outputs/U-TILISE/results/all_bands_sar_closest_mix_random_fully_masked_da/2026-03-14_10-59/checkpoints/Model_best.pth
-    test_config: /home/SPeillet/data_rpg/outputs/U-TILISE/results/all_bands_sar_closest_mix_random_fully_masked_da/2026-03-14_10-59/config.yaml
+    checkpoint: /chemin/vers/Model_best.pth        # Checkpoint du modèle entraîné.
+    test_config: /chemin/vers/config.yaml          # Config sauvegardée durant l'entraînement.
     hdf5_file: /mnt/DATA_10T/data_rpg/circa/hdf5/CIRCA_CR_merged.hdf5
     mode: null
     split: test
-    # return_predictions: true
-    # predictions_save_path: /mnt/DATA_10T/data_rpg/outputs/U-TILISE/inference/CIRCA_CR_inference
 
 mask:
-    mask_type: random_fully_masked    # Mask the input time series with randomly sampled cloud masks or the actual cloud masks. ['random_clouds', 'real_clouds', "random_fully_masked", "consecutive_fully_masked"]
-    ratio_masked_frames: 0.5               # Ratio of partially/fully masked images per image time series (upper bound).
-    ratio_fully_masked_frames: 0.0         # Ratio of fully masked images per image time series (upper bound).
-    fixed_masking_ratio: false             # True to vary the masking ratio across different image time series, False otherwise.
-    non_masked_frames: [0]                 # list of int, time steps to be excluded from masking. E.g., [0] never masks the first frame in a sequence.
-    intersect_real_cloud_masks: false      # True to intersect randomly sampled cloud masks with the actual cloud masks, False otherwise.
-    dilate_cloud_masks: false              # True to dilate the cloud masks before masking, False otherwise.
-    fill_type: fill_value                  # Strategy for initializing masked pixels. ['fill_value', 'white_noise', 'mean']
-    fill_value: 1                          # Pixel value of masked pixels. Used if fill_type == 'fill_value'.
+    mask_type: random_fully_masked    # Type de masquage. ['random_clouds', 'real_clouds', 'random_fully_masked', 'consecutive_fully_masked']
+    ratio_masked_frames: 0.5               # Part maximale de frames masquées.
+    ratio_fully_masked_frames: 0.0
+    fixed_masking_ratio: false
+    non_masked_frames: [0]
+    intersect_real_cloud_masks: false
+    dilate_cloud_masks: false
+    fill_type: fill_value
+    fill_value: 1
     p_filter: 0.1
 
 utilise:

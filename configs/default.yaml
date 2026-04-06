@@ -1,33 +1,38 @@
-data:                                      # See lib/datasets/EarthNet2021Dataset.py for a detailed description.
+# ============================================================================
+# Configuration par défaut du modèle U-TILISE
+# Ces paramètres sont surchargés par la config spécifique (train, eval, etc.)
+# ============================================================================
+
+data:                                      # Paramètres des données d'entrée
     filter_settings:
-        type: cloud-free                   # Strategy for removing observations with data gaps. ['cloud-free', 'cloud-free_consecutive']
-        min_length: 5                      # Minimum sequence length.
-        return_valid_obs_only: true        # True to return the cloud-filtered sequences, False otherwise.
+        type: cloud-free                   # Stratégie de filtrage des observations nuageuses. ['cloud-free', 'cloud-free_consecutive']
+        min_length: 5                      # Longueur minimale de séquence après filtrage.
+        return_valid_obs_only: true        # True = ne retourner que les dates cloud-free (train/val).
     crop_settings:
-        enabled: false                     # Activate/deactivate spatial cropping.
-        shape: ${tuple:64,64}              # Spatial size of the cropped images.
-    pe_strategy: day-of-year               # Strategy for positional encoding. ['day-of-year', 'day-within-sequence', 'absolute', 'enumeration']
-    max_seq_length: 10                     # Maximum temporal sequence length. Set to None to skip temporal trimming.
-    render_occluded_above_p: 0.9           # Minimum cloud cover [-] to fully mask an input image. Set to None to keep original cloud masks.
-    return_cloud_mask: true                # Set to True if metrics/masked_metrics is True.
+        enabled: false                     # Activer/désactiver le recadrage spatial.
+        shape: ${tuple:64,64}              # Taille spatiale des images recadrées.
+    pe_strategy: day-of-year               # Stratégie d'encodage positionnel. ['day-of-year', 'day-within-sequence', 'absolute', 'enumeration']
+    max_seq_length: 10                     # Longueur maximale de séquence temporelle. None = pas de troncature.
+    render_occluded_above_p: 0.9           # Seuil de couverture nuageuse pour masquer entièrement une image.
+    return_cloud_mask: true                # Retourner les masques nuageux (nécessaire pour les métriques masquées).
 
 mask:
-    mask_type: random_clouds               # Mask the input time series with randomly sampled cloud masks or the actual cloud masks. ['random_clouds', 'real_clouds']
-    ratio_masked_frames: 0.5               # Ratio of partially/fully masked images per image time series (upper bound).
-    ratio_fully_masked_frames: 0.0         # Ratio of fully masked images per image time series (upper bound).
-    fixed_masking_ratio: false             # True to vary the masking ratio across different image time series, False otherwise.
-    non_masked_frames: [0]                 # list of int, time steps to be excluded from masking. E.g., [0] never masks the first frame in a sequence.
-    intersect_real_cloud_masks: false      # True to intersect randomly sampled cloud masks with the actual cloud masks, False otherwise.
-    dilate_cloud_masks: false              # True to dilate the cloud masks before masking, False otherwise.
-    fill_type: fill_value                  # Strategy for initializing masked pixels. ['fill_value', 'white_noise', 'mean']
-    fill_value: 1                          # Pixel value of masked pixels. Used if fill_type == 'fill_value'.
+    mask_type: random_clouds               # Type de masquage. ['random_clouds', 'real_clouds', 'random_fully_masked', 'consecutive_fully_masked']
+    ratio_masked_frames: 0.5               # Part maximale d'images partiellement/totalement masquées par séquence.
+    ratio_fully_masked_frames: 0.0         # Part maximale d'images entièrement masquées par séquence.
+    fixed_masking_ratio: false             # True = ratio fixe, False = ratio variable entre séquences.
+    non_masked_frames: [0]                 # Indices des frames à ne jamais masquer. Ex: [0] = garder la première.
+    intersect_real_cloud_masks: false      # True = intersecter les masques aléatoires avec les masques réels.
+    dilate_cloud_masks: false              # True = dilater les masques nuageux avant application.
+    fill_type: fill_value                  # Initialisation des pixels masqués. ['fill_value', 'white_noise', 'mean']
+    fill_value: 1                          # Valeur de remplissage (si fill_type == 'fill_value').
     p_filter: 0.1
 
 method:
     model_type: utilise
     pad_value: 0
 
-utilise:                                   # See lib/models/utilise.py for a detailed description.
+utilise:                                   # Architecture U-TILISE (voir lib/models/utilise.py)
     encoder_widths: [64,64,64,128]
     decoder_widths: [64,64,64,128]
     upconv_type: transpose
@@ -55,63 +60,63 @@ utilise:                                   # See lib/models/utilise.py for a det
     output_activation: sigmoid
 
 training_settings:
-    batch_size: 3                          # Batch size.
-    num_epochs: 1000                       # Number of training epochs.
-    accum_iter: 1                          # Accumulate gradients for 'accum_iter` iterations.
-    gradient_clip_norm: 0                  # If > 0, clips gradient norm to that value.
-    gradient_clip_value: 0                 # If > 0, clips gradient at specified value.
-    early_stop_patience: 0                 # If > 0, stops training after N epochs without val loss improvement.
-    resume: false                          # True to resume training, False otherwise.
-    pretrained_path: ''                    # Path to the pretrained model weights.
+    batch_size: 3                          # Taille de batch.
+    num_epochs: 1000                       # Nombre d'epochs d'entraînement.
+    accum_iter: 1                          # Accumulation de gradients sur N itérations.
+    gradient_clip_norm: 0                  # Si > 0, clip la norme du gradient.
+    gradient_clip_value: 0                 # Si > 0, clip la valeur du gradient.
+    early_stop_patience: 0                 # Si > 0, arrêt après N epochs sans amélioration.
+    resume: false                          # True = reprendre un entraînement interrompu.
+    pretrained_path: ''                    # Chemin vers les poids pré-entraînés.
 
 optimizer:
-    name: Adam                             # Optimizer.
-    learning_rate: 2.e-04                  # Initial learning rate.
-    weight_decay: 0                        # Weight decay.
+    name: Adam                             # Optimiseur.
+    learning_rate: 2.e-04                  # Taux d'apprentissage initial.
+    weight_decay: 0                        # Régularisation L2.
 
 scheduler:
-    name: MultiStepLR                      # Learning rate scheduler.
-    enabled: true                          # Activate/deactivate the learning rate scheduler.
-    milestones: [50, 100, 150, 200, 250]   # Settings of the learning rate scheduler.
-    gamma: 0.5
+    name: MultiStepLR                      # Scheduler du taux d'apprentissage.
+    enabled: true                          # Activer/désactiver le scheduler.
+    milestones: [50, 100, 150, 200, 250]   # Epochs de réduction du LR.
+    gamma: 0.5                             # Facteur de réduction du LR.
 
 loss:
-    ssim_loss: false                       # SSIM loss.
-    l1_loss: true                          # L1 reconstruction loss computed over all pixels.
-    l1_loss_occluded_input_pixels: false   # L1 reconstruction loss computed over all masked pixels in the input sequence.
-    l1_loss_observed_input_pixels: false   # L1 reconstruction loss computed over all observed pixels in the input sequence.
-    masked_l1_loss: false                  # L1 reconstruction loss computed over all pixels with valid ground truth (real cloud masks used for masking remaining clouds).
-    ndvi_loss: false                        # L1 loss on NDVI index (NIR-Red)/(NIR+Red) to improve vegetation index reconstruction.
-    temporal_r2_loss: false                 # (1 - R²) loss per pixel along the temporal dimension to maximize temporal coherence.
-    ssim_loss_w: 1.0                       # Weight for `ssim_loss`.
-    l1_loss_w: 1.0                         # Weight for `l1_loss`.
-    l1_loss_occluded_input_pixels_w: 1.0   # Weight for `l1_loss_occluded_input_pixels`.
-    l1_loss_observed_input_pixels_w: 1.0   # Weight for `l1_loss_observed_input_pixels`.
-    masked_l1_loss_w: 1.0                  # Weight for `masked_l1_loss`.
-    ndvi_loss_w: 0.15                      # Weight for `ndvi_loss`. Recommended range: 0.05-0.5.
-    temporal_r2_loss_w: 0.1                # Weight for `temporal_r2_loss`. Recommended range: 0.05-0.5.
+    ssim_loss: false                       # Perte SSIM (similarité structurelle).
+    l1_loss: true                          # Perte L1 sur tous les pixels.
+    l1_loss_occluded_input_pixels: false   # L1 sur les pixels masqués en entrée uniquement.
+    l1_loss_observed_input_pixels: false   # L1 sur les pixels observés en entrée uniquement.
+    masked_l1_loss: false                  # L1 sur les pixels avec vérité terrain valide (masques nuageux réels).
+    ndvi_loss: false                       # L1 sur le NDVI (NIR-Red)/(NIR+Red) pour la végétation.
+    temporal_r2_loss: false                # (1 - R²) par pixel le long du temps pour la cohérence temporelle.
+    ssim_loss_w: 1.0                       # Poids de ssim_loss.
+    l1_loss_w: 1.0                         # Poids de l1_loss.
+    l1_loss_occluded_input_pixels_w: 1.0   # Poids de l1_loss_occluded_input_pixels.
+    l1_loss_observed_input_pixels_w: 1.0   # Poids de l1_loss_observed_input_pixels.
+    masked_l1_loss_w: 1.0                  # Poids de masked_l1_loss.
+    ndvi_loss_w: 0.15                      # Poids de ndvi_loss. Plage recommandée : 0.05-0.5.
+    temporal_r2_loss_w: 0.1                # Poids de temporal_r2_loss. Plage recommandée : 0.05-0.5.
 
 metrics:
-    masked_metrics: true                   # True to compute all pixel-based metrics only for those pixels with cloud-free target reflectance, False to evaluate all pixels.
-    mae: true                              # Mean absolute error (MAE).
-    mse: true                              # Mean square error (MSE).
-    rmse: true                             # Root mean square error (RMSE).
-    ssim: true                             # Structural similarity index (SSIM).
-    psnr: true                             # Peak signal-to-noise ratio (PSNR).
-    sam: true                              # Spectral angle mapper (SAM).
+    masked_metrics: true                   # True = métriques uniquement sur les pixels avec vérité terrain valide.
+    mae: true                              # Erreur absolue moyenne (MAE).
+    mse: true                              # Erreur quadratique moyenne (MSE).
+    rmse: true                             # Racine de l'erreur quadratique moyenne (RMSE).
+    ssim: true                             # Indice de similarité structurelle (SSIM).
+    psnr: true                             # Rapport signal-sur-bruit crête (PSNR).
+    sam: true                              # Spectral Angle Mapper (SAM).
 
 misc:
-    logstep_train: 100                     # Training log interval in number of iterations.
-    checkpoint_every_n_epochs: 5           # Save checkpoint after every `checkpoint_every_n_epochs` training epochs.
-    log_gradients: false                   # True to log gradients and model parameters using Weights & Biases.
-    val_every_n_epochs: 1                  # Validation interval in epochs.
-    plot_every_n_epochs: 15                # Plot interval in epochs.
-    plot_val_sample: []                    # List of int, indices of the validation samples to be visualized during training using Weights & Biases.
-    num_workers: 8                         # Number of dataloader worker processes.
-    random_seed: 0                         # Random seed.
-    pin_memory: false                      # Pin memory (dataloader settings).
-    run_mode: train                        # Run mode. ['train', 'val', 'test']
+    logstep_train: 100                     # Intervalle de log pendant l'entraînement (en itérations).
+    checkpoint_every_n_epochs: 5           # Sauvegarde du checkpoint tous les N epochs.
+    log_gradients: false                   # True = log des gradients via Weights & Biases.
+    val_every_n_epochs: 1                  # Intervalle de validation (en epochs).
+    plot_every_n_epochs: 15                # Intervalle de visualisation (en epochs).
+    plot_val_sample: []                    # Indices des échantillons de validation à visualiser.
+    num_workers: 8                         # Nombre de workers du dataloader.
+    random_seed: 0                         # Graine aléatoire.
+    pin_memory: false                      # Épinglage mémoire (paramètre dataloader).
+    run_mode: train                        # Mode d'exécution. ['train', 'val', 'test']
 
 output:
-    suffix:                                # Suffix appended to the name of the experiment directory.
-    plot_model_txt: true                   # True to dump the model architecture to a txt file, False otherwise.
+    suffix:                                # Suffixe ajouté au nom du dossier d'expérience.
+    plot_model_txt: true                   # True = sauvegarder l'architecture du modèle en .txt.

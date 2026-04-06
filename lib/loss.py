@@ -1,3 +1,13 @@
+"""Fonctions de perte pour l'entraînement U-TILISE.
+
+Loss combinée :
+- L1 : reconstruction globale
+- SSIM : similarité structurelle
+- L1 masqué : reconstruction sur pixels masqués uniquement
+- NDVI (optionnel) : cohérence de l'indice de végétation
+- R² temporel (optionnel) : cohérence des profils temporels par pixel
+"""
+
 from typing import Any
 
 import torch

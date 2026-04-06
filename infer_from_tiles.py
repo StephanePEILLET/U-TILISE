@@ -1,3 +1,13 @@
+"""Inférence U-TILISE sur des tuiles Sentinel-2 complètes.
+
+Charge les données à plat (GeoTIFF) via dataset_from_files, applique le modèle
+par patches 256×256 avec fenêtre glissante, puis fusionne les résultats en
+GeoTIFF géoréférencés.
+
+Usage:
+    python infer_from_tiles.py <config_infer.yaml> utilise
+"""
+
 import argparse
 import gc
 import json

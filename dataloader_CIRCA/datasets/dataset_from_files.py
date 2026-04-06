@@ -1,3 +1,10 @@
+"""Chargement des données CIRCA directement depuis les fichiers TIF.
+
+Mode alternatif au HDF5 : lit les répertoires de rasters Sentinel-1/2
+et construit les séries temporelles à la volée. Utile pour l'inférence
+sur de nouvelles zones ou le prototypage sans création de HDF5.
+"""
+
 import ast
 import datetime as dt
 import json

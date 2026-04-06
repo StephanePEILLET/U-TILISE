@@ -1,3 +1,10 @@
+"""Lecture des données CIRCA depuis un fichier HDF5.
+
+Fournit le dataset PyTorch CIRCA_from_HDF5 qui charge les séries temporelles
+Sentinel-2 et Sentinel-1 (ASC/DESC) à partir du fichier HDF5 fusionné.
+Gère les différences entre splits train/val (dates filtrées) et test (toutes dates).
+"""
+
 import datetime as dt
 import json
 import sys

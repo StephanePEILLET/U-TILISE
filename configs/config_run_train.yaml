@@ -1,25 +1,30 @@
+# ============================================================================
+# Config de base pour l'entraînement — surcharge les valeurs de default.yaml
+# Pour l'entraînement v4 asc+desc, utiliser plutôt la config dédiée :
+#   configs/jzellou/configs/train_v4_asc_desc_random_clouds_combined.yaml
+# ============================================================================
+
 data:
-    dataset: circa         # Name of the dataset, ['earthnet2021', 'sen12mscrts']
-    hdf5_file: /mnt/DATA_10T/data_rpg/circa/hdf5/CIRCA_CR_merged.hdf5 #/mnt/DATA_10T/data_rpg/circa/hdf5/circa_cloud_removal.hdf5
+    dataset: circa         # Jeu de données. ['circa']
+    hdf5_file: /mnt/DATA_10T/data_rpg/circa/hdf5/CIRCA_CR_merged.hdf5
     max_seq_length: 5
     channels: all
-    use_sar: mix_closest  # asc / desc / mix_closest / asc+desc / *_without_coherence
+    use_sar: mix_closest  # Mode SAR : asc / desc / mix_closest / asc+desc / *_without_coherence
     subset: false
     filter_settings:
         type: cloud-free
         min_length: 3
         return_valid_obs_only: true
-        # max_t_sampling: 28
 mask:
-    mask_type: random_fully_masked         # Mask the input time series with randomly sampled cloud masks or the actual cloud masks. ['random_clouds', 'real_clouds', random_fully_masked", "consecutive_fully_masked]
-    ratio_masked_frames: 0.5               # Ratio of partially/fully masked images per image time series (upper bound).
-    ratio_fully_masked_frames: 0.0         # Ratio of fully masked images per image time series (upper bound).
-    fixed_masking_ratio: false             # True to vary the masking ratio across different image time series, False otherwise.
-    non_masked_frames: [0]                 # list of int, time steps to be excluded from masking. E.g., [0] never masks the first frame in a sequence.
-    intersect_real_cloud_masks: false      # True to intersect randomly sampled cloud masks with the actual cloud masks, False otherwise.
-    dilate_cloud_masks: false              # True to dilate the cloud masks before masking, False otherwise.
-    fill_type: fill_value                  # Strategy for initializing masked pixels. ['fill_value', 'white_noise', 'mean']
-    fill_value: 1                          # Pixel value of masked pixels. Used if fill_type == 'fill_value'.
+    mask_type: random_fully_masked         # Type de masquage. ['random_clouds', 'real_clouds', 'random_fully_masked', 'consecutive_fully_masked']
+    ratio_masked_frames: 0.5               # Part maximale de frames masquées.
+    ratio_fully_masked_frames: 0.0         # Part maximale de frames entièrement masquées.
+    fixed_masking_ratio: false             # Ratio fixe ou variable.
+    non_masked_frames: [0]                 # Frames à ne jamais masquer.
+    intersect_real_cloud_masks: false      # Intersecter masques aléatoires et réels.
+    dilate_cloud_masks: false              # Dilater les masques nuageux.
+    fill_type: fill_value                  # Initialisation des pixels masqués.
+    fill_value: 1                          # Valeur de remplissage.
     p_filter: 0.1
 
 method:
@@ -42,17 +47,17 @@ scheduler:
     gamma: 0.5
 
 training_settings:
-    batch_size: 2                          # Batch size.
-    num_epochs: 1                       # Number of training epochs.
-    accum_iter: 1                          # Accumulate gradients for 'accum_iter` iterations.
-    gradient_clip_norm: 0                  # If > 0, clips gradient norm to that value.
-    gradient_clip_value: 0                 # If > 0, clips gradient at specified value.
-    resume: false                          # True to resume training, False otherwise.
-    pretrained_path: ''                    # Path to the pretrained model weights.
+    batch_size: 2                          # Taille de batch.
+    num_epochs: 1                          # Nombre d'epochs.
+    accum_iter: 1                          # Accumulation de gradients.
+    gradient_clip_norm: 0                  # Clip norme gradient (0 = désactivé).
+    gradient_clip_value: 0                 # Clip valeur gradient (0 = désactivé).
+    resume: false                          # Reprendre un entraînement interrompu.
+    pretrained_path: ''                    # Chemin vers les poids pré-entraînés.
 
 misc:
-    logstep_train: 100                     # Training log interval in number of iterations.
-    checkpoint_every_n_epochs: 5           # Save checkpoint after every `checkpoint_every_n_epochs` training epochs.
+    logstep_train: 100                     # Intervalle de log (en itérations).
+    checkpoint_every_n_epochs: 5           # Sauvegarde checkpoint tous les N epochs.
     log_gradients: false                   # True to log gradients and model parameters using Weights & Biases.
     val_every_n_epochs: 1                  # Validation interval in epochs.
     plot_every_n_epochs: 15                # Plot interval in epochs.

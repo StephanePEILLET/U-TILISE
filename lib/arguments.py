@@ -67,5 +67,5 @@ eval_parser.add_argument(
     "--test-data.mode",
     type=str,
     required=False,
-    help="Data mode (for EarthNet2021 only)",
+    help="Mode (baselines non-apprises uniquement)",
 )
