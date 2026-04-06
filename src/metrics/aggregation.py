@@ -40,6 +40,7 @@ class CloudRemovalDatasetMetrics:
             metrics=metrics,
             eval_occluded_observed=eval_occluded_observed,
             clean_gt_cloudy_pixels=clean_gt_cloudy_pixels,
+            compute_per_band=True,
             sam_units=sam_units,
             window_size=window_size,
             max_pixel_intensity=max_pixel_intensity,

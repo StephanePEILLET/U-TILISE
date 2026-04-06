@@ -234,6 +234,11 @@ class Trainer:
 
         return stats
 
+    def _update_meter(self, meter: prodict.Prodict, key: str, value: float) -> None:
+        if key not in meter:
+            meter[key] = AverageMeter()
+        meter[key].update(value)
+
     def _stats_meter(self, stats_type: str) -> prodict.Prodict:
         meters = Prodict()
         stats = self._stats_dict(stats_type)
@@ -417,7 +422,7 @@ class Trainer:
                 for key, value in loss_dict.items():
                     self.train_stats[key].update(value)
                 for key, value in metrics.items():
-                    self.train_metrics[key].update(value)
+                    self._update_meter(self.train_metrics, key, value)
 
                 loss = loss / self.args.accum_iter
                 loss.backward()
@@ -479,7 +484,7 @@ class Trainer:
                 for key, value in loss_dict.items():
                     self.val_stats[key].update(value)
                 for key, value in metrics.items():
-                    self.val_metrics[key].update(value)
+                    self._update_meter(self.val_metrics, key, value)
 
         if tnr is not None:
             tnr.set_postfix(

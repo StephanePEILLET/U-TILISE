@@ -28,6 +28,7 @@ class CloudRemovalMetrics:
         metrics: list[str] | None = None,
         eval_occluded_observed: bool = True,
         clean_gt_cloudy_pixels: bool = True,
+        compute_per_band: bool = False,
         sam_units: str = "rad",
         window_size: int = 5,
         max_pixel_intensity: int = 1,
@@ -43,15 +44,18 @@ class CloudRemovalMetrics:
                 for occluded/observed pixels.
             clean_gt_cloudy_pixels (bool): If True, excludes cloudy pixels
                 from the ground truth during evaluation.
+            compute_per_band (bool): If True, also computes per-band variants
+                of the metrics (pixelwise and SSIM).
             sam_units (str): Units for the SAM metric ("rad" or "deg").
             window_size (int): Window size for SSIM computation.
 
         """
         # True to evaluate the metrics over all pixels and separately
-        # for occluded and observed input pixels;
+        # for occluded and observed pixels;
         # False to evaluate the metrics over all pixels only
         self.eval_occluded_observed = eval_occluded_observed
         self.clean_gt_cloudy_pixels = clean_gt_cloudy_pixels
+        self.compute_per_band = compute_per_band
         self.sam_units = sam_units
         self.window_size = window_size
         self.max_pixel_intensity = max_pixel_intensity
@@ -322,14 +326,14 @@ class CloudRemovalMetrics:
             )
             metrics["ssim"] = 1 - 2 * dssim
 
-            # SSIM per band
             _, C, _, _ = predicted.shape  # noqa: N806
-            for band in range(C):
-                dssim_band = self.metric_fns[CloudRemovalMetrics.MetricType.SSIM](
-                    predicted[:, band : band + 1],
-                    target[:, band : band + 1],
-                )
-                metrics[f"ssim_band_{band}"] = 1 - 2 * dssim_band
+            if self.compute_per_band:
+                for band in range(C):
+                    dssim_band = self.metric_fns[CloudRemovalMetrics.MetricType.SSIM](
+                        predicted[:, band : band + 1],
+                        target[:, band : band + 1],
+                    )
+                    metrics[f"ssim_band_{band}"] = 1 - 2 * dssim_band
 
             if self.eval_occluded_observed:
                 occ_images = (masks == 1.0).any(dim=-1).any(dim=-1).any(dim=-1)
@@ -341,18 +345,20 @@ class CloudRemovalMetrics:
                         target[occ_images],
                     )
 
-                    for band in range(C):
-                        metrics[f"ssim_images_occluded_input_pixels_band_{band}"] = 1 - 2 * self.metric_fns[
-                            CloudRemovalMetrics.MetricType.SSIM
-                        ](
-                            predicted[occ_images][:, band : band + 1],
-                            target[occ_images][:, band : band + 1],
-                        )
+                    if self.compute_per_band:
+                        for band in range(C):
+                            metrics[f"ssim_images_occluded_input_pixels_band_{band}"] = 1 - 2 * self.metric_fns[
+                                CloudRemovalMetrics.MetricType.SSIM
+                            ](
+                                predicted[occ_images][:, band : band + 1],
+                                target[occ_images][:, band : band + 1],
+                            )
                 else:
                     metrics["ssim_images_occluded_input_pixels"] = np.nan
-                    metrics.update(
-                        {f"ssim_images_occluded_input_pixels_band_{b}": np.nan for b in range(C)},
-                    )
+                    if self.compute_per_band:
+                        metrics.update(
+                            {f"ssim_images_occluded_input_pixels_band_{b}": np.nan for b in range(C)},
+                        )
 
                 obs_images = ~occ_images
                 if obs_images.any():
@@ -363,18 +369,20 @@ class CloudRemovalMetrics:
                         target[obs_images],
                     )
 
-                    for band in range(C):
-                        metrics[f"ssim_images_observed_input_pixels_band_{band}"] = 1 - 2 * self.metric_fns[
-                            CloudRemovalMetrics.MetricType.SSIM
-                        ](
-                            predicted[obs_images][:, band : band + 1],
-                            target[obs_images][:, band : band + 1],
-                        )
+                    if self.compute_per_band:
+                        for band in range(C):
+                            metrics[f"ssim_images_observed_input_pixels_band_{band}"] = 1 - 2 * self.metric_fns[
+                                CloudRemovalMetrics.MetricType.SSIM
+                            ](
+                                predicted[obs_images][:, band : band + 1],
+                                target[obs_images][:, band : band + 1],
+                            )
                 else:
                     metrics["ssim_images_observed_input_pixels"] = np.nan
-                    metrics.update(
-                        {f"ssim_images_observed_input_pixels_band_{band}": np.nan for b in range(C)},
-                    )
+                    if self.compute_per_band:
+                        metrics.update(
+                            {f"ssim_images_observed_input_pixels_band_{b}": np.nan for b in range(C)},
+                        )
         return metrics
 
     def _compute_channelwise_metrics(
@@ -632,13 +640,14 @@ class CloudRemovalMetrics:
         metrics.update(
             self._compute_pixelwise_metrics(predicted_pix, target_pix, masks_pix),
         )
-        metrics.update(
-            self._compute_pixelwise_per_band_metrics(
-                predicted_pix,
-                target_pix,
-                masks_pix,
-            ),
-        )
+        if self.compute_per_band:
+            metrics.update(
+                self._compute_pixelwise_per_band_metrics(
+                    predicted_pix,
+                    target_pix,
+                    masks_pix,
+                ),
+            )
         metrics.update(
             self._compute_channelwise_metrics(predicted_pix, target_pix, masks_pix),
         )

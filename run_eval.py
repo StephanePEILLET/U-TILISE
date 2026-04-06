@@ -117,6 +117,7 @@ class Evaluator:
             metrics=metrics,
             eval_occluded_observed=True,
             clean_gt_cloudy_pixels=True,
+            compute_per_band=True,
             max_pixel_intensity=MAX_PIXEL_INTENSITY_USED_FOR_REVERSE,
         )
 

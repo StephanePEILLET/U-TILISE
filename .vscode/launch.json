@@ -19,6 +19,7 @@
             "preLaunchTask": "clean_training",
             "program": "run_train.py",
             "console": "integratedTerminal",
+            "envFile": "${workspaceFolder}/.env",
             "args": [
                 "./configs/config_run_train.yaml",
                 "--save_dir",
@@ -31,6 +32,7 @@
             "request": "launch",
             "program": "run_eval.py",
             "console": "integratedTerminal",
+            "envFile": "${workspaceFolder}/.env",
             "args": [
                 "./configs/config_run_eval.yaml",
                 "utilise",
@@ -52,6 +54,7 @@
             "request": "launch",
             "program": "run_eval.py",
             "console": "integratedTerminal",
+            "envFile": "${workspaceFolder}/.env",
             "args": [
                 "./configs/config_run_eval_ALL_SAR_rfm_parcelle.yaml",
                 "utilise",
@@ -63,6 +66,7 @@
             "request": "launch",
             "program": "inference_full_tile.py",
             "console": "integratedTerminal",
+            "envFile": "${workspaceFolder}/.env",
             "args": [
                 "./configs/config_run_inference.yaml",
                 "utilise",
@@ -74,6 +78,7 @@
             "request": "launch",
             "program": "run_inference.py",
             "console": "integratedTerminal",
+            "envFile": "${workspaceFolder}/.env",
             "args": [
                 "./configs/config_run_inference.yaml",
                 "utilise",
