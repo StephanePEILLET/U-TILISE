@@ -23,6 +23,7 @@
 | **v4** asc+desc, combined | 110.0 | 194.3 | 35.55 | 0.7378 | 0.0353 | 0.9566 |
 | **v4** mix_closest, combined | 119.9 | 220.5 | 34.76 | 0.7296 | 0.0393 | 0.9476 |
 | **v4** asc+desc, combined, blend | 109.4 | 193.4 | 35.60 | 0.7386 | 0.0352 | 0.9570 |
+| **v4** asc+desc, combined, iterative | — | — | — | — | — | — |
 | **v4** asc+desc, combined, NDVI+R² | 113.0 | 210.7 | 35.25 | 0.7278 | 0.0377 | 0.9503 |
 | **v4** mix_closest, combined, NDVI+R² | 109.3 | 195.7 | 35.52 | 0.7401 | 0.0348 | 0.9582 |
 
@@ -45,6 +46,7 @@
 | **v4** asc+desc, combined | 127.3 | 266.6 | 33.54 | 0.6822 | 0.0381 | 0.9245 |
 | **v4** mix_closest, combined | 128.8 | 271.2 | 33.57 | 0.6832 | 0.0388 | 0.9224 |
 | **v4** asc+desc, combined, blend | 126.2 | 264.7 | 33.62 | 0.6837 | 0.0380 | 0.9255 |
+| **v4** asc+desc, combined, iterative | 128.1 | 265.5 | 33.56 | 0.6826 | 0.0385 | 0.9254 |
 | **v4** asc+desc, combined, NDVI+R² | 123.8 | 271.6 | 33.81 | 0.6801 | 0.0381 | 0.9207 |
 | **v4** mix_closest, combined, NDVI+R² | 124.4 | 266.9 | 33.62 | 0.6884 | 0.0371 | 0.9263 |
 
@@ -69,6 +71,7 @@
 | **v4** asc+desc, combined | 277.0 | 439.9 | 28.52 | 0.5383 | 0.0636 | 0.8378 |
 | **v4** mix_closest, combined | 376.9 | 559.3 | 26.04 | 0.4705 | 0.0934 | 0.7686 |
 | **v4** asc+desc, combined, blend | 275.9 | 438.2 | 28.55 | 0.5388 | 0.0636 | 0.8389 |
+| **v4** asc+desc, combined, iterative | — | — | — | — | — | — |
 | **v4** asc+desc, combined, NDVI+R² | 353.0 | 534.2 | 26.52 | 0.4700 | 0.0882 | 0.7811 |
 | **v4** mix_closest, combined, NDVI+R² | 289.8 | 452.2 | 28.20 | 0.5259 | 0.0649 | 0.8332 |
 
@@ -91,6 +94,7 @@
 | **v4** asc+desc, combined | 492.8 | 800.8 | 23.48 | 0.3306 | 0.0956 | 0.6241 |
 | **v4** mix_closest, combined | 550.3 | 842.7 | 22.77 | 0.3133 | 0.1075 | 0.5990 |
 | **v4** asc+desc, combined, blend | 486.8 | 794.2 | 23.59 | 0.3349 | 0.0954 | 0.6289 |
+| **v4** asc+desc, combined, iterative | 484.0 | 791.4 | 23.64 | 0.3365 | 0.0949 | 0.6311 |
 | **v4** asc+desc, combined, NDVI+R² | 539.1 | 854.5 | 22.81 | 0.3031 | 0.1074 | 0.5924 |
 | **v4** mix_closest, combined, NDVI+R² | 494.9 | 808.7 | 23.40 | 0.3335 | 0.0946 | 0.6235 |
 
@@ -130,6 +134,8 @@
 | **v4** mix_closest, combined | Observed | 71.7 | 102.5 | 39.94 | 0.8227 | 0.0291 | 0.9879 |
 | **v4** asc+desc, combined, blend | Occluded | 275.9 | 438.2 | 28.55 | 0.5388 | 0.0636 | 0.8389 |
 | **v4** asc+desc, combined, blend | Observed | 77.6 | 110.9 | 39.29 | 0.8182 | 0.0296 | 0.9860 |
+| **v4** asc+desc, combined, iterative | Occluded | — | — | — | — | — | — |
+| **v4** asc+desc, combined, iterative | Observed | — | — | — | — | — | — |
 | **v4** asc+desc, combined, NDVI+R² | Occluded | 353.0 | 534.2 | 26.52 | 0.4700 | 0.0882 | 0.7811 |
 | **v4** asc+desc, combined, NDVI+R² | Observed | 68.0 | 98.0 | 40.37 | 0.8203 | 0.0282 | 0.9885 |
 | **v4** mix_closest, combined, NDVI+R² | Occluded | 289.8 | 452.2 | 28.20 | 0.5259 | 0.0649 | 0.8332 |
@@ -169,6 +175,8 @@
 | **v4** mix_closest, combined | Observed | 72.0 | 102.9 | 39.90 | 0.8218 | 0.0291 | 0.9879 |
 | **v4** asc+desc, combined, blend | Occluded | 486.8 | 794.2 | 23.59 | 0.3349 | 0.0954 | 0.6289 |
 | **v4** asc+desc, combined, blend | Observed | 77.7 | 111.1 | 39.28 | 0.8176 | 0.0295 | 0.9859 |
+| **v4** asc+desc, combined, iterative | Occluded | 484.0 | 791.4 | 23.64 | 0.3365 | 0.0949 | 0.6311 |
+| **v4** asc+desc, combined, iterative | Observed | 80.4 | 114.7 | 38.98 | 0.8129 | 0.0302 | 0.9854 |
 | **v4** asc+desc, combined, NDVI+R² | Occluded | 539.1 | 854.5 | 22.81 | 0.3031 | 0.1074 | 0.5924 |
 | **v4** asc+desc, combined, NDVI+R² | Observed | 68.2 | 98.4 | 40.34 | 0.8199 | 0.0282 | 0.9885 |
 | **v4** mix_closest, combined, NDVI+R² | Occluded | 494.9 | 808.7 | 23.40 | 0.3335 | 0.0946 | 0.6235 |
@@ -204,21 +212,21 @@
 
 | # | Modèle | Score | MAE | RMSE | PSNR | SSIM | SAM | R2 |
 |:---:|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| 1 | **v4** asc+desc, combined, blend | 1.11 | 486.8 | 794.2 | 23.59 | 0.3349 | 0.0954 | 0.6289 |
-| 2 | **v4** asc+desc, combined | 2.22 | 492.8 | 800.8 | 23.48 | 0.3306 | 0.0956 | 0.6241 |
-| 3 | **v4** mix_closest, combined, NDVI+R² | 2.67 | 494.9 | 808.7 | 23.40 | 0.3335 | 0.0946 | 0.6235 |
-| 4 | **v3** combined (wider+cyclic+loss) | 4.00 | 521.7 | 829.7 | 22.99 | 0.3176 | 0.1063 | 0.5993 |
-| 5 | **v4** mix_closest, combined | 5.89 | 550.3 | 842.7 | 22.77 | 0.3133 | 0.1075 | 0.5990 |
+| 1 | **v4** asc+desc, combined, iterative | 1.11 | 484.0 | 791.4 | 23.64 | 0.3365 | 0.0949 | 0.6311 |
+| 2 | **v4** asc+desc, combined, blend | 2.11 | 486.8 | 794.2 | 23.59 | 0.3349 | 0.0954 | 0.6289 |
+| 3 | **v4** asc+desc, combined | 3.22 | 492.8 | 800.8 | 23.48 | 0.3306 | 0.0956 | 0.6241 |
+| 4 | **v4** mix_closest, combined, NDVI+R² | 3.56 | 494.9 | 808.7 | 23.40 | 0.3335 | 0.0946 | 0.6235 |
+| 5 | **v3** combined (wider+cyclic+loss) | 5.00 | 521.7 | 829.7 | 22.99 | 0.3176 | 0.1063 | 0.5993 |
 
-#### Détail par bande du meilleur modèle : **v4** asc+desc, combined, blend
+#### Détail par bande du meilleur modèle : **v4** asc+desc, combined, iterative
 
 | Métrique | B2 | B3 | B4 | B5 | B6 | B7 | B8 | B8A | B11 | B12 |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| MAE | 372.8 | 376.1 | 426.8 | 438.3 | 544.4 | 604.2 | 628.9 | 614.8 | 462.5 | 399.4 |
-| RMSE | 726.8 | 702.4 | 750.1 | 749.9 | 813.1 | 870.8 | 898.2 | 878.2 | 637.3 | 568.2 |
-| PSNR | 26.50 | 26.37 | 25.23 | 25.04 | 23.39 | 22.54 | 22.16 | 22.35 | 24.53 | 25.63 |
-| SSIM | 0.2642 | 0.2945 | 0.3023 | 0.3365 | 0.3580 | 0.3650 | 0.3505 | 0.3696 | 0.3595 | 0.3488 |
-| R2 | 0.2480 | 0.3002 | 0.3632 | 0.3319 | 0.3274 | 0.3592 | 0.3705 | 0.3658 | 0.3959 | 0.4254 |
+| MAE | 370.2 | 373.8 | 425.5 | 436.6 | 542.5 | 598.5 | 625.6 | 608.7 | 458.7 | 399.6 |
+| RMSE | 726.4 | 699.7 | 748.9 | 746.1 | 809.9 | 864.9 | 895.0 | 872.4 | 633.8 | 569.2 |
+| PSNR | 26.54 | 26.44 | 25.26 | 25.09 | 23.43 | 22.62 | 22.21 | 22.42 | 24.59 | 25.63 |
+| SSIM | 0.2649 | 0.2959 | 0.3023 | 0.3394 | 0.3611 | 0.3679 | 0.3504 | 0.3721 | 0.3610 | 0.3504 |
+| R2 | 0.2508 | 0.3041 | 0.3665 | 0.3351 | 0.3313 | 0.3646 | 0.3748 | 0.3716 | 0.4012 | 0.4326 |
 
 ## 5. Disponibilité des résultats
 
@@ -243,6 +251,8 @@
 | **v4** asc+desc, combined | ✅ | ✅ |
 | **v4** mix_closest, combined | ✅ | ✅ |
 | **v4** asc+desc, combined, blend | ✅ | ✅ |
+| **v4** asc+desc, combined, center_only | ❌ | ❌ |
+| **v4** asc+desc, combined, iterative | ❌ | ✅ |
 | **v4** asc+desc, combined, NDVI+R² | ✅ | ✅ |
 | **v4** mix_closest, combined, NDVI+R² | ✅ | ✅ |
 
