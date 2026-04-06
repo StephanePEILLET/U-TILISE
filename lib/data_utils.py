@@ -171,10 +171,13 @@ def get_dataloader(
 
 
 def get_dataset(config: DictConfig, phase: str, logger: logging.Logger | None = None) -> Dataset:
-    """Returns a torch.utils.data.Dataset instance."""
+    """Instancie un dataset à partir de la configuration.
 
-    from lib.utils import without_keys
-
+    Extrait explicitement les paramètres attendus par le constructeur du dataset
+    au lieu de passer l'intégralité de config.data via **kwargs.
+    Les paramètres inconnus (anciennes configs) sont absorbés par **kwargs dans
+    SatelliteDataset avec un avertissement.
+    """
     assert config["misc"]["run_mode"] in ["train", "val", "test"]
     assert phase in ["train", "val", "train+val", "test"]
 
@@ -184,26 +187,36 @@ def get_dataset(config: DictConfig, phase: str, logger: logging.Logger | None = 
         else:
             raise NotImplementedError(f"Unknown dataset: {config.data.dataset}\n")
 
-    # Select the defined dataset
-    Dataset = DATASETS[config.data.dataset]
-
+    DatasetClass = DATASETS[config.data.dataset]
     augment = config.data.get("augment", phase == "train")
-    if "hdf5_file" in config.data and isinstance(config.data.hdf5_file, DictConfig):
-        # Choose the input hdf5 file depending on the phase
-        dset = Dataset(
-            hdf5_file=config.data.hdf5_file[phase],
-            **without_keys(config.data, ["dataset", "hdf5_file", "augment", "parcel_gpkg"]),
-            mask_kwargs=config.mask,
-            augment=augment,
-        )
-    else:
-        dset = Dataset(
-            **without_keys(config.data, ["dataset", "subset", "mode", "root", "split", "augment", "parcel_gpkg", "blend_mode"]),
-            mask_kwargs=config.mask,
-            augment=augment,
-            phase=phase,
-        )
-    return dset
+
+    # Résoudre le fichier HDF5 (peut être un dict par phase ou un chemin unique)
+    hdf5_file = config.data.get("hdf5_file")
+    if isinstance(hdf5_file, DictConfig):
+        hdf5_file = hdf5_file[phase]
+
+    # Extraction explicite des paramètres du dataset
+    dataset_kwargs = {
+        "hdf5_file": hdf5_file,
+        "phase": phase,
+        "channels": config.data.get("channels", "all"),
+        "use_sar": config.data.get("use_sar", "mix_closest"),
+        "load_transforms": config.data.get("load_transforms"),
+        "shuffle": config.data.get("shuffle", False),
+        "filter_settings": config.data.get("filter_settings"),
+        "max_seq_length": config.data.get("max_seq_length"),
+        "render_occluded_above_p": config.data.get("render_occluded_above_p"),
+        "pe_strategy": config.data.get("pe_strategy", "day-of-year"),
+        "process_data": config.data.get("process_data", True),
+        "mask_sar": config.data.get("mask_sar", False),
+        "return_windows": config.data.get("return_windows", False),
+        "mask_kwargs": config.mask,
+        "augment": augment,
+    }
+    # Retirer les None pour laisser les défauts du constructeur s'appliquer
+    dataset_kwargs = {k: v for k, v in dataset_kwargs.items() if v is not None}
+
+    return DatasetClass(**dataset_kwargs)
 
 
 def compute_false_color(x: Tensor, index_rgb: Tensor | list[int], index_nir: int | float) -> Tensor:

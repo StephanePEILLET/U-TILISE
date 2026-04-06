@@ -1,11 +1,15 @@
+# ============================================================================
+# Config de base pour l'inférence à la tuile — surcharge les valeurs de default.yaml
+# ============================================================================
+
 data:
-    dataset: circa         # Jeu de données. ['circa']
-    hdf5_file: /mnt/DATA_10T/data_rpg/circa/hdf5/CIRCA_CR_merged.hdf5
-    load_transforms: ./data/patches_with_transforms.json
+    dataset: circa
+    hdf5_file: ${oc.env:HDF5_FILE}
+    load_transforms: ${oc.env:LOAD_TRANSFORMS,./data/patches_with_transforms.json}
     channels: all
-    use_sar: mix_closest # Mode SAR : asc / desc / mix_closest / asc+desc
-    subset: False   
-    max_seq_length: 5                     # Fenêtre temporelle.
+    use_sar: mix_closest                   # Mode SAR : asc / desc / mix_closest / asc+desc
+    subset: false
+    max_seq_length: 5
     return_windows: true
     filter_settings:
         type: cloud-free
@@ -13,87 +17,23 @@ data:
         return_valid_obs_only: true
 
 test_data:
-    checkpoint: /home/SPeillet/data_rpg/outputs/U-TILISE/results/all_bands_sar_closest_mix_da/checkpoints/Model_best.pth
-    test_config: /home/SPeillet/data_rpg/outputs/U-TILISE/results/all_bands_sar_closest_mix_da/config.yaml
-    data_optique: /mnt/stores/store_dai/projets/pac/3str/EXP_2/Data_Raster/optique_dataset
-    data_radar: /mnt/stores/store_dai/projets/pac/3str/EXP_2/Data_Raster/radar_dataset_v4
+    checkpoint: ${oc.env:CHECKPOINT}
+    test_config: ${oc.env:TRAIN_CONFIG}
+    data_optique: ${oc.env:DATA_OPTIQUE}
+    data_radar: ${oc.env:DATA_RADAR}
     test_tiles: "./data/test_tiles.json"
     mode: null
     split: test
 
 mask:
-    mask_type: random_fully_masked    # Mask the input time series with randomly sampled cloud masks or the actual cloud masks. ['random_clouds', 'real_clouds', "random_fully_masked", "consecutive_fully_masked"]
-    ratio_masked_frames: 0.5               # Ratio of partially/fully masked images per image time series (upper bound).
-    ratio_fully_masked_frames: 0.0         # Ratio of fully masked images per image time series (upper bound).
-    fixed_masking_ratio: false             # True to vary the masking ratio across different image time series, False otherwise.
-    non_masked_frames: [0]                 # list of int, time steps to be excluded from masking. E.g., [0] never masks the first frame in a sequence.
-    intersect_real_cloud_masks: false      # True to intersect randomly sampled cloud masks with the actual cloud masks, False otherwise.
-    dilate_cloud_masks: false              # True to dilate the cloud masks before masking, False otherwise.
-    fill_type: fill_value                  # Strategy for initializing masked pixels. ['fill_value', 'white_noise', 'mean']
-    fill_value: 1                          # Pixel value of masked pixels. Used if fill_type == 'fill_value'.
-    p_filter: 0.1
-
-utilise:
-  encoder_widths:
-  - 64
-  - 64
-  - 64
-  - 128
-  decoder_widths:
-  - 64
-  - 64
-  - 64
-  - 128
-  upconv_type: transpose
-  encoder_norm: null
-  decoder_norm: null
-  skip_norm: null
-  activation: relu
-  str_conv_k: 4
-  str_conv_s: 2
-  str_conv_p: 1
-  str_conv_k_up: 2
-  str_conv_p_up: 0
-  skip_attention: false
-  n_temporal_encoding_layers: 1
-  agg_mode: att_group
-  n_head: 4
-  d_k: 4
-  bias_qk: false
-  attn_dropout: 0.1
-  dropout: 0.1
-  n_groups: 4
-  ltae_norm: group
-  ltae_activation: gelu
-  norm_first: true
-  output_activation: sigmoid
+    mask_type: random_fully_masked
 
 training_settings:
-    batch_size: 1                          # Batch size.
-    num_epochs: 1                          # Number of training epochs.
-    accum_iter: 1                          # Accumulate gradients for 'accum_iter` iterations.
-    gradient_clip_norm: 0                  # If > 0, clips gradient norm to that value.
-    gradient_clip_value: 0                 # If > 0, clips gradient at specified value.
-    resume: false                          # True to resume training, False otherwise.
-    pretrained_path: ''                    # Path to the pretrained model weights.
-
-method:
-    model_type: utilise
-    pad_value: 0
-
-metrics:
-    masked_metrics: true                   # True to compute all pixel-based metrics only over all pixels with valid ground truth, False to evaluate all pixels.
-    mae: true                              # Mean absolute error (MAE), computed over all pixels.
-    mse: true                              # Mean square error (MSE).
-    rmse: true                             # Root mean square error (RMSE).
-    ssim: true                             # Structural similarity index (SSIM).
-    psnr: true                             # Peak signal-to-noise ratio (PSNR).
-    sam: true                              # Spectral angle mapper (SAM).
+    batch_size: 1
+    num_epochs: 1
 
 misc:
-    num_workers: 8                         # Number of dataloader worker processes.
-    pin_memory: false                      # Pin memory (dataloader settings).
-    run_mode: test                         # Run mode. ['train', 'val', 'test']
+    run_mode: test
 
 output:
-    save_dir: /mnt/DATA_10T/data_rpg/outputs/U-TILISE/inference/tiles  # Répertoire de sortie des inférences par tuiles.
+    save_dir: ${oc.env:OUTPUT_DIR}/inference/tiles

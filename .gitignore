@@ -3,6 +3,7 @@ __pycache__/
 .idea/*
 *.pyc
 **/__pycache__/*
+.env
 _build/
 lightning_logs/*
 *.egg-info/

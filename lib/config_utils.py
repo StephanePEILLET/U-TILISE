@@ -9,6 +9,14 @@ from omegaconf import DictConfig, OmegaConf
 import prodict
 from prodict import Prodict
 
+# Charger les variables d'environnement depuis .env (si le fichier existe)
+# pour permettre l'interpolation ${oc.env:VAR_NAME} dans les configs YAML.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 
 class _PrettySafeLoader(yaml.SafeLoader):
     def construct_python_tuple(self, node):

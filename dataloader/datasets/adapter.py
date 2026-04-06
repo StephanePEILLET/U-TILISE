@@ -16,7 +16,6 @@ import torch
 
 torch.multiprocessing.set_sharing_strategy("file_system")
 
-import albumentations as A
 from omegaconf import DictConfig, OmegaConf
 from torch import Tensor
 
@@ -66,15 +65,19 @@ class SatelliteDataset(HDF5Dataset):
         pe_strategy: str = "day-within-sequence",
         augment: bool | None = False,
         process_data: bool | None = True,
-        stats: DictConfig | None = None,
         seed: int = SEED,
         mask_sar: bool = False,
-        # Récupération de vieux arguments du repo
-        crop_settings: DictConfig | None = None,
-        return_cloud_mask: bool = True,
         return_windows: bool = False,
-        image_size: tuple[int, int] = IMAGE_SIZE,
+        # Rétro-compatibilité : accepter les anciens kwargs sans crasher
+        **kwargs,
     ):
+        if kwargs:
+            import warnings
+            warnings.warn(
+                f"SatelliteDataset: paramètres ignorés (rétro-compatibilité) : {list(kwargs.keys())}",
+                stacklevel=2,
+            )
+
         # Initialize the random seed for reproducibility
         self.seed = seed
         self.rng = np.random.default_rng(seed=self.seed)
@@ -83,29 +86,13 @@ class SatelliteDataset(HDF5Dataset):
             phase=phase,
             hdf5_file=hdf5_file,
             shuffle=shuffle,
-            use_sar=use_sar,  # Use potentially modified self.use_sar
+            use_sar=use_sar,
             channels=channels,
-            image_size=image_size,
+            image_size=IMAGE_SIZE,
             load_transforms=load_transforms,
         )
-        self.crop_settings = crop_settings
-        self.return_cloud_mask = return_cloud_mask
-        self.transform = None
         self.process_data = process_data
         self.return_windows = return_windows
-
-        if stats is not None and isinstance(stats, DictConfig):
-            self.stats = stats
-            self.transform = A.Compose(
-                [
-                    A.Normalize(
-                        mean=self.stats["means"],
-                        std=self.stats["stds"],
-                        max_pixel_value=255.0,
-                    ),
-                    A.pytorch.transforms.ToTensorV2(),
-                ]
-            )
 
         self.render_occluded_above_p = render_occluded_above_p  # Fully occlude images with high cloud cover
         self.pe_strategy = pe_strategy
@@ -908,127 +895,3 @@ class SatelliteDataset(HDF5Dataset):
 ######################################################################################
 ######################################################################################
 ######################################################################################
-
-if __name__ == "__main__":
-    # filter_settings = {
-    #     "type": "cloud-free",  # Strategy for removing observations with data gaps.
-    #     # ['cloud-free', 'cloud-free_consecutive']
-    #     "min_length": 5,  # Minimum sequence length.
-    #     "return_valid_obs_only": True,  # True to return the cloud-filtered sequences, False otherwise.
-    #     # "max_t_sampling": 10,            # Maximum temporal sampling frequency in days.
-    # }
-
-    # mask_kwargs = {
-    #     "mask_type": "random_clouds",  # Mask the input time series with randomly sampled cloud masks or the actual cloud masks. ['random_clouds', 'real_clouds']
-    #     "ratio_masked_frames": 0.5,  # Ratio of partially/fully masked images per image time series (upper bound).
-    #     "ratio_fully_masked_frames": 0.0,  # Ratio of fully masked images per image time series (upper bound).
-    #     "fixed_masking_ratio": False,  # True to vary the masking ratio across different image time series, False otherwise.
-    #     "non_masked_frames": [
-    #         0
-    #     ],  # list of int, time steps to be excluded from masking. E.g., [0] never masks the first frame in a sequence.
-    #     "intersect_real_cloud_masks": False,  # True to intersect randomly sampled cloud masks with the actual cloud masks, False otherwise.
-    #     "dilate_cloud_masks": False,  # True to dilate the cloud masks before masking, False otherwise.
-    #     "fill_type": "fill_value",  # Strategy for initializing masked pixels. ['fill_value', 'white_noise', 'mean']
-    #     "fill_value": 1,  # Pixel value of masked pixels. Used if fill_type == 'fill_value'.
-    #     "p_filter": 0.1,
-    # }
-
-    # params_dataset = {
-    #     "phase": "test",
-    #     "hdf5_file": "/DATA_10TB/data_rpg/circa/hdf5/CIRCA_CR_merged.hdf5",
-    #     "shuffle": False,
-    #     "use_sar": False,
-    #     "channels": "all",
-    #     # U-TILISE specific parameters
-    #     "filter_settings": filter_settings,
-    #     "max_seq_length": 30,
-    #     "render_occluded_above_p": None,  # Set to None to keep original cloud masks. Minimum cloud cover to fully mask an input image (0.9 demo config)
-    #     "mask_kwargs": mask_kwargs,
-    #     "pe_strategy": "day-within-sequence",
-    #     "augment": False,
-    #     "process_data": True,
-    #     "seed": 42,
-    #     # Récupération de vieux arguments du repo
-    #     "crop_settings": None,
-    #     "return_cloud_mask": True,
-    # }
-
-    from lib import config_utils, data_utils
-    from run_train import setup_logging
-
-    # Setup configuration
-    config_file = Path("./configs/config_run_train.yaml")
-    default_config_path = Path("./configs/default.yaml")
-    cfg_custom = config_utils.read_config(config_file)
-    cfg_default = config_utils.read_config(default_config_path)
-    config = OmegaConf.merge(cfg_default, cfg_custom)
-
-    # Faire différents changments dans les fichiers de configs pour les vérifications
-    config.data.hdf5_file = "/DATA_10TB/data_rpg/circa/hdf5/CIRCA_CR_merged.hdf5"
-    config.mask.mask_type = "random_fully_masked"
-    config.data.max_seq_length = None
-    config.training_settings.batch_size = 10
-    config.mask.ratio_masked_frames = 0.8
-    config.mask.intersect_real_cloud_masks = False
-    config.mask.dilate_cloud_masks = False
-    # !!! Mettre un ratio_masked_frames plus petit que 0.5 dans le cas fully_masked aléatoire
-
-    BRIGHTNESS_FACTOR = 3
-    # Setup logging
-    logger = setup_logging(config)
-
-    # Génération des dataset
-    phase = "test"
-    dset = data_utils.get_dataset(config, phase=phase, logger=logger)
-
-    index = 4
-    sample = dset.__getitem__(index)
-
-    print(f"Sample {index}:")
-    print(f"  - Number of input time steps: {sample['x'].shape[0]}")
-    print(f"  - Number of target time steps: {sample['y'].shape[0]}")
-    print(f"  - Number of channels: {sample['x'].shape[1]}")
-    print(f"  - Height: {sample['x'].shape[2]}")
-    print(f"  - Width: {sample['x'].shape[3]}")
-    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
-    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
-    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
-    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
-    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
-    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
-    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
-    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
-    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
-    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
-    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
-    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
-    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
-    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
-    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
-    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
-    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
-    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
-    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
-    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
-    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
-    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
-    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
-    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
-    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
-    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
-    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
-    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
-    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
-    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
-    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
-    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
-    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
-    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
-    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
-    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
-    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
-    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
-    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
-    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")
-    print(f"  - Number of masked time steps: {sample['masks'].sum()}")
-    print(f"  - Valid time steps: {sample['masks_valid_obs'].nonzero().view(-1).numpy()}")

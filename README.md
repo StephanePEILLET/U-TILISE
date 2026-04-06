@@ -15,6 +15,8 @@ Le pipeline complet permet de :
 ## Table des matières
 
 - [Installation](#installation)
+  - [Environnement conda](#environnement-conda)
+  - [Variables d'environnement (.env)](#variables-denvironnement-env)
 - [Structure du projet](#structure-du-projet)
 - [Données](#données)
   - [Format HDF5](#format-hdf5-mode-principal)
@@ -43,6 +45,30 @@ conda activate cloud_reconstruction
 ```
 
 L'environnement nécessite Python 3.10+, PyTorch 2.x et CUDA 11.8+.
+
+### Variables d'environnement (`.env`)
+
+Les configurations YAML utilisent l'interpolation `${oc.env:VAR_NAME}` (OmegaConf) pour les
+chemins spécifiques à chaque machine. Copiez le template et adaptez les valeurs :
+
+```bash
+cp .env.example .env
+# Éditez .env avec vos chemins locaux
+```
+
+Variables disponibles (voir `.env.example` pour les détails) :
+
+| Variable | Description |
+|---|---|
+| `HDF5_FILE` | Chemin vers le fichier HDF5 des données |
+| `LOAD_TRANSFORMS` | Fichier JSON des transformations géométriques |
+| `OUTPUT_DIR` | Répertoire racine des sorties (entraînement, métriques, inférence) |
+| `CHECKPOINT` | Chemin vers le checkpoint du modèle (inférence) |
+| `TRAIN_CONFIG` | Config d'entraînement associée au checkpoint |
+| `DATA_OPTIQUE` | Répertoire des GeoTIFF Sentinel-2 (inférence tuile) |
+| `DATA_RADAR` | Répertoire des GeoTIFF Sentinel-1 (inférence tuile) |
+
+Le fichier `.env` est ignoré par git (`.gitignore`) et n'est **jamais versionné**.
 
 ---
 

@@ -5,33 +5,21 @@
 # ============================================================================
 
 data:
-    dataset: circa         # Jeu de données. ['circa']
-    hdf5_file: /mnt/DATA_10T/data_rpg/circa/hdf5/CIRCA_CR_merged.hdf5
+    dataset: circa
+    hdf5_file: ${oc.env:HDF5_FILE}
     max_seq_length: 5
     channels: all
-    use_sar: mix_closest  # Mode SAR : asc / desc / mix_closest / asc+desc / *_without_coherence
+    use_sar: mix_closest                   # Mode SAR : asc / desc / mix_closest / asc+desc
     subset: false
     filter_settings:
         type: cloud-free
         min_length: 3
         return_valid_obs_only: true
+
 mask:
-    mask_type: random_fully_masked         # Type de masquage. ['random_clouds', 'real_clouds', 'random_fully_masked', 'consecutive_fully_masked']
-    ratio_masked_frames: 0.5               # Part maximale de frames masquées.
-    ratio_fully_masked_frames: 0.0         # Part maximale de frames entièrement masquées.
-    fixed_masking_ratio: false             # Ratio fixe ou variable.
-    non_masked_frames: [0]                 # Frames à ne jamais masquer.
-    intersect_real_cloud_masks: false      # Intersecter masques aléatoires et réels.
-    dilate_cloud_masks: false              # Dilater les masques nuageux.
-    fill_type: fill_value                  # Initialisation des pixels masqués.
-    fill_value: 1                          # Valeur de remplissage.
-    p_filter: 0.1
+    mask_type: random_fully_masked         # ['random_clouds', 'real_clouds', 'random_fully_masked', 'consecutive_fully_masked']
 
-method:
-    model_type: utilise
-    pad_value: 0
-
-utilise:                                   
+utilise:
     encoder_widths: [64,64,64,64,128]
     decoder_widths: [64,64,64,64,128]
 
@@ -41,28 +29,14 @@ optimizer:
     weight_decay: 1.0e-05
 
 scheduler:
-    name: MultiStepLR 
+    name: MultiStepLR
     enabled: true
     milestones: [40,60,80,100]
     gamma: 0.5
 
 training_settings:
-    batch_size: 2                          # Taille de batch.
-    num_epochs: 1                          # Nombre d'epochs.
-    accum_iter: 1                          # Accumulation de gradients.
-    gradient_clip_norm: 0                  # Clip norme gradient (0 = désactivé).
-    gradient_clip_value: 0                 # Clip valeur gradient (0 = désactivé).
-    resume: false                          # Reprendre un entraînement interrompu.
-    pretrained_path: ''                    # Chemin vers les poids pré-entraînés.
+    batch_size: 2
+    num_epochs: 1
 
 misc:
-    logstep_train: 100                     # Intervalle de log (en itérations).
-    checkpoint_every_n_epochs: 5           # Sauvegarde checkpoint tous les N epochs.
-    log_gradients: false                   # True to log gradients and model parameters using Weights & Biases.
-    val_every_n_epochs: 1                  # Validation interval in epochs.
-    plot_every_n_epochs: 15                # Plot interval in epochs.
-    plot_val_sample: []                    # List of int, indices of the validation samples to be visualized during training using Weights & Biases.
-    num_workers: 8                          # Number of dataloader worker processes.
-    random_seed: 42                         # Random seed.
-    pin_memory: false                      # Pin memory (dataloader settings).
-    run_mode: train                        # Run mode. ['train', 'val', 'test']
+    random_seed: 42

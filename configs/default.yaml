@@ -8,13 +8,9 @@ data:                                      # Paramètres des données d'entrée
         type: cloud-free                   # Stratégie de filtrage des observations nuageuses. ['cloud-free', 'cloud-free_consecutive']
         min_length: 5                      # Longueur minimale de séquence après filtrage.
         return_valid_obs_only: true        # True = ne retourner que les dates cloud-free (train/val).
-    crop_settings:
-        enabled: false                     # Activer/désactiver le recadrage spatial.
-        shape: ${tuple:64,64}              # Taille spatiale des images recadrées.
     pe_strategy: day-of-year               # Stratégie d'encodage positionnel. ['day-of-year', 'day-within-sequence', 'absolute', 'enumeration']
     max_seq_length: 10                     # Longueur maximale de séquence temporelle. None = pas de troncature.
     render_occluded_above_p: 0.9           # Seuil de couverture nuageuse pour masquer entièrement une image.
-    return_cloud_mask: true                # Retourner les masques nuageux (nécessaire pour les métriques masquées).
 
 mask:
     mask_type: random_clouds               # Type de masquage. ['random_clouds', 'real_clouds', 'random_fully_masked', 'consecutive_fully_masked']
