@@ -23,11 +23,11 @@ from torch import Tensor
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
-from lib.metrics.cloud_removal import CloudRemovalMetrics
-from lib import logger, visutils
-from lib.data_utils import compute_false_color, extract_sample, to_device
-from lib.logger import AverageMeter
-from lib.loss import TrainLoss
+from src.metrics.cloud_removal import CloudRemovalMetrics
+from src import logger, visutils
+from src.data_utils import compute_false_color, extract_sample, to_device
+from src.logger import AverageMeter
+from src.loss import TrainLoss
 
 OBJECTIVE = {
     "l1": "min",

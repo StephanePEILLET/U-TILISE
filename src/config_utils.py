@@ -1,12 +1,10 @@
 import logging
 import os
 import sys
-from typing import Optional
-
-import yaml
-from omegaconf import DictConfig, OmegaConf
 
 import prodict
+import yaml
+from omegaconf import DictConfig, OmegaConf
 from prodict import Prodict
 
 # Charger les variables d'environnement depuis .env (si le fichier existe)
@@ -37,7 +35,7 @@ OmegaConf.register_new_resolver("tuple", resolve_tuple)
 
 
 def print_config(
-    config: DictConfig | prodict.Prodict | str, logger: Optional[logging.Logger] = None
+    config: DictConfig | prodict.Prodict | str, logger: logging.Logger | None = None
 ) -> None:
     """
     Prints a yaml configuration file to the console.
@@ -90,7 +88,7 @@ def read_config(file: str) -> DictConfig:
     if not os.path.exists(file):
         raise FileNotFoundError(f"ERROR: Cannot find the file {file}\n")
     try:
-        with open(file, "r", encoding="utf-8") as f:
+        with open(file, encoding="utf-8") as f:
             config = yaml.load(f, Loader=_PrettySafeLoader)
     except yaml.YAMLError as e:
         raise RuntimeError(f"ERROR: Cannot load the file {file}\n") from e

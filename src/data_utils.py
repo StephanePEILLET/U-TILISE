@@ -14,7 +14,7 @@ from torch import Tensor
 from torch.nn import functional as F
 from torch.utils.data import Dataset
 
-from lib.datasets import DATASETS
+from src.datasets import DATASETS
 
 warnings.filterwarnings("ignore", category=UserWarning)
 

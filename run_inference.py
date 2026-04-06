@@ -5,7 +5,7 @@ par patches 256×256 avec fenêtre glissante, puis fusionne les résultats en
 GeoTIFF géoréférencés.
 
 Usage:
-    python infer_from_tiles.py <config_infer.yaml> utilise
+    python run_inference.py <config_infer.yaml> utilise
 """
 
 import argparse
@@ -28,9 +28,9 @@ from tqdm.auto import tqdm
 from dataloader.datasets.dataset_from_files import Dataset_from_files
 from dataloader.tools.data_processor import SentinelDataProcessor
 from dataloader.tools.type_converter import TypeConverter
-from lib import config_utils
-from lib.arguments import eval_parser
-from lib.eval_tools import Imputation
+from src import config_utils
+from src.arguments import eval_parser
+from src.eval_tools import Imputation
 
 MAX_PIXEL_INTENSITY_USED_FOR_REVERSE = 10_000
 
@@ -64,7 +64,7 @@ GDAL_OPTIONS = {
 def _handle_folders(config: DictConfig):
     """
     Handle folders paths and output    # 1. Commit et push les changements locaux
-    git add infer_from_tiles.py dataloader/datasets/dataset_from_files.py
+    git add run_inference.py dataloader/datasets/dataset_from_files.py
     git commit -m "fix: keep_all_dates=True pour inférence tuiles + validation bandes + use_sar + shared memory"
     git push origin jzay
 
@@ -269,7 +269,7 @@ def main(
 ):
     """
     Flux des configurations :
-    - args.config_file     : chemin vers le fichier de config d'inférence (config_run_infer_from_tiles.yaml)
+    - args.config_file     : chemin vers le fichier de config d'inférence (config_run_inference.yaml)
                              Il est aussi passé comme 'config_file_train' à Imputation (convention héritée de run_eval).
     - args.test_data       : section test_data de la config d'inférence (data_optique, data_radar, test_tiles, etc.)
     - args.test_data.test_config : chemin vers la config d'entraînement du modèle.

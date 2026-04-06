@@ -22,38 +22,41 @@ mask:
     dilate_cloud_masks: false              # True = dilater les masques nuageux avant application.
     fill_type: fill_value                  # Initialisation des pixels masqués. ['fill_value', 'white_noise', 'mean']
     fill_value: 1                          # Valeur de remplissage (si fill_type == 'fill_value').
-    p_filter: 0.1
+    p_filter: 0.1                          # Probabilité de filtrer un masque (suppression aléatoire de masques).
 
 method:
-    model_type: utilise
-    pad_value: 0
+    model_type: utilise                    # Type de modèle. ['utilise', 'interpolation']
+    pad_value: 0                           # Valeur de padding pour les séquences de longueur variable.
 
-utilise:                                   # Architecture U-TILISE (voir lib/models/utilise.py)
-    encoder_widths: [64,64,64,128]
-    decoder_widths: [64,64,64,128]
-    upconv_type: transpose
-    encoder_norm:
-    decoder_norm:
-    skip_norm:
-    activation: relu
-    str_conv_k: 4
-    str_conv_s: 2
-    str_conv_p: 1
-    str_conv_k_up: 2
-    str_conv_p_up: 0
-    skip_attention: false
-    n_temporal_encoding_layers: 1
-    agg_mode: att_group
-    n_head: 4
-    d_k: 4
-    bias_qk: false
-    attn_dropout: 0.1
-    dropout: 0.1
-    n_groups: 4
-    ltae_norm: group
-    ltae_activation: gelu
-    norm_first: true
-    output_activation: sigmoid
+utilise:                                   # Architecture U-TILISE (voir src/models/utilise.py)
+    # --- Encodeur / Décodeur spatial (U-Net) ---
+    encoder_widths: [64,64,64,128]         # Largeurs des niveaux de l'encodeur. Chaque élément = nb de filtres.
+    decoder_widths: [64,64,64,128]         # Largeurs des niveaux du décodeur. Doit correspondre à l'encodeur.
+    upconv_type: transpose                 # Type d'upsampling. ['transpose', 'bilinear', 'nearest']
+    encoder_norm:                          # Normalisation dans l'encodeur. [null, 'batch', 'group', 'instance']
+    decoder_norm:                          # Normalisation dans le décodeur. [null, 'batch', 'group', 'instance']
+    skip_norm:                             # Normalisation des connexions skip. [null, 'batch', 'group', 'instance']
+    activation: relu                       # Fonction d'activation spatiale. ['relu', 'gelu', 'silu']
+    str_conv_k: 4                          # Taille du noyau pour la convolution stride (downsampling).
+    str_conv_s: 2                          # Stride de la convolution de downsampling.
+    str_conv_p: 1                          # Padding de la convolution de downsampling.
+    str_conv_k_up: 2                       # Taille du noyau pour la convolution transposée (upsampling).
+    str_conv_p_up: 0                       # Padding de la convolution transposée.
+    skip_attention: false                  # True = appliquer l'attention sur les connexions skip.
+    # --- LTAE (Lightweight Temporal Attention Encoder) ---
+    n_temporal_encoding_layers: 1          # Nombre de couches d'encodage temporel dans le LTAE.
+    agg_mode: att_group                    # Mode d'agrégation temporelle. ['att_group', 'att_mean']
+    n_head: 4                              # Nombre de têtes d'attention dans le LTAE.
+    d_k: 4                                 # Dimension des clés/requêtes par tête d'attention.
+    bias_qk: false                         # True = biais dans les projections Q/K.
+    attn_dropout: 0.1                      # Dropout sur les poids d'attention.
+    dropout: 0.1                           # Dropout général dans le réseau.
+    n_groups: 4                            # Nombre de groupes pour la normalisation de groupe.
+    ltae_norm: group                       # Normalisation dans le LTAE. ['group', 'batch', 'instance']
+    ltae_activation: gelu                  # Activation dans le LTAE. ['relu', 'gelu', 'silu']
+    norm_first: true                       # True = pré-normalisation (LayerNorm avant attention).
+    # --- Sortie ---
+    output_activation: sigmoid             # Activation de sortie. ['sigmoid', 'softmax', null]
 
 training_settings:
     batch_size: 3                          # Taille de batch.

@@ -38,5 +38,5 @@ export TEMP=$TMPDIR
 export TMP=$TMPDIR
 
 WORK_DIR="/mnt/common/hdd/home/SPeillet/U-TILISE"
-srun --cpu-bind=none python $WORK_DIR/infer_from_tiles.py $WORK_DIR/configs/jzellou/configs/config_run_infer_from_tiles_v4_asc_desc_rfm.yaml utilise
+srun --cpu-bind=none python $WORK_DIR/run_inference.py $WORK_DIR/configs/jzellou/configs/config_run_inference_v4_asc_desc_rfm.yaml utilise
 echo "Job complete"

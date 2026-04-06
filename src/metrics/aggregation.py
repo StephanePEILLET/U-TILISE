@@ -12,7 +12,7 @@ import torch
 from torch import Tensor
 from torchmetrics.aggregation import MeanMetric
 
-from lib.metrics.cloud_removal import CloudRemovalMetrics
+from src.metrics.cloud_removal import CloudRemovalMetrics
 
 
 class CloudRemovalDatasetMetrics:

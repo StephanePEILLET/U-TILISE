@@ -72,10 +72,10 @@
             "name": "Inference from tiles",
             "type": "debugpy",
             "request": "launch",
-            "program": "infer_from_tiles.py",
+            "program": "run_inference.py",
             "console": "integratedTerminal",
             "args": [
-                "./configs/config_run_infer_from_tiles.yaml",
+                "./configs/config_run_inference.yaml",
                 "utilise",
             ]
         },

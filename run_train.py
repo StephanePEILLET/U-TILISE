@@ -17,9 +17,9 @@ from argparse import ArgumentParser
 import torch
 from omegaconf import OmegaConf
 
-from lib import config_utils, data_utils, utils
-from lib.formatter import RawFormatter
-from lib.logger import prepare_logger
+from src import config_utils, data_utils, utils
+from src.formatter import RawFormatter
+from src.logger import prepare_logger
 
 # Ignore spécifiquement ce warning de PyTorch concernant les optimizers et schedulers pour éviter de polluer les logs
 
@@ -213,7 +213,7 @@ def main(args: argparse.Namespace) -> None:
 
     # Setup training components
     optimizer, scheduler = setup_training_components(config, model, logger)
-    from lib.loss import TrainLoss
+    from src.loss import TrainLoss
 
     criterion = TrainLoss(config.loss)
 
@@ -238,8 +238,8 @@ def main(args: argparse.Namespace) -> None:
 
     from tqdm.auto import tqdm
 
-    from lib.metrics.aggregation import CloudRemovalDatasetMetrics
-    from lib.eval_tools import Imputation
+    from src.metrics.aggregation import CloudRemovalDatasetMetrics
+    from src.eval_tools import Imputation
 
     _ = torch.set_grad_enabled(False)
 

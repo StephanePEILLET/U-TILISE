@@ -1,0 +1,35 @@
+# ============================================================================
+# Config de base pour l'inférence à la tuile — surcharge les valeurs de default.yaml
+# ============================================================================
+
+data:
+    dataset: circa                         # Nom du dataset. ['circa']
+    hdf5_file: ${oc.env:HDF5_FILE}         # Chemin HDF5 (variable .env)
+    load_transforms: ${oc.env:LOAD_TRANSFORMS,./data/patches_with_transforms.json}  # JSON des transformations géométriques.
+    channels: all                          # Bandes spectrales. ['all', 'rgb', 'bgr_nir', liste d'indices]
+    use_sar: mix_closest                   # Mode SAR. [false, 'asc', 'desc', 'mix_closest', 'asc+desc']
+    subset: false                          # Entier = sous-ensemble, false = tout.
+    max_seq_length: 5                      # Longueur max de séquence temporelle.
+    return_windows: true                   # Retourner les coordonnées de la fenêtre dans le batch.
+
+test_data:
+    checkpoint: ${oc.env:CHECKPOINT}       # Checkpoint du modèle entraîné.
+    test_config: ${oc.env:TRAIN_CONFIG}    # Config sauvegardée durant l'entraînement.
+    data_optique: ${oc.env:DATA_OPTIQUE}   # Répertoire des GeoTIFF Sentinel-2.
+    data_radar: ${oc.env:DATA_RADAR}       # Répertoire des GeoTIFF Sentinel-1.
+    test_tiles: "./data/test_tiles.json"   # JSON listant les tuiles MGRS-C à traiter.
+    mode: null                             # Mode d'inférence. [null]
+    split: test                            # Split du dataset. ['train', 'val', 'test']
+
+mask:
+    mask_type: random_fully_masked
+
+training_settings:
+    batch_size: 1
+    num_epochs: 1
+
+misc:
+    run_mode: test
+
+output:
+    save_dir: ${oc.env:OUTPUT_DIR}/inference/tiles

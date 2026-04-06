@@ -22,9 +22,9 @@ import torch
 from matplotlib import pyplot as plt
 from torch import Tensor, nn
 
-from lib import config_utils, data_utils, utils, visutils
-from lib.models import MODELS
-from lib.visutils import COLORMAPS
+from src import config_utils, data_utils, utils, visutils
+from src.models import MODELS
+from src.visutils import COLORMAPS
 
 
 class Method(Enum):

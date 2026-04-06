@@ -21,11 +21,11 @@ from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
 from dataloader.tools.data_processor import SentinelDataProcessor
-from lib import config_utils
-from lib.arguments import eval_parser
-from lib.data_utils import get_dataset
-from lib.eval_tools import Imputation
-from lib.parcel_mask import ParcelMaskGenerator
+from src import config_utils
+from src.arguments import eval_parser
+from src.data_utils import get_dataset
+from src.eval_tools import Imputation
+from dataloader.tools.parcel_mask import ParcelMaskGenerator
 
 THRESHOLD = 0.5
 MAX_PIXEL_INTENSITY_USED_FOR_REVERSE = 10_000
@@ -96,8 +96,8 @@ class Evaluator:
             "sam": True,
         }
 
-        from lib.metrics.cloud_removal import CloudRemovalMetrics
-        from lib.metrics.aggregation import CloudRemovalDatasetMetrics
+        from src.metrics.cloud_removal import CloudRemovalMetrics
+        from src.metrics.aggregation import CloudRemovalDatasetMetrics
 
         list_available_metrics = [l.value for l in CloudRemovalMetrics.MetricType]
         # metrics = (
@@ -184,7 +184,7 @@ class Evaluator:
         # subset = 200
         # print(f"INFO: Forcing evaluation on a subset of {subset} samples for testing.")
 
-        from lib import data_utils
+        from src import data_utils
 
         self.dataloader = data_utils.get_dataloader(
             self.dset,

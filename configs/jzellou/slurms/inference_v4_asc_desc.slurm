@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=infer_v4_ad_cfm
+#SBATCH --job-name=infer_v4_ad
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:1
@@ -8,8 +8,8 @@
 #SBATCH --mem=100G
 #SBATCH --partition=jean-zellou
 
-#SBATCH -e /mnt/stores/store-DAI/tmp/speillet/logs/infer_v4_asc_desc_cfm-%j.out
-#SBATCH -o /mnt/stores/store-DAI/tmp/speillet/logs/infer_v4_asc_desc_cfm-%j.out
+#SBATCH -e /mnt/stores/store-DAI/tmp/speillet/logs/infer_v4_asc_desc-%j.out
+#SBATCH -o /mnt/stores/store-DAI/tmp/speillet/logs/infer_v4_asc_desc-%j.out
 
 cat "$0"
 echo "================================================================================"
@@ -38,5 +38,5 @@ export TEMP=$TMPDIR
 export TMP=$TMPDIR
 
 WORK_DIR="/mnt/common/hdd/home/SPeillet/U-TILISE"
-srun --cpu-bind=none python $WORK_DIR/infer_from_tiles.py $WORK_DIR/configs/jzellou/configs/config_run_infer_from_tiles_v4_asc_desc_cfm.yaml utilise
+srun --cpu-bind=none python $WORK_DIR/run_inference.py $WORK_DIR/configs/jzellou/configs/config_run_inference_v4_asc_desc.yaml utilise
 echo "Job complete"

@@ -5,16 +5,16 @@
 # ============================================================================
 
 data:
-    dataset: circa
-    hdf5_file: ${oc.env:HDF5_FILE}
-    max_seq_length: 5
-    channels: all
-    use_sar: mix_closest                   # Mode SAR : asc / desc / mix_closest / asc+desc
-    subset: false
+    dataset: circa                         # Nom du dataset. ['circa']
+    hdf5_file: ${oc.env:HDF5_FILE}         # Chemin HDF5 (variable .env)
+    max_seq_length: 5                      # Longueur max de séquence temporelle.
+    channels: all                          # Bandes spectrales. ['all', 'rgb', 'bgr_nir', liste d'indices]
+    use_sar: mix_closest                   # Mode SAR. [false, 'asc', 'desc', 'mix_closest', 'asc+desc']
+    subset: false                          # Entier = sous-ensemble de N patches, false = tout le dataset.
     filter_settings:
-        type: cloud-free
-        min_length: 3
-        return_valid_obs_only: true
+        type: cloud-free                   # Stratégie de filtrage des observations nuageuses.
+        min_length: 3                      # Longueur minimale de séquence après filtrage.
+        return_valid_obs_only: true        # True = ne retourner que les dates cloud-free.
 
 mask:
     mask_type: random_fully_masked         # ['random_clouds', 'real_clouds', 'random_fully_masked', 'consecutive_fully_masked']

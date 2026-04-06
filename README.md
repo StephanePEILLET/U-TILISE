@@ -18,6 +18,7 @@ Le pipeline complet permet de :
   - [Environnement conda](#environnement-conda)
   - [Variables d'environnement (.env)](#variables-denvironnement-env)
 - [Structure du projet](#structure-du-projet)
+- [Référence des paramètres de configuration](#référence-des-paramètres-de-configuration)
 - [Données](#données)
   - [Format HDF5](#format-hdf5-mode-principal)
   - [Fichiers à plat](#fichiers-à-plat-mode-alternatif)
@@ -78,18 +79,18 @@ Le fichier `.env` est ignoré par git (`.gitignore`) et n'est **jamais versionn�
 U-TILISE/
 ├── run_train.py                  # Point d'entrée : entraînement
 ├── run_eval.py                   # Point d'entrée : évaluation (métriques)
-├── infer_from_tiles.py           # Point d'entrée : inférence sur tuiles complètes
+├── run_inference.py              # Point d'entrée : inférence sur tuiles complètes
 │
 ├── configs/                      # Configurations YAML
-│   ├── default.yaml              #   Paramètres par défaut du modèle
-│   ├── config_run_train.yaml     #   Config de base pour l'entraînement
-│   ├── config_run_eval.yaml      #   Config de base pour l'évaluation
-│   ├── config_run_infer_*.yaml   #   Configs inférence tuile
+│   ├── default.yaml              #   Paramètres par défaut (référence complète)
+│   ├── config_run_train.yaml     #   Surcharges pour l'entraînement
+│   ├── config_run_eval.yaml      #   Surcharges pour l'évaluation
+│   ├── config_run_inference.yaml #   Surcharges pour l'inférence tuile
 │   └── jzellou/                  #   Configs spécifiques au cluster
 │       ├── configs/              #     Configs YAML (train, eval, inférence)
 │       └── slurms/               #     Scripts SLURM de soumission
 │
-├── lib/                          # Bibliothèque principale U-TILISE
+├── src/                          # Bibliothèque principale U-TILISE
 │   ├── models/                   #   Architecture du modèle
 │   │   ├── utilise.py            #     Encodeur spatial + LTAE + décodeur
 │   │   ├── ltae_transformer.py   #     Lightweight Temporal Attention Encoder
@@ -109,15 +110,13 @@ U-TILISE/
 │   ├── eval_tools.py             #   Imputation fenêtre glissante + fusion
 │   ├── metrics.py                #   Fonctions métriques utilitaires
 │   ├── data_utils.py             #   Chargement datasets / dataloaders
-│   ├── config_utils.py           #   Lecture/écriture configs (OmegaConf)
+│   ├── config_utils.py           #   Lecture/écriture configs (OmegaConf + .env)
 │   ├── utils.py                  #   Instanciation modèle, optimiseur, scheduler
-│   ├── torch_transforms.py       #   Augmentations (rotation, flip, bruit)
-│   ├── parcel_mask.py            #   Masques parcellaires agricoles (GPKG)
 │   ├── visutils.py               #   Visualisation (galeries, colormaps)
 │   ├── logger.py                 #   Logging et statistiques
 │   └── formatter.py              #   Formatage des logs
 │
-├── dataloader/                   # Chargement des données
+├── dataloader/                   # Chargement et traitement des données
 │   ├── datasets/
 │   │   ├── hdf5_creator.py       #   Création HDF5 (FileScanner, HDF5Maker, merge)
 │   │   ├── hdf5_reader.py        #   Lecture HDF5 (HDF5Dataset)
@@ -125,10 +124,10 @@ U-TILISE/
 │   │   ├── dataset_from_files.py #   Chargement direct depuis TIF
 │   │   └── constants.py          #   Splits géographiques train/val/test
 │   └── tools/
-│       ├── data_processor.py     #   Lecture rasters (rasterio)
+│       ├── data_processor.py     #   Lecture/normalisation rasters (rasterio)
 │       ├── mask_generation.py    #   Utilitaires de masquage
 │       ├── sampling.py           #   Échantillonnage temporel
-│       ├── torch_transforms.py   #   Transformations PyTorch
+│       ├── parcel_mask.py        #   Masques parcellaires agricoles (GPKG)
 │       ├── type_converter.py     #   Conversion float ↔ int16
 │       ├── writer.py             #   Écriture de prédictions (GeoTIFF)
 │       └── positional_encoding.py#   Encodage positionnel
@@ -141,6 +140,62 @@ U-TILISE/
 │   └── inference_demo.ipynb      #   Démo inférence (visualisation + métriques)
 └── docs/                         # Documentation
 ```
+
+---
+
+## Référence des paramètres de configuration
+
+Les configurations YAML sont fusionnées dans l'ordre : `default.yaml` ← `config_run_*.yaml` ← config spécifique.
+Seuls les paramètres qui diffèrent de `default.yaml` doivent être spécifiés dans les configs dérivées.
+
+La référence complète est dans [`configs/default.yaml`](configs/default.yaml). Voici les
+paramètres les plus importants :
+
+### `data:` — Données d'entrée
+
+| Paramètre | Type | Description |
+|---|---|---|
+| `dataset` | str | Nom du dataset (`circa`) |
+| `hdf5_file` | str | Chemin vers le fichier HDF5 (`${oc.env:HDF5_FILE}`) |
+| `channels` | str/list | Bandes spectrales : `all`, `rgb`, `bgr_nir`, ou liste d'indices |
+| `use_sar` | str/bool | Mode SAR : `false`, `asc`, `desc`, `mix_closest`, `asc+desc` |
+| `max_seq_length` | int/null | Longueur max de séquence temporelle. `null` = pas de troncature |
+| `pe_strategy` | str | Encodage positionnel : `day-of-year`, `day-within-sequence`, `absolute`, `enumeration` |
+| `render_occluded_above_p` | float | Seuil de couverture nuageuse (0.0–1.0) pour masquer une image entière |
+| `load_transforms` | str | Chemin JSON des transformations géométriques (optionnel) |
+| `blend_mode` | str | Fusion temporelle en évaluation : `switch`, `center`, `center_only`, `iterative` |
+| `subset` | int/bool | Sous-ensemble de N patches (`false` = tout le dataset) |
+
+### `mask:` — Masquage synthétique
+
+| Paramètre | Type | Description |
+|---|---|---|
+| `mask_type` | str | `random_clouds`, `real_clouds`, `random_fully_masked`, `consecutive_fully_masked` |
+| `ratio_masked_frames` | float | Part max d'images masquées par séquence (0.0–1.0) |
+| `fill_type` | str | Initialisation des pixels masqués : `fill_value`, `white_noise`, `mean` |
+| `fill_value` | float | Valeur de remplissage si `fill_type == fill_value` |
+
+### `utilise:` — Architecture du modèle
+
+| Paramètre | Type | Description |
+|---|---|---|
+| `encoder_widths` | list[int] | Nombre de filtres par niveau de l'encodeur spatial |
+| `decoder_widths` | list[int] | Nombre de filtres par niveau du décodeur spatial |
+| `n_head` | int | Nombre de têtes d'attention dans le LTAE |
+| `d_k` | int | Dimension des clés/requêtes par tête d'attention |
+| `n_groups` | int | Nombre de groupes pour la normalisation de groupe |
+| `dropout` | float | Dropout général dans le réseau |
+| `output_activation` | str | Activation de sortie : `sigmoid`, `softmax`, `null` |
+
+### `loss:` — Fonctions de perte
+
+| Paramètre | Type | Description |
+|---|---|---|
+| `l1_loss` | bool | Perte L1 sur tous les pixels |
+| `ssim_loss` | bool | Perte SSIM (similarité structurelle) |
+| `ndvi_loss` | bool | Perte L1 sur le NDVI pour la cohérence végétation |
+| `temporal_r2_loss` | bool | Perte (1 - R²) pour la cohérence temporelle |
+| `*_w` | float | Poids associé à chaque terme de perte |
 
 ---
 
@@ -272,7 +327,7 @@ Paramètres de la config d'évaluation :
 ### 4. Inférence à la tuile
 
 ```bash
-python infer_from_tiles.py configs/jzellou/configs/config_run_infer_from_tiles_v4_asc_desc.yaml utilise
+python run_inference.py configs/config_run_inference.yaml utilise
 ```
 
 Produit des GeoTIFF de reconstruction pour chaque tuile MGRSC. Le script :
@@ -337,7 +392,7 @@ sbatch configs/jzellou/slurms/metrics_v4_asc_desc_rfm_blend.slurm
 sbatch configs/jzellou/slurms/metrics_v4_asc_desc_cfm_iterative.slurm
 
 # Inférence à la tuile
-sbatch configs/jzellou/slurms/infer_from_tiles_v4_asc_desc.slurm
+sbatch configs/jzellou/slurms/inference_v4_asc_desc.slurm
 ```
 
 ---

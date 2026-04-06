@@ -15,7 +15,7 @@ import torchgeometry as tgm
 from prodict import Prodict
 from torch import Tensor, nn
 
-from lib.data_utils import extract_sample
+from src.data_utils import extract_sample
 
 
 class TrainLoss:

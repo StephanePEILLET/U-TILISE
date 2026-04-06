@@ -8,7 +8,7 @@ import torchgeometry as tgm
 from prodict import Prodict
 from torch import Tensor
 
-from lib.data_utils import extract_sample
+from src.data_utils import extract_sample
 
 
 def compute_sam(predicted: Tensor, target: Tensor, units: Literal["deg", "rad"] = "rad") -> Tensor:

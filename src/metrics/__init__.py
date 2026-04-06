@@ -4,7 +4,7 @@
 - aggregation.py  : agrégation des métriques sur un dataset complet
 """
 
-from lib.metrics.cloud_removal import CloudRemovalMetrics
-from lib.metrics.aggregation import CloudRemovalDatasetMetrics
+from src.metrics.cloud_removal import CloudRemovalMetrics
+from src.metrics.aggregation import CloudRemovalDatasetMetrics
 
 __all__ = ["CloudRemovalMetrics", "CloudRemovalDatasetMetrics"]

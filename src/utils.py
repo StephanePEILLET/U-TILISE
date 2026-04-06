@@ -14,9 +14,9 @@ import torch
 import torchinfo
 from omegaconf import DictConfig, OmegaConf
 
-from lib.models import MODELS
-from lib.models.weight_init import weight_init
-from lib.trainer import Trainer
+from src.models import MODELS
+from src.models.weight_init import weight_init
+from src.trainer import Trainer
 
 
 def create_output_directory(config: DictConfig) -> str:

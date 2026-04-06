@@ -3,7 +3,7 @@ from typing import Optional
 
 import numpy as np
 
-from lib.formatter import LeveledFormatter
+from src.formatter import LeveledFormatter
 
 
 class AverageMeter:

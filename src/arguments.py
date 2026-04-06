@@ -2,7 +2,7 @@ import sys
 
 from nestargs import NestedArgumentParser
 
-from lib.formatter import RawFormatter
+from src.formatter import RawFormatter
 
 eval_parser = NestedArgumentParser(
     description="U-TILISE: A Sequence-to-sequence Model for Cloud Removal in Optical Satellite Time Series (Evaluation)",
