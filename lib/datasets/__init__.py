@@ -1,5 +1,5 @@
-from dataloader_CIRCA.datasets import CIRCA_ADAPTED2UTILISE_Dataset
+from dataloader.datasets import SatelliteDataset
 
 DATASETS = {
-    "circa": CIRCA_ADAPTED2UTILISE_Dataset,
+    "circa": SatelliteDataset,
 }

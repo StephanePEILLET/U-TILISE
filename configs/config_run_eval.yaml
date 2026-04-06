@@ -6,7 +6,7 @@
 data:
     dataset: circa         # Jeu de données. ['circa']
     hdf5_file: /mnt/DATA_10T/data_rpg/circa/hdf5/CIRCA_CR_merged.hdf5
-    load_transforms: ./data/CIRCA_patches_datasets_with_transforms.json
+    load_transforms: ./data/patches_with_transforms.json
     # parcel_gpkg: chemin/vers/parcelles.gpkg  # Chemin vers le GPKG parcellaire (null = désactivé).
     channels: all
     use_sar: asc+desc # Mode SAR : asc / desc / mix_closest / asc+desc

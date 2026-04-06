@@ -1,6 +1,6 @@
 """Lecture des données CIRCA depuis un fichier HDF5.
 
-Fournit le dataset PyTorch CIRCA_from_HDF5 qui charge les séries temporelles
+Fournit le dataset PyTorch HDF5Dataset qui charge les séries temporelles
 Sentinel-2 et Sentinel-1 (ASC/DESC) à partir du fichier HDF5 fusionné.
 Gère les différences entre splits train/val (dates filtrées) et test (toutes dates).
 """
@@ -23,7 +23,7 @@ from torch.utils.data import Dataset
 
 sys.path.append(str(Path(__file__).parents[2]))
 
-from dataloader_CIRCA.datasets.CIRCA_constants import MGRSC_SPLITS
+from dataloader.datasets.constants import GEOGRAPHIC_SPLITS
 
 # Set multiprocessing sharing strategy
 torch.multiprocessing.set_sharing_strategy("file_system")
@@ -40,7 +40,7 @@ ChannelType = Literal["all", "bgr-nir"]
 SarPairingType = Literal["asc+desc", "asc", "desc", "mix_closest"]
 
 
-class CIRCA_from_HDF5(Dataset):
+class HDF5Dataset(Dataset):
     """
     A PyTorch Dataset class for loading CIRCA data from HDF5 files.
 
@@ -264,11 +264,11 @@ class CIRCA_from_HDF5(Dataset):
         if phase is None:
             raise ValueError("Phase is not defined. Use 'train', 'val', 'train+val', or 'all'.")
 
-        if phase in MGRSC_SPLITS:
-            patches_dataset = patches_dataset[patches_dataset["mgrs25"].isin(MGRSC_SPLITS[phase])]
+        if phase in GEOGRAPHIC_SPLITS:
+            patches_dataset = patches_dataset[patches_dataset["mgrs25"].isin(GEOGRAPHIC_SPLITS[phase])]
         elif phase == "train+val":
             patches_dataset = patches_dataset[
-                patches_dataset["mgrs25"].isin(MGRSC_SPLITS["train"] + MGRSC_SPLITS["val"])
+                patches_dataset["mgrs25"].isin(GEOGRAPHIC_SPLITS["train"] + GEOGRAPHIC_SPLITS["val"])
             ]
         elif phase != "all":
             raise ValueError(f"Phase {phase} not recognized. Use 'train', 'val', 'train+val', or 'all'.")
@@ -495,13 +495,13 @@ if __name__ == "__main__":
     # hdf5_file = path_dataset_circa / "new_circa_ligth.hdf5"
     hdf5_file = path_dataset_circa / "CIRCA_CR_merged.hdf5"
     # Import data from HDF5 file
-    dataset = CIRCA_from_HDF5(
+    dataset = HDF5Dataset(
         hdf5_file=hdf5_file,
         phase="all",
         shuffle=False,
         channels="all",
         use_sar="asc+desc",
-        load_transforms="./data/CIRCA_patches_datasets_with_transforms.json",
+        load_transforms="./data/patches_with_transforms.json",
     )
     # Get a sample
     sample = next(iter(dataset))

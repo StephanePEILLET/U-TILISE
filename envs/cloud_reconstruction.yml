@@ -1,4 +1,4 @@
-name: cr
+name: cloud_reconstruction
 channels:
   - nvidia
   - pytorch

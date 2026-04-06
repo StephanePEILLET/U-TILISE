@@ -1,7 +1,7 @@
 data:
     dataset: circa
     hdf5_file: /var/data/datasets/CIRCA_CR_merged.hdf5
-    load_transforms: /mnt/common/hdd/home/SPeillet/U-TILISE/data/CIRCA_patches_datasets_with_transforms.json
+    load_transforms: /mnt/common/hdd/home/SPeillet/U-TILISE/data/patches_with_transforms.json
     channels: all
     use_sar: asc+desc
     subset: false
@@ -19,7 +19,7 @@ test_data:
     data_radar: /mnt/stores/store-DAI/projets/pac/3str/EXP_2/Data_Raster/radar_dataset_v4
     data_masks: /mnt/stores/store-DAI/projets/pac/3str/EXP_2/Data_Raster/test_v3/aleatoire
     mask_type: fully_masked
-    test_tiles: "./data/MGRSC_test.json"
+    test_tiles: "./data/test_tiles.json"
     mode: null
     split: test
 

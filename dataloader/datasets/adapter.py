@@ -1,6 +1,6 @@
 """Adaptateur CIRCA → format U-TILISE.
 
-Encapsule CIRCA_from_HDF5 ou Dataset_from_files pour fournir les tenseurs
+Encapsule HDF5Dataset ou Dataset_from_files pour fournir les tenseurs
 dans le format attendu par U-TILISE : x (entrée masquée), y (cible),
 masks, position_days, etc. Gère l'échantillonnage temporel, le masquage
 synthétique et les augmentations spatiales.
@@ -20,15 +20,15 @@ import albumentations as A
 from omegaconf import DictConfig, OmegaConf
 from torch import Tensor
 
-from dataloader_CIRCA.datasets import CIRCA_from_HDF5
-from dataloader_CIRCA.tools.data_processor import SentinelDataProcessor
-from dataloader_CIRCA.tools.mask_generation import masks_init_filling, overlay_seq_with_clouds
-from dataloader_CIRCA.tools.positional_encoding import (
+from dataloader.datasets import HDF5Dataset
+from dataloader.tools.data_processor import SentinelDataProcessor
+from dataloader.tools.mask_generation import masks_init_filling, overlay_seq_with_clouds
+from dataloader.tools.positional_encoding import (
     get_pairwise_representative_dates,
     get_position_for_positional_encoding,
     str2date,
 )
-from dataloader_CIRCA.tools.sampling import sample_indices_masked_frames, sampling_consecutive_frames
+from dataloader.tools.sampling import sample_indices_masked_frames, sampling_consecutive_frames
 
 MAX_SEQ_LENGTH = 30
 IMAGE_SIZE = (256, 256)
@@ -44,14 +44,14 @@ PhaseType = Literal["train", "val", "test", "train+val", "all"]
 ChannelType = Literal["all", "bgr-nir"]
 
 
-class CIRCA_ADAPTED2UTILISE_Dataset(CIRCA_from_HDF5):
+class SatelliteDataset(HDF5Dataset):
     """
     Dataset qui exporte / ou importe les données CIRCA dans / depuis un fichier HDF5.
     """
 
     def __init__(
         self,
-        # CIRCA_from_HDF5 parameters
+        # HDF5Dataset parameters
         phase: PhaseType = "all",
         hdf5_file: str | Path | None = None,
         shuffle: bool = False,

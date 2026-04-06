@@ -25,9 +25,9 @@ from rasterio.windows import Window
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
-from dataloader_CIRCA.datasets.dataset_from_files import Dataset_from_files
-from dataloader_CIRCA.tools.data_processor import SentinelDataProcessor
-from dataloader_CIRCA.tools.type_converter import TypeConverter
+from dataloader.datasets.dataset_from_files import Dataset_from_files
+from dataloader.tools.data_processor import SentinelDataProcessor
+from dataloader.tools.type_converter import TypeConverter
 from lib import config_utils
 from lib.arguments import eval_parser
 from lib.eval_tools import Imputation
@@ -64,7 +64,7 @@ GDAL_OPTIONS = {
 def _handle_folders(config: DictConfig):
     """
     Handle folders paths and output    # 1. Commit et push les changements locaux
-    git add infer_from_tiles.py dataloader_CIRCA/datasets/dataset_from_files.py
+    git add infer_from_tiles.py dataloader/datasets/dataset_from_files.py
     git commit -m "fix: keep_all_dates=True pour inférence tuiles + validation bandes + use_sar + shared memory"
     git push origin jzay
 

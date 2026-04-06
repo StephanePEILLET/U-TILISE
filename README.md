@@ -27,6 +27,7 @@ Le pipeline complet permet de :
   - [4. Inférence à la tuile](#4-inférence-à-la-tuile)
 - [Modes de masquage](#modes-de-masquage)
 - [Modes de fusion temporelle (blend)](#modes-de-fusion-temporelle-blend)
+- [Notebooks de démonstration](#notebooks-de-démonstration)
 - [Utilisation sur cluster (SLURM)](#utilisation-sur-cluster-slurm)
 - [Références](#références)
 
@@ -37,8 +38,8 @@ Le pipeline complet permet de :
 ### Environnement conda
 
 ```bash
-conda env create -f envs/cr.yml
-conda activate cr
+conda env create -f envs/cloud_reconstruction.yml
+conda activate cloud_reconstruction
 ```
 
 L'environnement nécessite Python 3.10+, PyTorch 2.x et CUDA 11.8+.
@@ -52,7 +53,6 @@ U-TILISE/
 ├── run_train.py                  # Point d'entrée : entraînement
 ├── run_eval.py                   # Point d'entrée : évaluation (métriques)
 ├── infer_from_tiles.py           # Point d'entrée : inférence sur tuiles complètes
-├── aggregate_metrics.py          # Agrégation des résultats d'évaluation
 │
 ├── configs/                      # Configurations YAML
 │   ├── default.yaml              #   Paramètres par défaut du modèle
@@ -68,16 +68,20 @@ U-TILISE/
 │   │   ├── utilise.py            #     Encodeur spatial + LTAE + décodeur
 │   │   ├── ltae_transformer.py   #     Lightweight Temporal Attention Encoder
 │   │   ├── positional_encoding.py#     Encodage positionnel temporel
+│   │   ├── interpolator.py       #     Interpolation triviale (baseline)
 │   │   ├── make_layers.py        #     Constructeurs de couches
 │   │   ├── weight_init.py        #     Initialisation des poids
 │   │   └── parameters.py         #     Enums (activation, normalisation)
+│   ├── metrics/                  #   Métriques de reconstruction
+│   │   ├── cloud_removal.py      #     Métriques par sample (MAE, RMSE, PSNR, SSIM, SAM)
+│   │   └── aggregation.py        #     Agrégation dataset (torchmetrics)
 │   ├── datasets/                 #   Registre des datasets
 │   │   ├── dataset_tools.py      #     Détection de frames nuageuses
 │   │   └── mask_generation.py    #     Masques synthétiques
 │   ├── trainer.py                #   Boucle d'entraînement (train/val)
 │   ├── loss.py                   #   Fonctions de perte (L1, SSIM, NDVI, R²)
 │   ├── eval_tools.py             #   Imputation fenêtre glissante + fusion
-│   ├── metrics.py                #   Métriques (MAE, RMSE, PSNR, SSIM, SAM)
+│   ├── metrics.py                #   Fonctions métriques utilitaires
 │   ├── data_utils.py             #   Chargement datasets / dataloaders
 │   ├── config_utils.py           #   Lecture/écriture configs (OmegaConf)
 │   ├── utils.py                  #   Instanciation modèle, optimiseur, scheduler
@@ -87,34 +91,29 @@ U-TILISE/
 │   ├── logger.py                 #   Logging et statistiques
 │   └── formatter.py              #   Formatage des logs
 │
-├── dataloader_CIRCA/             # Chargement des données CIRCA
+├── dataloader/                   # Chargement des données
 │   ├── datasets/
-│   │   ├── hdf5_creator.py       #   Création HDF5 (scan, écriture, fusion)
-│   │   ├── CIRCA_hdf5_reader.py  #   Lecture HDF5 pour train/eval
-│   │   ├── UTILISE_adapter.py    #   Adaptation CIRCA → format U-TILISE
+│   │   ├── hdf5_creator.py       #   Création HDF5 (FileScanner, HDF5Maker, merge)
+│   │   ├── hdf5_reader.py        #   Lecture HDF5 (HDF5Dataset)
+│   │   ├── adapter.py            #   Adaptation → format U-TILISE (SatelliteDataset)
 │   │   ├── dataset_from_files.py #   Chargement direct depuis TIF
-│   │   ├── CIRCA_constants.py    #   Splits train/val/test (zones MGRSC)
-│   │   ├── cr_metrics_nina.py    #   Métriques de reconstruction (sample)
-│   │   └── cr_torchmetrics.py    #   Agrégation métriques (dataset)
-│   ├── tools/
-│   │   ├── data_processor.py     #   Lecture rasters (rasterio)
-│   │   ├── mask_generation.py    #   Utilitaires de masquage
-│   │   ├── sampling.py           #   Échantillonnage temporel
-│   │   ├── torch_transforms.py   #   Transformations PyTorch
-│   │   ├── type_converter.py     #   Conversion float ↔ int16
-│   │   ├── writer.py             #   Écriture de prédictions (GeoTIFF)
-│   │   └── positional_encoding.py#   Encodage positionnel
-│   └── viz/
-│       └── ts_vis.py             #   Visualisation séries temporelles
-│
-├── utils_hdf5/                   # Outils d'inspection HDF5
-│   ├── explore_hdf5.py           #   Explorateur interactif
-│   └── compute_stats.py          #   Statistiques par bande
+│   │   └── constants.py          #   Splits géographiques train/val/test
+│   └── tools/
+│       ├── data_processor.py     #   Lecture rasters (rasterio)
+│       ├── mask_generation.py    #   Utilitaires de masquage
+│       ├── sampling.py           #   Échantillonnage temporel
+│       ├── torch_transforms.py   #   Transformations PyTorch
+│       ├── type_converter.py     #   Conversion float ↔ int16
+│       ├── writer.py             #   Écriture de prédictions (GeoTIFF)
+│       └── positional_encoding.py#   Encodage positionnel
 │
 ├── data/                         # Métadonnées des patches
-├── envs/                         # Environnement conda (cr.yml)
-├── notebooks/demo.ipynb          # Notebook de démonstration
-└── scripts/                      # Scripts utilitaires
+├── envs/                         # Environnement conda
+│   └── cloud_reconstruction.yml  #   Définition de l'environnement
+├── notebooks/                    # Notebooks de démonstration
+│   ├── training_demo.ipynb       #   Démo entraînement (subset + TensorBoard)
+│   └── inference_demo.ipynb      #   Démo inférence (visualisation + métriques)
+└── docs/                         # Documentation
 ```
 
 ---
@@ -175,14 +174,14 @@ reconstruites).
 
 ### 1. Création du HDF5
 
-Le module `dataloader_CIRCA/datasets/hdf5_creator.py` consolide toute la chaîne de
+Le module `dataloader/datasets/hdf5_creator.py` consolide toute la chaîne de
 préparation des données :
 
 ```python
-from dataloader_CIRCA.datasets.hdf5_creator import CIRCA_HDF5_Maker, merge_hdf5_files
+from dataloader.datasets.hdf5_creator import HDF5Maker, merge_hdf5_files
 
 # Étape 1 : Créer les HDF5 individuels par zone MGRS
-maker = CIRCA_HDF5_Maker(
+maker = HDF5Maker(
     data_optique="chemin/vers/optique_dataset/",
     data_radar="chemin/vers/radar_dataset_v4/",
     image_size=[256, 256],
@@ -244,11 +243,6 @@ Paramètres de la config d'évaluation :
 
 **Métriques calculées** : MAE, MSE, RMSE, PSNR, SSIM, SAM, R².
 
-**Agrégation des résultats** :
-```bash
-python aggregate_metrics.py --results_dir /chemin/vers/resultats/
-```
-
 ### 4. Inférence à la tuile
 
 ```bash
@@ -286,6 +280,17 @@ prédictions des fenêtres qui se chevauchent sont combinées :
 | `center` | Pondération triangulaire favorisant le centre de chaque fenêtre |
 | `center_only` | Ne conserve que les N frames centrales par fenêtre |
 | `iterative` | Multi-passes : les prédictions sont réinjectées comme observations pour les passes suivantes. Le nombre de passes est calculé dynamiquement selon la plus longue lacune consécutive |
+
+---
+
+## Notebooks de démonstration
+
+Deux notebooks Jupyter sont disponibles dans `notebooks/` :
+
+| Notebook | Description |
+|----------|-------------|
+| `training_demo.ipynb` | Entraînement interactif sur un sous-ensemble réduit avec suivi TensorBoard |
+| `inference_demo.ipynb` | Chargement d'un checkpoint, inférence, visualisation des résultats et des masques d'attention, calcul des métriques |
 
 ---
 

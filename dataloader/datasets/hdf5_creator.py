@@ -2,13 +2,13 @@
 hdf5_creator.py — Module consolidé pour la création de fichiers HDF5 à partir des données CIRCA.
 
 Ce module regroupe toute la chaîne de création HDF5 :
-1. Lecture et indexation des fichiers TIF Sentinel-1/2 (classe CIRCA_from_files)
+1. Lecture et indexation des fichiers TIF Sentinel-1/2 (classe FileScanner)
 2. Appariement temporel des dates S1 ASC/DESC vers les dates S2 (fonctions d'appariement)
-3. Écriture des données dans des fichiers HDF5 par zone MGRS (classe CIRCA_HDF5_Maker)
+3. Écriture des données dans des fichiers HDF5 par zone MGRS (classe HDF5Maker)
 4. Fusion des fichiers HDF5 individuels en un seul fichier (fonction merge_hdf5_files)
 
 Pipeline typique :
-    1. Instancier CIRCA_HDF5_Maker avec les chemins vers les données raster
+    1. Instancier HDF5Maker avec les chemins vers les données raster
     2. Appeler load_items_to_hdf5() pour écrire un fichier HDF5 par zone MGRS
     3. Appeler merge_hdf5_files() pour fusionner tous les fichiers en un seul
 
@@ -35,9 +35,9 @@ from rasterio.windows import Window
 from torch.utils.data import Dataset
 from tqdm.auto import tqdm
 
-from dataloader_CIRCA.datasets.CIRCA_constants import MGRSC_SPLITS
-from dataloader_CIRCA.tools.data_processor import SentinelDataProcessor
-from dataloader_CIRCA.tools.positional_encoding import get_position_for_positional_encoding  # NOQA
+from dataloader.datasets.constants import GEOGRAPHIC_SPLITS
+from dataloader.tools.data_processor import SentinelDataProcessor
+from dataloader.tools.positional_encoding import get_position_for_positional_encoding  # NOQA
 
 torch.multiprocessing.set_sharing_strategy("file_system")
 
@@ -52,11 +52,11 @@ SEED = 42
 
 
 # =============================================================================
-# Section 1 : Lecture et indexation des fichiers TIF (CIRCA_from_files)
+# Section 1 : Lecture et indexation des fichiers TIF (FileScanner)
 # =============================================================================
 
 
-class CIRCA_from_files(Dataset):
+class FileScanner(Dataset):
     """
     Dataset PyTorch pour la gestion des données Sentinel-1 et Sentinel-2
     à partir de fichiers TIF pour les tâches de reconstruction sans nuages.
@@ -449,15 +449,15 @@ def appariement_S1_to_S2(
 
 
 # =============================================================================
-# Section 3 : Écriture HDF5 (CIRCA_HDF5_Maker)
+# Section 3 : Écriture HDF5 (HDF5Maker)
 # =============================================================================
 
 
-class CIRCA_HDF5_Maker(CIRCA_from_files):
+class HDF5Maker(FileScanner):
     """
     Classe qui exporte les données CIRCA dans des fichiers HDF5.
 
-    Hérite de CIRCA_from_files pour le scan des données, puis écrit les patches
+    Hérite de FileScanner pour le scan des données, puis écrit les patches
     dans des fichiers HDF5 organisés par zone MGRS.
 
     Architecture HDF5 :
@@ -643,7 +643,7 @@ class CIRCA_HDF5_Maker(CIRCA_from_files):
 
                     print(f"Chargement des données MGRS25 {mgrs25_id} dans {hdf5_file}...")
                     mgrs25_group = mgrs_group.create_group(mgrs25_id)
-                    in_test_set = mgrs25_id in MGRSC_SPLITS["test"]
+                    in_test_set = mgrs25_id in GEOGRAPHIC_SPLITS["test"]
 
                     mgrs25_dataset = mgrs_dataset[mgrs_dataset["mgrs25"] == mgrs25_id]
 
@@ -988,7 +988,7 @@ if __name__ == "__main__":
             "p_filter": 0.1,
         }
 
-        dataset = CIRCA_HDF5_Maker(
+        dataset = HDF5Maker(
             hdf5_folder=Path(args.hdf5_folder),
             data_optique=Path(args.data_optique),
             data_radar=Path(args.data_radar),

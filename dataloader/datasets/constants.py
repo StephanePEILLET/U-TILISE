@@ -1,4 +1,4 @@
-MGRSC_SPLITS = {
+GEOGRAPHIC_SPLITS = {
     "train": [  # 41 zones MGRSC
         "31UDP_row-3_col-2",
         "30TYQ_row-4_col-3",

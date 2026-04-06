@@ -20,7 +20,7 @@ import torch
 from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
-from dataloader_CIRCA.tools.data_processor import SentinelDataProcessor
+from dataloader.tools.data_processor import SentinelDataProcessor
 from lib import config_utils
 from lib.arguments import eval_parser
 from lib.data_utils import get_dataset
@@ -96,8 +96,8 @@ class Evaluator:
             "sam": True,
         }
 
-        from dataloader_CIRCA.datasets.cr_metrics_nina import CloudRemovalMetrics
-        from dataloader_CIRCA.datasets.cr_torchmetrics import CloudRemovalDatasetMetrics
+        from lib.metrics.cloud_removal import CloudRemovalMetrics
+        from lib.metrics.aggregation import CloudRemovalDatasetMetrics
 
         list_available_metrics = [l.value for l in CloudRemovalMetrics.MetricType]
         # metrics = (

@@ -238,7 +238,7 @@ def main(args: argparse.Namespace) -> None:
 
     from tqdm.auto import tqdm
 
-    from dataloader_CIRCA.datasets.cr_torchmetrics import CloudRemovalDatasetMetrics
+    from lib.metrics.aggregation import CloudRemovalDatasetMetrics
     from lib.eval_tools import Imputation
 
     _ = torch.set_grad_enabled(False)

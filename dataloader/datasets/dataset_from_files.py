@@ -20,9 +20,9 @@ from rasterio.windows import Window
 from torch.utils.data import Dataset
 from tqdm.auto import tqdm
 
-from dataloader_CIRCA.tools.data_processor import SentinelDataProcessor
-from dataloader_CIRCA.tools.mask_generation import masks_init_filling
-from dataloader_CIRCA.tools.positional_encoding import (
+from dataloader.tools.data_processor import SentinelDataProcessor
+from dataloader.tools.mask_generation import masks_init_filling
+from dataloader.tools.positional_encoding import (
     get_pairwise_representative_dates,
     get_position_for_positional_encoding,
 )
@@ -1061,7 +1061,7 @@ class Dataset_from_files(Dataset):
         # LEGACY (ALL_SAR) : masque aussi les canaux SAR quand des nuages sont présents.
         # Ce comportement reproduit l'erreur du dataloader d'entraînement du modèle ALL_SAR.
         # Pour les nouveaux modèles (comportement correct), le SAR ne doit PAS être masqué.
-        # TODO: ajouter un flag mask_sar pour contrôler ce comportement (cf. UTILISE_adapter.py)
+        # TODO: ajouter un flag mask_sar pour contrôler ce comportement (cf. adapter.py)
         if self.use_sar and masks is not None:
             frames_input = frames_input.masked_fill(masks == 1.0, self.fill_value)
 
