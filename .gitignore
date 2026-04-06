@@ -12,5 +12,6 @@ lightning_logs/*
 **/__pycache__/
 **/.ipynb_checkpoints/
 **/checkpoints/
-.data/patches_with_transforms.csv
 .data/patches_with_transforms.json.DS_Store
+.kilo/*
+.github/*

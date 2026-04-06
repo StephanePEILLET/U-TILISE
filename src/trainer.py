@@ -16,17 +16,17 @@ import numpy as np
 import prodict
 import torch
 import torchvision.utils
-from omegaconf import DictConfig, ListConfig, OmegaConf
+from omegaconf import DictConfig, ListConfig
 from prodict import Prodict
 from torch import Tensor
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
-from src.metrics.cloud_removal import CloudRemovalMetrics
 from src import logger, visutils
 from src.data_utils import compute_false_color, extract_sample, to_device
 from src.logger import AverageMeter
 from src.loss import TrainLoss
+from src.metrics.cloud_removal import CloudRemovalMetrics
 
 OBJECTIVE = {
     "l1": "min",

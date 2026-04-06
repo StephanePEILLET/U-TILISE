@@ -1,9 +1,5 @@
 import math
-from typing import Dict
-from typing import List
-from typing import Optional
 
-import numpy as np
 import torch
 from torch import Tensor
 from torchmetrics.aggregation import MeanMetric
@@ -24,7 +20,7 @@ class CloudRemovalDatasetMetrics:
 
     def __init__(
         self,
-        metrics: Optional[List[str]] = None,
+        metrics: list[str] | None = None,
         eval_occluded_observed: bool = True,
         clean_gt_cloudy_pixels: bool = True,
         max_pixel_intensity: int = 1,
@@ -49,7 +45,7 @@ class CloudRemovalDatasetMetrics:
             max_pixel_intensity=max_pixel_intensity,
         )
         self.skip_nan = skip_nan
-        self._aggregators: Dict[str, MeanMetric] = {}
+        self._aggregators: dict[str, MeanMetric] = {}
 
     def _get_or_create_aggregator(self, name: str) -> MeanMetric:
         if name not in self._aggregators:
@@ -63,8 +59,8 @@ class CloudRemovalDatasetMetrics:
         target: Tensor,
         masks: Tensor,
         predicted: Tensor,
-        cloud_masks: Optional[Tensor] = None,
-    ) -> Dict[str, float]:
+        cloud_masks: Tensor | None = None,
+    ) -> dict[str, float]:
         """Compute metrics for one sample/batch and update running means.
 
         Returns the per-sample metrics dict (not averaged)."""
@@ -88,7 +84,7 @@ class CloudRemovalDatasetMetrics:
         return metrics_dict
 
     @torch.no_grad()
-    def compute(self) -> Dict[str, float]:
+    def compute(self) -> dict[str, float]:
         """Return the mean value for each metric accumulated so far."""
         return {k: agg.compute().item() for k, agg in self._aggregators.items()}
 
@@ -98,10 +94,10 @@ class CloudRemovalDatasetMetrics:
             agg.reset()
 
     # Optional: make the class iterable-friendly with state_dict / load_state_dict
-    def state_dict(self) -> Dict[str, Dict[str, Tensor]]:
+    def state_dict(self) -> dict[str, dict[str, Tensor]]:
         return {k: agg.state_dict() for k, agg in self._aggregators.items()}
 
-    def load_state_dict(self, state: Dict[str, Dict[str, Tensor]]):
+    def load_state_dict(self, state: dict[str, dict[str, Tensor]]):
         for k, sd in state.items():
             agg = self._get_or_create_aggregator(k)
             agg.load_state_dict(sd)
