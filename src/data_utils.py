@@ -152,7 +152,7 @@ def get_dataloader(
         dset = torch.utils.data.Subset(dset, range(subset))
 
     if variable_seq_length:
-        collate_fn = partial(pad_collate, pad_value=config.method.pad_value)
+        collate_fn = partial(pad_collate, pad_value=config.get("pad_value", 0))
     else:
         collate_fn = None
 

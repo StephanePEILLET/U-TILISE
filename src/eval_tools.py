@@ -9,38 +9,22 @@ Contient la classe Imputation qui gère :
 
 import math
 import os
-from enum import Enum
-from typing import Any, Literal
+from typing import Any
 
 import matplotlib
 import torch
 from matplotlib import pyplot as plt
+from omegaconf import OmegaConf
 from torch import Tensor, nn
 
 from src import config_utils, data_utils, utils, visutils
-from src.models import MODELS
 from src.visutils import COLORMAPS
-
-
-class Method(Enum):
-    UTILISE = "utilise"
-    TRIVIAL = "trivial"
-
-
-class Mode(Enum):
-    LAST = "last"
-    NEXT = "next"
-    CLOSEST = "closest"
-    LINEAR_INTERPOLATION = "linear_interpolation"
-    NONE = None
 
 
 class Imputation:
     def __init__(
         self,
         config_file_train: str | None,
-        method: Literal["utilise", "trivial"] = "utilise",
-        mode: Literal["last", "next", "closest", "linear_interpolation"] | None = None,
         checkpoint: str | None = None,
         config_file_test: str | None = None,
         temporal_window: int | None = None,
@@ -49,51 +33,39 @@ class Imputation:
         blend_mode: str = "switch",
         center_only_n_keep: int = 2,
     ):
-        self.method = Method(method)
-        self.mode = Mode(mode)
         self.checkpoint = checkpoint
         self.config_file_train = config_file_train
         self.blend_mode = blend_mode
         self.center_only_n_keep = center_only_n_keep
 
-        if self.method == Method.TRIVIAL and self.mode == Mode.NONE:
-            raise ValueError(f"No mode specified. Choose among {[mode.value for mode in Mode]}.")
+        if self.checkpoint is None:
+            raise ValueError("No checkpoint specified.\n")
 
-        if self.method == Method.UTILISE:
-            if self.checkpoint is None:
-                raise ValueError("No checkpoint specified.\n")
+        if self.config_file_train is None:
+            raise ValueError("No training configuration file specified.\n")
 
-            if self.config_file_train is None:
-                raise ValueError("No training configuration file specified.\n")
+        if not os.path.isfile(self.config_file_train):
+            raise FileNotFoundError(
+                f"Cannot find the configuration file used during training: {self.config_file_train}\n"
+            )
 
-            if not os.path.isfile(self.config_file_train):
-                raise FileNotFoundError(
-                    f"Cannot find the configuration file used during training: {self.config_file_train}\n"
-                )
+        if not os.path.isfile(self.checkpoint):
+            raise FileNotFoundError(f"Cannot find the model weights: {self.checkpoint}\n")
 
-            if not os.path.isfile(self.checkpoint):
-                raise FileNotFoundError(f"Cannot find the model weights: {self.checkpoint}\n")
+        # Read the configuration file used during training
+        self.config = config_utils.read_config(self.config_file_train)
 
-            # Read the configuration file used during training
-            self.config = config_utils.read_config(self.config_file_train)
-
-            if self.method == Method.UTILISE and config_file_test is not None:
-                test_config = config_utils.read_config(config_file_test)
-                self.config.utilise.update(test_config.utilise)
-                self.config.data.channels = test_config.data.channels
-                if "include_S1" in test_config.data:
-                    if test_config.data.include_S1 is True:
-                        self.config.data.use_sar = "mix_closest"
-                    else:
-                        self.config.data.use_sar = test_config.data.include_S1
-                elif "use_sar" in test_config.data:
-                    self.config.data.use_sar = test_config.data.use_sar
-            # Extract the temporal window size and the number of channels used during training
-            if temporal_window is not None:
-                self.temporal_window = temporal_window
-            else:
-                self.temporal_window = self.config.data.max_seq_length
-            self.num_channels = num_channels
+        if config_file_test is not None:
+            test_config = config_utils.read_config(config_file_test)
+            # Training config provides base (architecture, method, etc.),
+            # eval config overrides what it specifies (data, mask, etc.)
+            self.config = OmegaConf.merge(test_config, self.config)
+        # Extract the temporal window size and the number of channels used during training
+        if temporal_window is not None:
+            self.temporal_window = temporal_window
+        else:
+            self.temporal_window = self.config.data.max_seq_length
+        self.num_channels = num_channels
 
         if device is not None:
             self.device = device
@@ -103,12 +75,9 @@ class Imputation:
         _ = torch.set_grad_enabled(False)
 
         # Get the model
-        if self.method == Method.UTILISE:
-            self.model, _ = utils.get_model(self.config, self.num_channels)
-            self._resume()
-            self.model.to(self.device).eval()
-        else:
-            self.model = MODELS["ImageSeriesInterpolator"](mode=self.mode.value)
+        self.model, _ = utils.get_model(self.config, self.num_channels)
+        self._resume()
+        self.model.to(self.device).eval()
 
     def impute_sample(
         self,
@@ -131,26 +100,23 @@ class Imputation:
                     batch[key] = batch[key][:, t_start:t_end]
 
         # Impute the given satellite image time series
-        if isinstance(self.model, MODELS["utilise"]):
-            batch = data_utils.to_device(batch, self.device)
-            if return_att:
-                y_pred, att = impute_sequence(
-                    self.model, batch, self.temporal_window,
-                    return_att=True, blend_mode=self.blend_mode,
-                    center_only_n_keep=self.center_only_n_keep,
-                )
-                if att is not None:
-                    att = att.cpu()
-            else:
-                y_pred = impute_sequence(
-                    self.model, batch, self.temporal_window,
-                    return_att=False, blend_mode=self.blend_mode,
-                    center_only_n_keep=self.center_only_n_keep,
-                )
-            batch = data_utils.to_device(batch, "cpu")
-            y_pred = y_pred.cpu()
+        batch = data_utils.to_device(batch, self.device)
+        if return_att:
+            y_pred, att = impute_sequence(
+                self.model, batch, self.temporal_window,
+                return_att=True, blend_mode=self.blend_mode,
+                center_only_n_keep=self.center_only_n_keep,
+            )
+            if att is not None:
+                att = att.cpu()
         else:
-            y_pred = self.model(batch["x"], cloud_mask=batch["masks"], days=batch["days"])
+            y_pred = impute_sequence(
+                self.model, batch, self.temporal_window,
+                return_att=False, blend_mode=self.blend_mode,
+                center_only_n_keep=self.center_only_n_keep,
+            )
+        batch = data_utils.to_device(batch, "cpu")
+        y_pred = y_pred.cpu()
 
         if return_att:
             return batch, y_pred, att

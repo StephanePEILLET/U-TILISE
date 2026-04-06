@@ -35,7 +35,6 @@
             "envFile": "${workspaceFolder}/.env",
             "args": [
                 "./configs/config_run_eval.yaml",
-                "utilise",
                 // "--checkpoint",
                 // "/DATA_10TB/data_rpg/outputs/U-TILISE/results/BGR_NIR_SAR_120_epochs_2025-07-11_16-56/checkpoints/Model_best.pth",
                 // "/DATA_10TB/data_rpg/outputs/U-TILISE/results/ALL_BANDS_120_epochs_2025-07-11_18-05/checkpoints/Model_best.pth",
@@ -57,7 +56,6 @@
             "envFile": "${workspaceFolder}/.env",
             "args": [
                 "./configs/config_run_eval_ALL_SAR_rfm_parcelle.yaml",
-                "utilise",
             ]
         },
         {
@@ -69,7 +67,6 @@
             "envFile": "${workspaceFolder}/.env",
             "args": [
                 "./configs/config_run_inference.yaml",
-                "utilise",
             ]
         },
         {
@@ -81,7 +78,6 @@
             "envFile": "${workspaceFolder}/.env",
             "args": [
                 "./configs/config_run_inference.yaml",
-                "utilise",
             ]
         },
     ]

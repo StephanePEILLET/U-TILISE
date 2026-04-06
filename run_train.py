@@ -141,13 +141,13 @@ def setup_output_directories(config: OmegaConf, logger: logging.Logger) -> None:
 def setup_model(config: OmegaConf, train_dset: torch.utils.data.Dataset, logger: logging.Logger):
     """Setup and configure the model."""
     logger.info("\nModel Architecture\n------------------\n")
-    logger.info("Architecture: %s", config.method.model_type)
+    logger.info("Architecture: U-TILISE")
     input_dim = train_dset.num_channels
     model, args_model = utils.get_model(config, input_dim, logger)
     logger.info("Number of trainable parameters: %d\n", utils.count_model_parameters(model))
     # Log model parameters to file
     config_file = os.path.join(config.output.experiment_folder, "model_config.yaml")
-    config_utils.write_config(OmegaConf.create({config.method.model_type: args_model}), config_file)
+    config_utils.write_config(OmegaConf.create({"utilise": args_model}), config_file)
     # Write model architecture to txt file
     if config.output.plot_model_txt:
         file = os.path.join(config.output.experiment_folder, "model_parameters.txt")
@@ -265,8 +265,6 @@ def main(args: argparse.Namespace) -> None:
 
         test_imputation = Imputation(
             config_file_train=(Path(config.output.experiment_folder) / "config.yaml"),
-            method="utilise",
-            mode=None,
             checkpoint=(Path(config.output.checkpoint_dir) / "Model_best.pth"),
             num_channels=test_dset.num_channels,
             device=device,

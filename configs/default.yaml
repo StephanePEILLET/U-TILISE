@@ -24,9 +24,7 @@ mask:
     fill_value: 1                          # Valeur de remplissage (si fill_type == 'fill_value').
     p_filter: 0.1                          # Probabilité de filtrer un masque (suppression aléatoire de masques).
 
-method:
-    model_type: utilise                    # Type de modèle. ['utilise', 'interpolation']
-    pad_value: 0                           # Valeur de padding pour les séquences de longueur variable.
+pad_value: 0                               # Valeur de padding pour les séquences de longueur variable.
 
 utilise:                                   # Architecture U-TILISE (voir src/models/utilise.py)
     # --- Encodeur / Décodeur spatial (U-Net) ---

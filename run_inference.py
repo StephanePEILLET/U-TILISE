@@ -169,8 +169,6 @@ def inference_one_tile(
     # Get the imputation model
     imputation = Imputation(
         config_file_train=args.config_file,
-        method=args.method,
-        mode=args.mode,
         checkpoint=args.checkpoint,
         config_file_test=args.test_data.test_config,
         # temporal_window=MAX_SAMPLES_ON_GPU,
@@ -387,7 +385,6 @@ if __name__ == "__main__":
     if "test_data" in config:
         temp = OmegaConf.create()
         temp.config_file = args.config_file
-        temp.method = args.method
         temp.test_data = config.test_data
         if "mode" in temp.test_data:
             temp.mode = config.test_data.mode

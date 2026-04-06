@@ -14,7 +14,7 @@ import torch
 import torchinfo
 from omegaconf import DictConfig, OmegaConf
 
-from src.models import MODELS
+from src.models import UTILISE
 from src.models.weight_init import weight_init
 from src.trainer import Trainer
 
@@ -75,7 +75,7 @@ def get_default_model_settings(model, args_model: DictConfig) -> None:
 
     default_parms = {}
 
-    if isinstance(model, MODELS["utilise"]):
+    if isinstance(model, UTILISE):
         default_parms = [
             "encoder_widths",
             "decoder_widths",
@@ -126,36 +126,31 @@ def get_model(config: DictConfig, input_dim: int, logger: logging.Logger | None 
         args_model: dict, dictionary storing the model architecture parameters.
     """
 
-    model_type = config.method.model_type
-
-    if model_type not in MODELS or model_type not in config:
+    if "utilise" not in config:
+        msg = "Missing 'utilise' section in config (architecture hyperparameters).\n"
         if logger is not None:
-            logger.error(f"{model_type} model is not implemented.\n")
+            logger.error(msg)
         else:
-            raise NotImplementedError(f"ERROR: {model_type} model is not implemented.\n")
+            raise ValueError(msg)
 
-    args_model = deepcopy(config[model_type]) if model_type in config else OmegaConf.create()
+    args_model = deepcopy(config.utilise)
+    args_model.input_dim = input_dim
+    args_model.output_dim = input_dim
+    args_model.pad_value = config.get("pad_value", 0)
+    if "-mask" in config.data.channels:
+        args_model.output_dim -= 1
+    if config.data.get("use_sar", False):
+        _sar = config.data.use_sar
+        _has_no_coh = isinstance(_sar, str) and ("_without_coherence" in _sar or "_only_coherence" in _sar)
+        s1_bands = 2 if _has_no_coh else 4
+        use_sar_base = _sar.replace("_without_coherence", "").replace("_only_coherence", "") if isinstance(_sar, str) else _sar
+        if use_sar_base == "asc+desc":
+            args_model.output_dim -= 2 * s1_bands
+        else:
+            args_model.output_dim -= s1_bands
 
-    if model_type == "utilise":
-        args_model.input_dim = input_dim
-        args_model.output_dim = input_dim
-        args_model.pad_value = config.method.pad_value
-        if "-mask" in config.data.channels:
-            args_model.output_dim -= 1
-        if config.data.get("use_sar", False):
-            _sar = config.data.use_sar
-            _has_no_coh = isinstance(_sar, str) and ("_without_coherence" in _sar or "_only_coherence" in _sar)
-            s1_bands = 2 if _has_no_coh else 4
-            use_sar_base = _sar.replace("_without_coherence", "").replace("_only_coherence", "") if isinstance(_sar, str) else _sar
-            if use_sar_base == "asc+desc":
-                args_model.output_dim -= 2 * s1_bands
-            else:
-                args_model.output_dim -= s1_bands
-
-        model = MODELS[model_type](**args_model)
-        model.apply(weight_init)
-    else:
-        model = MODELS[model_type](**args_model)
+    model = UTILISE(**args_model)
+    model.apply(weight_init)
 
     # Collect default values (if not specified in config) in order to log them
     get_default_model_settings(model, args_model)
@@ -369,31 +364,24 @@ def write_model_structure_to_file(
     original = sys.stdout
     sys.stdout = open(filepath, "w", encoding="utf-8")
 
-    if isinstance(model, MODELS["utilise"]):
-        torchinfo.summary(
-            model.cuda(),
-            input_size=[
-                (
-                    batch_size,
-                    seq_length,
-                    in_channels,
-                    *image_size,
-                ),  # input (image time series)
-                (
-                    batch_size,
-                    seq_length,
-                ),  # batch_positions (date sequence of the observations
-                # expressed in #days since the first observation)
-            ],
-            device="cuda",
-            depth=5,
-        )
-    else:
-        torchinfo.summary(
-            model.cuda(),
-            input_size=(batch_size, seq_length, in_channels, *image_size),
-            device="cuda",
-        )
+    torchinfo.summary(
+        model.cuda(),
+        input_size=[
+            (
+                batch_size,
+                seq_length,
+                in_channels,
+                *image_size,
+            ),  # input (image time series)
+            (
+                batch_size,
+                seq_length,
+            ),  # batch_positions (date sequence of the observations
+            # expressed in #days since the first observation)
+        ],
+        device="cuda",
+        depth=5,
+    )
     torch.cuda.empty_cache()
     print("\n\n")
     print(model)

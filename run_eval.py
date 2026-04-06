@@ -204,8 +204,6 @@ class Evaluator:
         # Get the imputation model
         self.imputation = Imputation(
             config_file_train=self.args.config_file,
-            method=self.args.method,
-            mode=args.mode,
             checkpoint=self.args.checkpoint,
             config_file_test=self.args.test_data.test_config,
             # temporal_window=MAX_SAMPLES_ON_GPU,
@@ -349,7 +347,6 @@ if __name__ == "__main__":
     if "test_data" in config:
         temp = OmegaConf.create()
         temp.config_file = args.config_file
-        temp.method = args.method
         temp.test_data = config.test_data
         if "mode" in temp.test_data:
             temp.mode = config.test_data.mode
