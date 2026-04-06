@@ -238,8 +238,8 @@ def main(args: argparse.Namespace) -> None:
 
     from tqdm.auto import tqdm
 
-    from src.metrics.aggregation import CloudRemovalDatasetMetrics
     from src.eval_tools import Imputation
+    from src.metrics.aggregation import CloudRemovalDatasetMetrics
 
     _ = torch.set_grad_enabled(False)
 
@@ -251,37 +251,31 @@ def main(args: argparse.Namespace) -> None:
         subset = 10
 
     for mask_type in ["random_clouds", "random_fully_masked", "consecutive_fully_masked"]:
-        config_modified = OmegaConf.create(config)
-        config_modified.mask.mask_type = mask_type
+        # Propager le mask_type directement au dataset (mask_kwargs est stocké à l'init)
+        test_dset.mask_kwargs.mask_type = mask_type
         test_dataloader = data_utils.get_dataloader(
             test_dset,
-            config_modified,
+            config,
+            batch_size=1,  # impute_sequence suppose B=1
             drop_last=False,
             shuffle=False,
             generator=None,
             subset=subset,
         )
 
-        # MAX_SAMPLES_ON_GPU = 14
         test_imputation = Imputation(
             config_file_train=(Path(config.output.experiment_folder) / "config.yaml"),
             method="utilise",
             mode=None,
             checkpoint=(Path(config.output.checkpoint_dir) / "Model_best.pth"),
-            # temporal_window=MAX_SAMPLES_ON_GPU,
             num_channels=test_dset.num_channels,
             device=device,
         )
 
-        with torch.no_grad():  # Envelopper la boucle
+        compute_metrics.reset()
+        with torch.no_grad():
             for i, batch in enumerate(tqdm(test_dataloader, leave=False)):
-                _, y_pred = test_imputation.impute_sample(
-                    batch,
-                    # t_start=None,
-                    # t_end=None,
-                    # return_all=False,
-                )
-                # Evaluation
+                _, y_pred = test_imputation.impute_sample(batch)
                 compute_metrics.update(
                     target=batch["y"],
                     masks=batch["masks"],
@@ -291,7 +285,7 @@ def main(args: argparse.Namespace) -> None:
             results_test_metrics = compute_metrics.compute()
             with open((Path(config.output.experiment_folder) / f"test_metrics_{mask_type}.json"), "w") as outfile:
                 json.dump(results_test_metrics, outfile, indent=4)
-            print("Test set metrics:")
+            print(f"Test set metrics ({mask_type}):")
             print(results_test_metrics)
 
 
