@@ -146,16 +146,7 @@ def group_by_mode(results: list[dict], base_path: Path) -> dict[str, list[dict]]
     return dict(grouped)
 
 
-def extract_zone_name(filepath: Path) -> str:
-    """Extrait le nom de zone MGRS depuis le nom de fichier.
 
-    Exemple : pred_mgrsc_30TYP_row-2_col-3.tif -> 30TYP
-    """
-    stem = filepath.stem
-    match = re.search(r"pred_mgrsc_(\w+?)_row", stem)
-    if match:
-        return match.group(1)
-    return stem
 
 
 def print_report(results: list[dict], base_path: Path, verbose: bool = False) -> bool:
@@ -186,7 +177,7 @@ def print_report(results: list[dict], base_path: Path, verbose: bool = False) ->
         if errors_in_mode:
             has_errors = True
             total_errors += len(errors_in_mode)
-            defective_zones[mode] = [extract_zone_name(r["filepath"]) for r in errors_in_mode]
+            defective_zones[mode] = [r["filepath"].name for r in errors_in_mode]
             print(f"\n  ✗ {len(errors_in_mode)} fichier(s) avec des ERREURS :")
             for r in errors_in_mode:
                 print(f"\n    Fichier : {r['filepath'].relative_to(base_path)}")
