@@ -13,3 +13,4 @@ lightning_logs/*
 **/checkpoints/
 .data/CIRCA_patches_datasets_with_transforms.csv
 .data/CIRCA_patches_datasets_with_transforms.json.DS_Store
+.env
