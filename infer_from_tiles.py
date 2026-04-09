@@ -2,8 +2,11 @@ import argparse
 import gc
 import json
 import os
+import shutil
 import sys
 import tempfile
+import time
+import traceback
 from pathlib import Path
 
 import numpy as np
@@ -24,81 +27,111 @@ from lib.eval_tools import Imputation
 
 MAX_PIXEL_INTENSITY_USED_FOR_REVERSE = 10_000
 
-
-def _worker_init_fn(worker_id):
-    """Propagate file_system sharing strategy to spawned DataLoader workers.
-
-    With 'spawn' start method, workers don't inherit the parent's sharing
-    strategy and default to file_descriptor (POSIX shm → /dev/shm).
-    Also redirect tempfile to disk-backed storage (not tmpfs).
-    """
-    torch.multiprocessing.set_sharing_strategy('file_system')
-    # Ensure temp files go to the same disk-backed dir as the parent
-    _tmp = os.environ.get("TMPDIR", None)
-    if _tmp:
-        tempfile.tempdir = _tmp
-
+MAX_WRITE_RETRIES = 3
+WRITE_RETRY_DELAY_S = 2
+GC_INTERVAL = 50
 
 GDAL_OPTIONS = {
     "compress": "LZW",
     "tiled": True,
     "blockxsize": 256,
     "blockysize": 256,
-    "bigtiff": "YES",  # Force BigTIFF to avoid issues with file size limits and re-writes
-    "num_threads": "1",  # Restricted to 1 to prevent issues with locking/multiprocessing on clusters
-    "interleave": "band",  # Band interleave for QGIS compatibility (easier band-by-band reading)
+    "bigtiff": "YES",
+    "num_threads": "1",
+    "interleave": "band",
 }
 
 
-def _handle_folders(config: DictConfig):
-    """
-    Handle folders paths and output    # 1. Commit et push les changements locaux
-    git add infer_from_tiles.py dataloader_CIRCA/datasets/dataset_from_files.py
-    git commit -m "fix: keep_all_dates=True pour inférence tuiles + validation bandes + use_sar + shared memory"
-    git push origin jzay
-
-    # 2. Sur jzay, faire un git pull puis supprimer les fichiers corrompus et relancer directories based on the provided configuration.
-    """
-    # Recupération chemins depuis la patie test_data de la config
-    data_optique = Path(config.test_data.get("data_optique", None))
-    assert data_optique is not None, "Le chemin vers les données optiques doit être spécifié dans la configuration de test."
-    data_radar = Path(config.test_data.get("data_radar", None))
-    assert data_radar is not None, "Le chemin vers les données radar doit être spécifié dans la configuration de test."
-    # Répertoire optionnel contenant les masques synthétiques (aléatoire/consécutif)
-    data_masks_val = config.test_data.get("data_masks", None)
-    data_masks = Path(data_masks_val) if data_masks_val is not None else None
-    # Répertoires de sortie
-    output_folder = Path(config.output.save_dir)
-    output_folder.mkdir(parents=True, exist_ok=True)
-    name_experiment = Path(config.test_data.test_config).parent.name
-    output_folder_inferences = output_folder / name_experiment
-    output_folder_inferences.mkdir(parents=True, exist_ok=True)
-    return Path(data_optique), Path(data_radar), data_masks, Path(output_folder_inferences)
+def _worker_init_fn(worker_id):
+    torch.multiprocessing.set_sharing_strategy('file_system')
+    _tmp = os.environ.get("TMPDIR", None)
+    if _tmp:
+        tempfile.tempdir = _tmp
 
 
-def _prepare_patch_for_writing(y_pred, batch, converter, output_type):
-    """Effectue la dénormalisation, la concaténation et le formatage du patch."""
-    # Reverse normalization
+def _validate_tif(path: Path) -> tuple[bool, str]:
+    if not path.exists():
+        return False, "File does not exist"
+    if path.stat().st_size == 0:
+        return False, "File is empty (0 bytes)"
+    try:
+        with rasterio.open(path) as src:
+            _ = src.profile
+            src.read(1, window=Window(0, 0, min(256, src.width), min(256, src.height)))
+        return True, "OK"
+    except Exception as e:
+        return False, str(e)
+
+
+def _safe_unlink(path: Path, label: str = "") -> None:
+    try:
+        if path.exists():
+            path.unlink()
+            tag = f"[{label}]" if label else ""
+            print(f"  {tag} Deleted: {path.name}")
+    except Exception as e:
+        print(f"  Failed to delete {path.name}: {e}")
+
+
+def _write_patch_with_retry(dst, final_patch: np.ndarray, window: Window) -> bool:
+    for attempt in range(1, MAX_WRITE_RETRIES + 1):
+        try:
+            dst.write(final_patch, window=window)
+            return True
+        except Exception:
+            if attempt < MAX_WRITE_RETRIES:
+                time.sleep(WRITE_RETRY_DELAY_S)
+    return False
+
+
+def _prepare_patch_keep_all(y_pred, batch, converter, output_type):
     denorm_pred = SentinelDataProcessor.reverse_process_MS(
         y_pred, intensity_max=MAX_PIXEL_INTENSITY_USED_FOR_REVERSE
     )
-
-    # 1. Get prediction (T, 10, h, w) on CPU
     pred_patch = denorm_pred.squeeze(axis=0).cpu().numpy()
-
-    # 2. Get original bands 11 & 12 (T, 2, h, w) from the batch
     original_bands = batch["original_masks"].squeeze(axis=0).cpu().numpy()
-
-    # 3. Concatenate (T, 12, h, w)
     full_patch = np.concatenate([pred_patch, original_bands], axis=1)
-
-    # 4. Reshape to flattened channels (T*12, h, w)
     full_patch = full_patch.reshape(
         full_patch.shape[0] * full_patch.shape[1], full_patch.shape[2], full_patch.shape[3]
     )
-
-    # 5. Convert to output type (e.g., uint16)
     return converter.from_type("float32").to_type(output_type).convert(full_patch)
+
+
+def _prepare_patch_filtered(y_pred, batch, converter, output_type):
+    full_s2 = batch["full_s2"].squeeze(axis=0).cpu().numpy()
+    full_s2_data, s2_masks = full_s2[:, :10, ...], full_s2[:, 10:, ...]
+    idx_kept = batch["idx_kept"].squeeze(axis=0).cpu().numpy()
+    assert len(idx_kept) == y_pred.shape[1], (
+        f"Mismatch: {len(idx_kept)} kept dates vs {y_pred.shape[1]} output."
+    )
+    denorm_pred = SentinelDataProcessor.reverse_process_MS(
+        y_pred, intensity_max=MAX_PIXEL_INTENSITY_USED_FOR_REVERSE
+    )
+    pred_patch = denorm_pred.squeeze(axis=0).cpu().numpy()
+    full_s2_data[idx_kept, ...] = pred_patch
+    full_patch = np.concatenate([full_s2_data, s2_masks], axis=1)
+    full_patch = full_patch.reshape(
+        full_patch.shape[0] * full_patch.shape[1],
+        full_patch.shape[2],
+        full_patch.shape[3],
+    )
+    return converter.from_type("float32").to_type(output_type).convert(full_patch)
+
+
+def _save_manifest(output_dir: Path, results: dict) -> None:
+    manifest_path = output_dir / "inference_manifest.json"
+    existing = {}
+    if manifest_path.exists():
+        try:
+            with open(manifest_path) as f:
+                existing = json.load(f)
+        except Exception:
+            pass
+    existing.update(results)
+    tmp = manifest_path.with_suffix(".json.tmp")
+    with open(tmp, "w") as f:
+        json.dump(existing, f, indent=2, default=str)
+    tmp.replace(manifest_path)
 
 
 def inference_one_tile(
@@ -108,36 +141,35 @@ def inference_one_tile(
     image_size: list,
     pin_memory: bool,
     num_workers: int,
-    overlap: int = 0,
+    overlap: int,
+    data_optique: Path,
+    data_radar: Path,
+    data_masks: Path | None,
+    output_folder_inferences: Path,
 ):
-    """
-    Perform inference on a single MGRS-C tile using the provided imputation model and configuration.
-    """
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    data_optique, data_radar, data_masks, output_folder_inferences = _handle_folders(config)
     out_filename = output_folder_inferences / f"pred_mgrsc_{mgrs25}.tif"
+    tmp_filename = output_folder_inferences / f".tmp_pred_mgrsc_{mgrs25}.tif"
 
     if out_filename.exists():
-        # Vérifier que le fichier est lisible et non corrompu (pas seulement la taille)
-        try:
-            with rasterio.open(out_filename) as src:
-                # Tenter de lire le premier bloc pour valider la compression LZW
-                src.read(1, window=Window(0, 0, min(256, src.width), min(256, src.height)))
-            print(f"Predictions for MGRS-C area {mgrs25} already exist and are readable. Skipping...")
-            return
-        except Exception as e:
-            print(f"Predictions for MGRS-C area {mgrs25} exist but are corrupted: {e}\n  Re-processing...")
-            out_filename.unlink()
+        ok, msg = _validate_tif(out_filename)
+        if ok:
+            print(f"[{mgrs25}] Already exists and valid. Skipping.")
+            return "skipped", 0, 0, 0
+        print(f"[{mgrs25}] Existing file corrupted ({msg}). Re-processing...")
+        _safe_unlink(out_filename, "cleanup")
+
+    _safe_unlink(tmp_filename, "stale")
 
     if (config.mask.mask_type == "random_fully_masked" or config.mask.mask_type == "consecutive_fully_masked"):
         if config.test_data.data_masks is None:
-            raise ValueError(f"Mask type {config.mask.mask_type} requires a data_masks directory in the configuration.")
-        mask_type = "fully_masked"  # Nécessaire pour que le dataset applique les masques de reconstruction (aléatoires ou consécutifs) au lieu des masques d'origine
-        keep_all_dates = False  # On filtre les dates et on garde seulement les dates non nuageuses et les dates masquées.
+            raise ValueError(f"Mask type {config.mask.mask_type} requires a data_masks directory.")
+        mask_type = "fully_masked"
+        keep_all_dates = False
     else:
-        mask_type = "original_masks"  # Utilise les masques d'origine (nuages + masques de reconstruction) fournis dans les données d'entraînement
-        keep_all_dates = True  # En mode inférence, ne pas filtrer les dates nuageuses (sinon T varie par patch et ne correspond plus au nombre de bandes du fichier de sortie)
+        mask_type = "original_masks"
+        keep_all_dates = True
 
     ds = Dataset_from_files(
         mgrsc=mgrs25,
@@ -152,131 +184,161 @@ def inference_one_tile(
         keep_all_dates=keep_all_dates,
     )
 
-    # ds.keep_all_dates = True
     meta = ds.s2_meta.copy()
     output_type = meta["dtype"]
-    mgrs25_dataloader = DataLoader(ds, batch_size=1, shuffle=False, pin_memory=pin_memory, num_workers=num_workers, worker_init_fn=_worker_init_fn)
+    mgrs25_dataloader = DataLoader(
+        ds, batch_size=1, shuffle=False, pin_memory=pin_memory,
+        num_workers=num_workers, worker_init_fn=_worker_init_fn,
+    )
 
-    # Get the imputation model
     imputation = Imputation(
         config_file_train=args.config_file,
         method=args.method,
         mode=args.mode,
         checkpoint=args.checkpoint,
         config_file_test=args.test_data.test_config,
-        # temporal_window=MAX_SAMPLES_ON_GPU,
         num_channels=ds.num_channels,
         device=device,
     )
     converter = TypeConverter()
     expected_bands = meta["count"]
 
-    write_errors = 0
     patches_written = 0
+    patches_skipped_nodata = 0
+    patches_failed = 0
+    success = False
 
-    with rasterio.open(out_filename, "w", **meta, **GDAL_OPTIONS) as dst:
-        with torch.no_grad():
-            for batch_in in tqdm(mgrs25_dataloader, leave=False, total=len(ds), desc="Patches"):
-                batch, y_pred = imputation.impute_sample(batch_in)
-
-                # Unpacking direct de la fenêtre pour gagner des variables
-                x, y, w, h = batch["window"][0].item(), batch["window"][1].item(), batch["window"][2].item(), batch["window"][3].item()
-
-                if keep_all_dates:
-                    # Appel de la fonction utilitaire
-                    final_patch = _prepare_patch_for_writing(y_pred, batch, converter, output_type)
-                    # En mode inférence, le nombre de bandes doit être constant et égal à T*12 (T dates, 12 bandes par date)
-                else:
-                    full_s2 = batch["full_s2"].squeeze(axis=0).cpu().numpy()  # (T_all, 12, h, w) raw values
-                    full_s2_data, s2_masks = full_s2[:, :10, ...], full_s2[:, 10:, ...]  # Séparer les données S2 (raw) des masques (raw)
-                    idx_kept = batch["idx_kept"].squeeze(axis=0).cpu().numpy()  # (T_kept,)
-                    assert len(idx_kept) == y_pred.shape[1], f"Mismatch between number of kept dates ({len(idx_kept)}) and model output time dimension ({y_pred.shape[1]})."
-
-                    denorm_pred = SentinelDataProcessor.reverse_process_MS(
-                        y_pred, intensity_max=MAX_PIXEL_INTENSITY_USED_FOR_REVERSE
+    try:
+        with rasterio.open(tmp_filename, "w", **meta, **GDAL_OPTIONS) as dst:
+            with torch.no_grad():
+                for patch_idx, batch_in in enumerate(tqdm(
+                    mgrs25_dataloader, leave=False, total=len(ds),
+                    desc=f"Patches [{mgrs25}]",
+                )):
+                    x, y, w, h = (
+                        batch_in["window"][0].item(),
+                        batch_in["window"][1].item(),
+                        batch_in["window"][2].item(),
+                        batch_in["window"][3].item(),
                     )
-                    # Get prediction (T_kept, 10, h, w) on CPU — denormalized to [0, 10000]
-                    pred_patch = denorm_pred.squeeze(axis=0).cpu().numpy()
 
-                    # Restore the original temporal order: predictions for kept dates,
-                    # raw S2 data (same scale) for dropped dates (really cloudy)
-                    full_s2_data[idx_kept, ...] = pred_patch
+                    s2_input = batch_in["x"][:, :, :10]
+                    if s2_input.abs().sum().item() == 0:
+                        patches_skipped_nodata += 1
+                        continue
 
-                    # Concatenate (T_all, 12, h, w) — raw mask values preserved
-                    full_patch = np.concatenate([full_s2_data, s2_masks], axis=1)
+                    try:
+                        batch, y_pred = imputation.impute_sample(batch_in)
+                    except RuntimeError as e:
+                        print(f"  [GPU ERROR] {mgrs25} patch ({x},{y}): {e}")
+                        torch.cuda.empty_cache()
+                        patches_failed += 1
+                        continue
 
-                    # 4. Reshape to flattened channels (T*12, h, w)
-                    final_patch = full_patch.reshape(
-                        full_patch.shape[0] * full_patch.shape[1], full_patch.shape[2], full_patch.shape[3]
-                    )
-                    # 5. Convert to output type (e.g., uint16)
-                    final_patch = converter.from_type("float32").to_type(output_type).convert(final_patch)
+                    try:
+                        if keep_all_dates:
+                            final_patch = _prepare_patch_keep_all(y_pred, batch, converter, output_type)
+                        else:
+                            final_patch = _prepare_patch_filtered(y_pred, batch, converter, output_type)
+                    except Exception as e:
+                        print(f"  [POST-PROCESS ERROR] {mgrs25}: {e}")
+                        patches_failed += 1
+                        del y_pred
+                        continue
 
-                # Validation du nombre de bandes AVANT écriture
-                if final_patch.shape[0] != expected_bands:
-                    write_errors += 1
-                    if write_errors == 1:
+                    if final_patch.shape[0] != expected_bands:
                         print(
-                            f"\n⚠ BAND COUNT MISMATCH pour {mgrs25} : patch a {final_patch.shape[0]} bandes "
-                            f"mais le fichier attend {expected_bands}. "
-                            f"Vérifiez que keep_all_dates=True est actif (T doit être constant par patch)."
+                            f"  [BAND MISMATCH] {mgrs25}: got {final_patch.shape[0]} "
+                            f"expected {expected_bands}."
                         )
-                    continue
+                        patches_failed += 1
+                        del final_patch
+                        continue
 
-                try:
-                    dst.write(final_patch, window=Window(x, y, w, h))
-                    patches_written += 1
-                except Exception as e:
-                    write_errors += 1
-                    if write_errors <= 3:
-                        print(f"Error writing patch at x={x}, y={y}: {e}")
+                    if _write_patch_with_retry(dst, final_patch, Window(x, y, w, h)):
+                        patches_written += 1
+                    else:
+                        print(f"  [WRITE FAIL] {mgrs25} patch ({x},{y}) after {MAX_WRITE_RETRIES} retries.")
+                        patches_failed += 1
 
-    if write_errors > 0:
-        print(f"\n✗ ÉCHEC pour {mgrs25} : {write_errors} patchs en erreur, {patches_written} écrits.")
-        if patches_written == 0:
-            print(f"  Fichier vide supprimé : {out_filename.as_posix()}")
-            out_filename.unlink(missing_ok=True)
-        print("-----------------------------------------------------")
+                    del final_patch, y_pred
+
+                    if patch_idx > 0 and patch_idx % GC_INTERVAL == 0:
+                        gc.collect()
+
+        ok, msg = _validate_tif(tmp_filename)
+        if not ok:
+            print(f"[{mgrs25}] Post-write validation FAILED: {msg}")
+            _safe_unlink(tmp_filename, "invalid")
+            return "failed", patches_written, patches_skipped_nodata, patches_failed
+
+        try:
+            tmp_filename.replace(out_filename)
+            success = True
+        except OSError as e:
+            print(f"[{mgrs25}] Atomic rename failed ({e}), falling back to copy.")
+            try:
+                shutil.copy2(str(tmp_filename), str(out_filename))
+                ok2, msg2 = _validate_tif(out_filename)
+                if ok2:
+                    _safe_unlink(tmp_filename, "rename-fallback")
+                    success = True
+                else:
+                    print(f"[{mgrs25}] Copied file invalid: {msg2}")
+                    _safe_unlink(out_filename, "bad-copy")
+                    _safe_unlink(tmp_filename, "bad-copy")
+            except Exception as e2:
+                print(f"[{mgrs25}] Fallback copy failed: {e2}")
+                _safe_unlink(tmp_filename, "fallback-fail")
+
+    except Exception as e:
+        print(f"[{mgrs25}] UNEXPECTED ERROR: {e}")
+        traceback.print_exc()
+        _safe_unlink(tmp_filename, "crash")
+    finally:
+        del mgrs25_dataloader
+        del ds
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+    status = "ok" if success else "failed"
+    if success:
+        parts = [f"{patches_written} written"]
+        if patches_skipped_nodata > 0:
+            parts.append(f"{patches_skipped_nodata} nodata-skipped")
+        if patches_failed > 0:
+            parts.append(f"{patches_failed} failed")
+            print(f"[{mgrs25}] COMPLETED WITH WARNINGS: {', '.join(parts)}.")
+        else:
+            print(f"[{mgrs25}] OK — {', '.join(parts)}.")
+        print(f"  -> {out_filename.as_posix()}")
     else:
-        print(f"\n✓ Predictions for MGRS-C area {mgrs25} saved successfully ({patches_written} patches).")
-        print(f"  File path: {out_filename.as_posix()}")
-        print("-----------------------------------------------------")
+        print(f"[{mgrs25}] FAILED — output file not produced.")
+    print("-" * 60)
 
-    del mgrs25_dataloader
-    del ds
-    gc.collect()
+    return status, patches_written, patches_skipped_nodata, patches_failed
 
 
 def main(
     args: argparse.Namespace,
     args_test_data: DictConfig,
 ):
-    """
-    Flux des configurations :
-    - args.config_file     : chemin vers le fichier de config d'inférence (config_run_infer_from_tiles.yaml)
-                             Il est aussi passé comme 'config_file_train' à Imputation (convention héritée de run_eval).
-    - args.test_data       : section test_data de la config d'inférence (data_optique, data_radar, test_tiles, etc.)
-    - args.test_data.test_config : chemin vers la config d'entraînement du modèle.
-    - args_test_data       : section 'data' de la config d'entraînement (channels, use_sar, etc.)
-    """
     _ = torch.set_grad_enabled(False)
     if not os.path.isfile(args.config_file):
         raise FileNotFoundError(f"Cannot find the configuration file used during training: {args.config_file}\n")
-    # Read config file (inference config) — contient test_data, mask, output, misc, etc.
     config = config_utils.read_config(args.config_file)
-    # Manage old config settings
+
     if "include_S1" in args_test_data:
         if args_test_data.include_S1 is True:
             config.data.use_sar = "mix_closest"
         else:
             config.data.use_sar = False
         args_test_data.pop("include_S1")
-    # Merge les paramètres 'data' de la config d'entraînement dans la config d'inférence
+
     config.data.update(args_test_data)
-    # Evaluate the entire image sequence (dans le cas de l'evaluation)
     config.data.max_seq_length = None
 
-    # --- Valeurs par défaut pour les sections optionnelles ---
     if "misc" not in config:
         config.misc = OmegaConf.create({"num_workers": 0, "pin_memory": False})
     if "output" not in config:
@@ -285,64 +347,56 @@ def main(
             "Ajoutez :\n  output:\n    save_dir: /chemin/vers/repertoire/sortie"
         )
 
-    # 3. Optimisation pour multiprocessing (num_workers > 0)
-    # Rasterio/GDAL est thread-safe mais peut avoir des problèmes avec fork()
-    # "spawn" est plus sûr mais plus lent au démarrage.
-    # Pour Unix "fork" est plus standard mais peut causer des verrous sur les fichiers ouverts par GDAL
     try:
         mp.set_start_method("spawn", force=True)
     except RuntimeError:
         pass
 
-    # ==============================================================================
-    # FIX POUR L'ERREUR "Bus error / out of shared memory" SUR SLURM
-    # ==============================================================================
-    # 1. Stratégie file_system : utilise des fichiers temporaires au lieu de /dev/shm
     mp.set_sharing_strategy('file_system')
-    # 2. Rediriger les fichiers temporaires vers un stockage disque (pas un tmpfs/ramdisk)
-    #    Sur Jean Zay : $JOBSCRATCH ou $SCRATCH sont sur disque, /tmp est un tmpfs en RAM
     for scratch_var in ("JOBSCRATCH", "SCRATCH", "SLURM_TMPDIR"):
         scratch_dir = os.environ.get(scratch_var)
         if scratch_dir and os.path.isdir(scratch_dir):
             os.environ["TMPDIR"] = scratch_dir
             tempfile.tempdir = scratch_dir
-            print(f"[shared memory fix] TMPDIR redirigé vers ${scratch_var}={scratch_dir}")
+            print(f"[shared memory fix] TMPDIR -> ${scratch_var}={scratch_dir}")
             break
     else:
-        print("[shared memory fix] Aucun répertoire scratch trouvé, TMPDIR inchangé.")
-    # ==============================================================================
+        print("[shared memory fix] No scratch dir found, TMPDIR unchanged.")
 
-    image_size = [256, 256]
-    overlap = 0
+    image_size = config.misc.get("image_size", [256, 256])
+    if isinstance(image_size, int):
+        image_size = [image_size, image_size]
+    overlap = config.misc.get("overlap", 0)
 
-    # CONFIGURATION CRITIQUE pour les workers sur stockage réseau :
-    # 1. Empêche GDAL d'essayer d'écrire des fichiers de métadonnées (.aux.xml)
     os.environ["GDAL_PAM_ENABLED"] = "NO"
-    # 2. Empêche GDAL de scanner tout le dossier à chaque ouverture
     os.environ["GDAL_DISABLE_READDIR_ON_OPEN"] = "EMPTY_DIR"
-    # 3. Limit GDAL Cache to avoid OOM on write or heavy flushing issues
-    os.environ["GDAL_CACHEMAX"] = "512"  # 512 MB
+    os.environ["GDAL_CACHEMAX"] = "512"
 
-    # Pour l'inférence, limiter les workers pour éviter la saturation de la mémoire partagée.
-    # Chaque worker sérialise des tenseurs volumineux (T×14×256×256) vers le parent.
-    num_workers = min(config.misc.num_workers, 2)  # Max 2 workers en inférence
-    # Sécuriser GDAL pour les environnements multithread/multiprocess
-    # Removing VSI_CACHE as it might cause issues with high-throughput writing or network drives ("dirty block" errors)
-    # os.environ["VSI_CACHE"] = "TRUE"
-    # os.environ["VSI_CACHE_SIZE"] = "100000000"  # 100MB
-
-    # Désactiver pin_memory si multiprocessing complexe cause des problèmes
-    # ou si la RAM est limite
+    num_workers = min(config.misc.num_workers, 2)
+    print(f"[config] image_size={image_size}, overlap={overlap}, num_workers={num_workers}")
     pin_memory = False if num_workers > 0 else torch.cuda.is_available()
 
-    test_tiles_file = Path(config.test_data.get("test_tiles", None))  # JSON file containing the list of MGRS-C tiles to evaluate on
-    assert test_tiles_file is not None, "Le chemin vers le fichier JSON contenant les MGRS-C à évaluer doit être spécifié dans la configuration de test."
+    data_optique = Path(config.test_data.get("data_optique", None))
+    assert data_optique is not None
+    data_radar = Path(config.test_data.get("data_radar", None))
+    assert data_radar is not None
+    data_masks_val = config.test_data.get("data_masks", None)
+    data_masks = Path(data_masks_val) if data_masks_val is not None else None
+    output_folder = Path(config.output.save_dir)
+    output_folder.mkdir(parents=True, exist_ok=True)
+    name_experiment = Path(config.test_data.test_config).parent.name
+    output_folder_inferences = output_folder / name_experiment
+    output_folder_inferences.mkdir(parents=True, exist_ok=True)
+
+    test_tiles_file = Path(config.test_data.get("test_tiles", None))
+    assert test_tiles_file is not None
     with open(test_tiles_file, encoding="utf-8") as f:
         test_tiles = json.load(f)
 
-    # load_dataset = config.output.get("tiles_window_file", None)
+    total = {"ok": 0, "failed": 0, "skipped": 0, "patches_written": 0, "patches_skipped_nodata": 0, "patches_failed": 0}
+
     for mgrs25 in tqdm(test_tiles, desc="MGRS-C areas"):
-        inference_one_tile(
+        status, pw, psn, pf = inference_one_tile(
             args=args,
             mgrs25=mgrs25,
             image_size=image_size,
@@ -350,14 +404,37 @@ def main(
             pin_memory=pin_memory,
             num_workers=num_workers,
             overlap=overlap,
+            data_optique=data_optique,
+            data_radar=data_radar,
+            data_masks=data_masks,
+            output_folder_inferences=output_folder_inferences,
         )
-    print("Evaluation completed.")
+        total[status] += 1
+        total["patches_written"] += pw
+        total["patches_skipped_nodata"] += psn
+        total["patches_failed"] += pf
 
-    # Sauvegarder la config d'inférence utilisée dans le dossier de sortie
-    _, _, _, output_folder_inferences = _handle_folders(config)
+        _save_manifest(output_folder_inferences, {
+            mgrs25: {
+                "status": status,
+                "patches_written": pw,
+                "patches_skipped_nodata": psn,
+                "patches_failed": pf,
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            }
+        })
+
+    print("\n" + "=" * 60)
+    print("INFERENCE SUMMARY")
+    print(f"  Tiles OK: {total['ok']} | Failed: {total['failed']} | Skipped (existing): {total['skipped']}")
+    print(f"  Patches written: {total['patches_written']} | "
+          f"Nodata-skipped: {total['patches_skipped_nodata']} | "
+          f"Failed: {total['patches_failed']}")
+    print("=" * 60)
+
     config_dump_path = output_folder_inferences / "config_inference.yaml"
     OmegaConf.save(config, config_dump_path)
-    print(f"Config d'inférence sauvegardée : {config_dump_path}")
+    print(f"Config saved: {config_dump_path}")
 
 
 if __name__ == "__main__":
@@ -380,7 +457,6 @@ if __name__ == "__main__":
             del temp.test_data.checkpoint
         args = temp
 
-    # Extract settings w.r.t. test data
     if args.test_data.test_config is not None:
         if not os.path.isfile(args.test_data.test_config):
             raise FileNotFoundError(f"Cannot find the test configuration file: {args.test_data.test_config}\n")
@@ -395,4 +471,3 @@ if __name__ == "__main__":
         args_test_data.mode = args.test_data.mode
 
     main(args, args_test_data)
-    # EOF
