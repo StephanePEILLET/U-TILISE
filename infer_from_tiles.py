@@ -44,10 +44,9 @@ GDAL_OPTIONS = {
     "tiled": True,
     "blockxsize": 256,
     "blockysize": 256,
-    "sparse_ok": True,  # Was "SPARSE_MODE" (invalid), recommended True for large files
     "bigtiff": "YES",  # Force BigTIFF to avoid issues with file size limits and re-writes
     "num_threads": "1",  # Restricted to 1 to prevent issues with locking/multiprocessing on clusters
-    "interleave": "pixel",  # CRITICAL: PIXEL interleave prevents massive seeking when writing multi-band tiles
+    "interleave": "band",  # Band interleave for QGIS compatibility (easier band-by-band reading)
 }
 
 
@@ -120,13 +119,15 @@ def inference_one_tile(
     out_filename = output_folder_inferences / f"pred_mgrsc_{mgrs25}.tif"
 
     if out_filename.exists():
-        # Vérifier la taille du fichier : si < 10 KB, c'est probablement un fichier corrompu d'un run précédent
-        file_size_kb = out_filename.stat().st_size / 1024
-        if file_size_kb > 10:
-            print(f"Predictions for MGRS-C area {mgrs25} already exist ({file_size_kb:.0f} KB). Skipping...")
+        # Vérifier que le fichier est lisible et non corrompu (pas seulement la taille)
+        try:
+            with rasterio.open(out_filename) as src:
+                # Tenter de lire le premier bloc pour valider la compression LZW
+                src.read(1, window=Window(0, 0, min(256, src.width), min(256, src.height)))
+            print(f"Predictions for MGRS-C area {mgrs25} already exist and are readable. Skipping...")
             return
-        else:
-            print(f"Predictions for MGRS-C area {mgrs25} exist but are likely corrupted ({file_size_kb:.1f} KB). Re-processing...")
+        except Exception as e:
+            print(f"Predictions for MGRS-C area {mgrs25} exist but are corrupted: {e}\n  Re-processing...")
             out_filename.unlink()
 
     if (config.mask.mask_type == "random_fully_masked" or config.mask.mask_type == "consecutive_fully_masked"):
@@ -172,13 +173,6 @@ def inference_one_tile(
 
     write_errors = 0
     patches_written = 0
-
-    # Test de la modification afin de pouvoir passer les inférences en interleave à la place de pixel (pour faciliter la lecture dans QGIS et éviter les problèmes de lecture des bandes dans certains logiciels SIG)
-    dictionnaire = {
-        'interleave': 'Band',
-        'tiled': True
-    }
-    GDAL_OPTIONS.update(dictionnaire)
 
     with rasterio.open(out_filename, "w", **meta, **GDAL_OPTIONS) as dst:
         with torch.no_grad():
