@@ -5,7 +5,6 @@
 #SBATCH --gres=gpu:1                 # nombre de GPU (1/4 des GPU)
 #SBATCH --cpus-per-task=10           # nombre de coeurs CPU par tache
 #SBATCH --hint=nomultithread         # hyperthreading desactive
-#SBATCH --mem=160G                   # memoire RAM totale (evite OOM)
 #SBATCH --time=20:00:00              # temps maximum d'execution demande (HH:MM:SS)
 #SBATCH -e /lustre/fsn1/worksf/projects/rech/tel/uug84ql/cloud_reconstruction/logs/infer_v3_combined_rfm-%j.out
 #SBATCH -o /lustre/fsn1/worksf/projects/rech/tel/uug84ql/cloud_reconstruction/logs/infer_v3_combined_rfm-%j.out

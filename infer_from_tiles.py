@@ -3,6 +3,7 @@ import gc
 import json
 import os
 import shutil
+import signal
 import sys
 import tempfile
 import time
@@ -30,6 +31,17 @@ MAX_PIXEL_INTENSITY_USED_FOR_REVERSE = 10_000
 MAX_WRITE_RETRIES = 3
 WRITE_RETRY_DELAY_S = 2
 GC_INTERVAL = 50
+
+# Mutable container for the SLURM stop flag (avoids global statement).
+# Set to True by signal handlers so the tile loop exits cleanly.
+_stop_flag: dict[str, bool] = {"requested": False}
+
+
+def _handle_stop_signal(signum, _frame) -> None:
+    sig_name = signal.Signals(signum).name
+    print(f"\n[SIGNAL] Received {sig_name}. Will stop cleanly after the current tile.", flush=True)
+    _stop_flag["requested"] = True
+
 
 GDAL_OPTIONS = {
     "compress": "LZW",
@@ -190,6 +202,9 @@ def inference_one_tile(
     mgrs25_dataloader = DataLoader(
         ds, batch_size=1, shuffle=False, pin_memory=pin_memory,
         num_workers=num_workers, worker_init_fn=_worker_init_fn,
+        prefetch_factor=1 if num_workers > 0 else None,
+        persistent_workers=False,
+        timeout=180 if num_workers > 0 else 0,
     )
 
     if imputation is None:
@@ -225,7 +240,9 @@ def inference_one_tile(
                     )
 
                     s2_input = batch_in["x"][:, :, :10]
-                    if s2_input.abs().sum().item() == 0:
+                    is_nodata = s2_input.abs().sum().item() == 0
+                    del s2_input
+                    if is_nodata:
                         patches_skipped_nodata += 1
                         del batch_in
                         continue
@@ -271,6 +288,13 @@ def inference_one_tile(
                         gc.collect()
                         if torch.cuda.is_available():
                             torch.cuda.empty_cache()
+                            alloc_gb = torch.cuda.memory_allocated() / 1e9
+                            reserv_gb = torch.cuda.memory_reserved() / 1e9
+                            print(
+                                f"  [GPU MEM @{patch_idx}] "
+                                f"allocated={alloc_gb:.1f}GB reserved={reserv_gb:.1f}GB",
+                                flush=True,
+                            )
 
         ok, msg = _validate_tif(tmp_filename)
         if not ok:
@@ -353,6 +377,12 @@ def main(
             "Ajoutez :\n  output:\n    save_dir: /chemin/vers/repertoire/sortie"
         )
 
+    # Register SLURM signal handlers: SIGUSR1 is sent by Jean Zay ~60s before the
+    # time limit; SIGTERM is sent on preemption. Both set _stop_flag so the loop
+    # finishes the current tile cleanly before exiting.
+    signal.signal(signal.SIGUSR1, _handle_stop_signal)
+    signal.signal(signal.SIGTERM, _handle_stop_signal)
+
     try:
         mp.set_start_method("spawn", force=True)
     except RuntimeError:
@@ -424,6 +454,10 @@ def main(
     )
 
     for mgrs25 in tqdm(test_tiles, desc="MGRS-C areas"):
+        if _stop_flag["requested"]:
+            print(f"[STOP] Signal received — stopping before tile {mgrs25}.", flush=True)
+            break
+
         status, pw, psn, pf = inference_one_tile(
             args=args,
             mgrs25=mgrs25,
