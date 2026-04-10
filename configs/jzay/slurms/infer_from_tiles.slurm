@@ -3,8 +3,9 @@
 #SBATCH --nodes=1                    # on demande 2 noeuds
 #SBATCH --ntasks-per-node=1          # avec 2 tache par noeud (= nombre de GPU ici)
 #SBATCH --gres=gpu:1                 # nombre de GPU (1/4 des GPU)
-#SBATCH --cpus-per-task=36           # nombre de coeurs CPU par tache (1/4 du noeud 4-GPU)
+#SBATCH --cpus-per-task=10           # nombre de coeurs CPU par tache
 #SBATCH --hint=nomultithread         # hyperthreading desactive
+#SBATCH --mem=160G                   # memoire RAM totale demandee
 ##SBATCH --time=20:00:00             # temps maximum d'execution demande (HH:MM:SS)
 #SBATCH --time=00:30:00             # temps maximum d'execution demande (HH:MM:SS)
 #SBATCH --qos=qos_gpu-dev

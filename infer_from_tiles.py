@@ -146,6 +146,7 @@ def inference_one_tile(
     data_radar: Path,
     data_masks: Path | None,
     output_folder_inferences: Path,
+    imputation: "Imputation | None" = None,
 ):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -191,15 +192,16 @@ def inference_one_tile(
         num_workers=num_workers, worker_init_fn=_worker_init_fn,
     )
 
-    imputation = Imputation(
-        config_file_train=args.config_file,
-        method=args.method,
-        mode=args.mode,
-        checkpoint=args.checkpoint,
-        config_file_test=args.test_data.test_config,
-        num_channels=ds.num_channels,
-        device=device,
-    )
+    if imputation is None:
+        imputation = Imputation(
+            config_file_train=args.config_file,
+            method=args.method,
+            mode=args.mode,
+            checkpoint=args.checkpoint,
+            config_file_test=args.test_data.test_config,
+            num_channels=ds.num_channels,
+            device=device,
+        )
     converter = TypeConverter()
     expected_bands = meta["count"]
 
@@ -225,6 +227,7 @@ def inference_one_tile(
                     s2_input = batch_in["x"][:, :, :10]
                     if s2_input.abs().sum().item() == 0:
                         patches_skipped_nodata += 1
+                        del batch_in
                         continue
 
                     try:
@@ -233,6 +236,7 @@ def inference_one_tile(
                         print(f"  [GPU ERROR] {mgrs25} patch ({x},{y}): {e}")
                         torch.cuda.empty_cache()
                         patches_failed += 1
+                        del batch_in
                         continue
 
                     try:
@@ -243,7 +247,7 @@ def inference_one_tile(
                     except Exception as e:
                         print(f"  [POST-PROCESS ERROR] {mgrs25}: {e}")
                         patches_failed += 1
-                        del y_pred
+                        del batch_in, batch, y_pred
                         continue
 
                     if final_patch.shape[0] != expected_bands:
@@ -252,7 +256,7 @@ def inference_one_tile(
                             f"expected {expected_bands}."
                         )
                         patches_failed += 1
-                        del final_patch
+                        del batch_in, batch, y_pred, final_patch
                         continue
 
                     if _write_patch_with_retry(dst, final_patch, Window(x, y, w, h)):
@@ -261,10 +265,12 @@ def inference_one_tile(
                         print(f"  [WRITE FAIL] {mgrs25} patch ({x},{y}) after {MAX_WRITE_RETRIES} retries.")
                         patches_failed += 1
 
-                    del final_patch, y_pred
+                    del batch, batch_in, final_patch, y_pred
 
                     if patch_idx > 0 and patch_idx % GC_INTERVAL == 0:
                         gc.collect()
+                        if torch.cuda.is_available():
+                            torch.cuda.empty_cache()
 
         ok, msg = _validate_tif(tmp_filename)
         if not ok:
@@ -374,7 +380,7 @@ def main(
 
     num_workers = min(config.misc.num_workers, 2)
     print(f"[config] image_size={image_size}, overlap={overlap}, num_workers={num_workers}")
-    pin_memory = False if num_workers > 0 else torch.cuda.is_available()
+    pin_memory = False  # Pinned memory is non-swappable; not worth it for batch_size=1 inference
 
     data_optique = Path(config.test_data.get("data_optique", None))
     assert data_optique is not None
@@ -395,6 +401,28 @@ def main(
 
     total = {"ok": 0, "failed": 0, "skipped": 0, "patches_written": 0, "patches_skipped_nodata": 0, "patches_failed": 0}
 
+    # Compute num_channels from config (must match the trained model)
+    use_sar = config.data.get("use_sar", False)
+    channels = config.data.get("channels", "all")
+    num_channels = 10 if channels == "all" else 4
+    if use_sar:
+        if use_sar == "asc+desc":
+            num_channels += 8
+        elif use_sar in ("asc", "desc", "mix_closest"):
+            num_channels += 4
+
+    # Load model once for all tiles
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    shared_imputation = Imputation(
+        config_file_train=args.config_file,
+        method=args.method,
+        mode=args.mode,
+        checkpoint=args.checkpoint,
+        config_file_test=args.test_data.test_config,
+        num_channels=num_channels,
+        device=device,
+    )
+
     for mgrs25 in tqdm(test_tiles, desc="MGRS-C areas"):
         status, pw, psn, pf = inference_one_tile(
             args=args,
@@ -408,6 +436,7 @@ def main(
             data_radar=data_radar,
             data_masks=data_masks,
             output_folder_inferences=output_folder_inferences,
+            imputation=shared_imputation,
         )
         total[status] += 1
         total["patches_written"] += pw
