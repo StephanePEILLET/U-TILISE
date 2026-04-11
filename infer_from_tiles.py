@@ -239,9 +239,11 @@ def inference_one_tile(
                         batch_in["window"][3].item(),
                     )
 
-                    s2_input = batch_in["x"][:, :, :10]
-                    is_nodata = s2_input.abs().sum().item() == 0
-                    del s2_input
+                    # Check nodata on the original (un-masked) S2 target rather than
+                    # the masked input: a nodata patch with some cloud-masked pixels
+                    # would have fill_value=1 in batch_in["x"], giving a non-zero sum
+                    # even though the underlying data is entirely nodata.
+                    is_nodata = batch_in["y"][:, :, :10].abs().sum().item() == 0
                     if is_nodata:
                         patches_skipped_nodata += 1
                         del batch_in
@@ -295,6 +297,20 @@ def inference_one_tile(
                                 f"allocated={alloc_gb:.1f}GB reserved={reserv_gb:.1f}GB",
                                 flush=True,
                             )
+
+        if patches_written == 0:
+            if patches_skipped_nodata > 0 and patches_failed == 0:
+                print(
+                    f"[{mgrs25}] WARNING: all {patches_skipped_nodata} patches were nodata "
+                    f"— output file contains no predictions."
+                )
+            elif patches_failed > 0:
+                print(
+                    f"[{mgrs25}] WARNING: 0 patches written — "
+                    f"{patches_failed} failed, {patches_skipped_nodata} nodata-skipped."
+                )
+            else:
+                print(f"[{mgrs25}] WARNING: 0 patches written — dataset appears empty.")
 
         ok, msg = _validate_tif(tmp_filename)
         if not ok:

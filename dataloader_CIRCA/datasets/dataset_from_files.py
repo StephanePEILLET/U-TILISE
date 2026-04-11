@@ -191,6 +191,12 @@ class Dataset_from_files(Dataset):
             mask_tifs = sorted(mask_zone.rglob("*.tif"))
             if mask_tifs:
                 self.mask_file = mask_tifs[0].as_posix()
+            elif not self.keep_all_dates:
+                raise FileNotFoundError(
+                    f"[{mgrs25_name}] Mask file not found in {mask_zone}. "
+                    f"mask_type='fully_masked' with keep_all_dates=False requires a mask file — "
+                    f"this tile cannot be processed in rfm/cfm mode."
+                )
         with rasterio.open(self.s2_file) as src:
             self.s2_meta = src.meta.copy()
         if self.use_sar:

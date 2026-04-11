@@ -72,13 +72,13 @@ def run_tile(tile_inference, tile_gt):
     if len(indices_vrai_faux_nuages) == 0:
         return
 
-    tile_inference = tile_inference[indices_vrai_faux_nuages, :10]
+    tile_inference = tile_inference[indices_vrai_faux_nuages, :10].astype(np.float32) / 10000.0
     tile_gt = tile_gt[indices_vrai_faux_nuages, :10]
-    tile_gt = np.where(tile_gt == 0, 0, tile_gt - 1000)
+    tile_gt = np.where(tile_gt == 0, 0, tile_gt - 1000).astype(np.float32) / 10000.0
 
     tile_gt = np.expand_dims(tile_gt, 0)
     tile_inference = np.expand_dims(tile_inference, 0)
-    mask_agg = np.where(tile_gt != 0, 0, 1)
+    mask_agg = np.where(tile_gt != 0, 0, 1).astype(np.float32)
     mask_agg = mask_agg[:, :, 0, :, :]
 
     agg_global.update(target=Tensor(tile_gt), masks=Tensor(mask_agg), predicted=Tensor(tile_inference))
