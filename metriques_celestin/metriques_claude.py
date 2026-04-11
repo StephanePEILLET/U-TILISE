@@ -21,7 +21,7 @@ PATCH_SIZE = 256
 
 # Paths JZELLOU
 store_dai = Path("/mnt/stores/store-DAI")
-path_input = Path("/mnt/common/hdd/home/SPeillet/outputs/U-TILISE/inference/v3_combined")
+path_input = store_dai / "tmp/speillet/inferences/v3_combined/consecutive_fully_masked/2026-03-26_16-17"
 gt_path_dir = store_dai / "projets/pac/3str/EXP_2/Data_Raster/test_v3/aleatoire"
 
 tif_files = [i for i in os.listdir(path_input) if i[-4:] == ".tif"]
