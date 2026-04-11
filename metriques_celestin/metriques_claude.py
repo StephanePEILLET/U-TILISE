@@ -12,12 +12,18 @@ from tqdm import tqdm
 
 PATCH_SIZE = 256
 
-store_dai = Path("/mnt/stores/store_dai")
+# store_dai = Path("/mnt/stores/store_dai")
 # store_dai = Path("/mnt/stores/store-DAI") # jzellou
-path_input = store_dai / "tmp/speillet/inferences/v3_combined/consecutive_fully_masked/2026-03-26_16-17"
+# path_input = store_dai / "tmp/speillet/inferences/v3_combined/consecutive_fully_masked/2026-03-26_16-17"
 # path_input = store_dai / "tmp/speillet/inferences/v3_combined/random_fully_masked/2026-03-26_16-17"
-gt_path_dir = store_dai / "projets/pac/3str/EXP_2/Data_Raster/test_v3/consecutif"
+# gt_path_dir = store_dai / "projets/pac/3str/EXP_2/Data_Raster/test_v3/consecutif"
 # gt_path_dir = store_dai / "projets/pac/3str/EXP_2/Data_Raster/test_v3/aleatoire"
+
+# Paths JZELLOU
+store_dai = Path("/mnt/stores/store-DAI")
+path_input = Path("/mnt/common/hdd/home/SPeillet/outputs/U-TILISE/inference/v3_combined")
+gt_path_dir = store_dai / "projets/pac/3str/EXP_2/Data_Raster/test_v3/aleatoire"
+
 tif_files = [i for i in os.listdir(path_input) if i[-4:] == ".tif"]
 
 
@@ -163,4 +169,4 @@ for i in range(10):
             dictionnaire[key.split("_")[0]].append(results[key])
 
 
-pd.DataFrame(dictionnaire).to_csv("resultats.csv")
+pd.DataFrame(dictionnaire).to_csv("resultats_claude.csv")
