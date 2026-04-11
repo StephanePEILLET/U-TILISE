@@ -66,9 +66,9 @@ def _filter_patch(tile_inference_raw: np.ndarray, tile_gt_raw: np.ndarray):
     if len(indices_vrai_faux_nuages) == 0:
         return None
 
-    tile_inference = tile_inference[indices_vrai_faux_nuages, :10].astype(np.float32) / 10000.0
+    tile_inference = tile_inference[indices_vrai_faux_nuages, :10].astype(np.float32)
     tile_gt = tile_gt[indices_vrai_faux_nuages, :10]
-    tile_gt = np.where(tile_gt == 0, 0, tile_gt - 1000).astype(np.float32) / 10000.0
+    tile_gt = np.where(tile_gt == 0, 0, tile_gt - 1000).astype(np.float32)
 
     tile_gt = np.expand_dims(tile_gt, 0)          # (1, T, 10, H, W)
     tile_inference = np.expand_dims(tile_inference, 0)  # (1, T, 10, H, W)
