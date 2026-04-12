@@ -100,7 +100,12 @@ def _prepare_patch_keep_all(y_pred, batch, converter, output_type):
     denorm_pred = SentinelDataProcessor.reverse_process_MS(
         y_pred, intensity_max=MAX_PIXEL_INTENSITY_USED_FOR_REVERSE
     )
-    pred_patch = denorm_pred.squeeze(axis=0).cpu().numpy()
+    pred_patch = denorm_pred.squeeze(axis=0).cpu().numpy()  # (T, 10, H, W) in [0, 10000]
+    # Re-apply nodata mask: pixels where all bands == 0 in the target must stay 0
+    # (partial-nodata patches, e.g. tile edges, would otherwise get model predictions)
+    target = batch["y"].squeeze(0).cpu().numpy()           # (T, 10, H, W) in [0, 1]
+    nodata = (target == 0).all(axis=1, keepdims=True)      # (T, 1, H, W)
+    pred_patch = np.where(nodata, 0.0, pred_patch)
     original_bands = batch["original_masks"].squeeze(axis=0).cpu().numpy()
     full_patch = np.concatenate([pred_patch, original_bands], axis=1)
     full_patch = full_patch.reshape(
@@ -119,7 +124,10 @@ def _prepare_patch_filtered(y_pred, batch, converter, output_type):
     denorm_pred = SentinelDataProcessor.reverse_process_MS(
         y_pred, intensity_max=MAX_PIXEL_INTENSITY_USED_FOR_REVERSE
     )
-    pred_patch = denorm_pred.squeeze(axis=0).cpu().numpy()
+    pred_patch = denorm_pred.squeeze(axis=0).cpu().numpy()  # (T_kept, 10, H, W) in [0, 10000]
+    # Re-apply nodata mask: full_s2_data contains raw values (0 = nodata) for kept dates
+    nodata = (full_s2_data[idx_kept] == 0).all(axis=1, keepdims=True)  # (T_kept, 1, H, W)
+    pred_patch = np.where(nodata, 0.0, pred_patch)
     full_s2_data[idx_kept, ...] = pred_patch
     full_patch = np.concatenate([full_s2_data, s2_masks], axis=1)
     full_patch = full_patch.reshape(

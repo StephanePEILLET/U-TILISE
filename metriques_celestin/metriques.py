@@ -16,16 +16,19 @@ from tqdm import tqdm
 # src_gt = rasterio.open(gt)
 
 # Paths LNV16
-# store_dai = Path("/mnt/stores/store_dai")
-# path_input = store_dai / "tmp/speillet/inferences/v3_combined/consecutive_fully_masked/2026-03-26_16-17"
-# gt_path_dir = store_dai / "projets/pac/3str/EXP_2/Data_Raster/test_v3/consecutif"
+store_dai = Path("/mnt/stores/store_dai")
+path_input = store_dai / "tmp/speillet/inferences/v3_combined/consecutive_fully_masked/2026-03-26_16-17"
+gt_path_dir = store_dai / "projets/pac/3str/EXP_2/Data_Raster/test_v3/consecutif"
 
 # Paths JZELLOU
-store_dai = Path("/mnt/stores/store-DAI")
-# path_input = Path("/mnt/common/hdd/home/SPeillet/outputs/U-TILISE/inference/v3_combined")
-path_input = store_dai / "tmp/speillet/inferences/v3_combined/consecutive_fully_masked/2026-03-26_16-17"
-gt_path_dir = store_dai / "projets/pac/3str/EXP_2/Data_Raster/test_v3/aleatoire"
+# store_dai = Path("/mnt/stores/store-DAI")
+# # path_input = Path("/mnt/common/hdd/home/SPeillet/outputs/U-TILISE/inference/v3_combined")
+# path_input = store_dai / "tmp/speillet/inferences/v3_combined/consecutive_fully_masked/2026-03-26_16-17"
+# gt_path_dir = store_dai / "projets/pac/3str/EXP_2/Data_Raster/test_v3/aleatoire"
 
+REAL_CLOUD_MAX_VALUE = 100  # Valeur maximale qu'un pixel de vrai nuage peut prendre (nuages synthétiques ont une valeur > 100)
+SYNTHETIC_CLOUD_VALUE = 150  # Valeur ajoutée au masque original pour marquer les nuages synthétiques
+OFFSET_S2 = 1000
 tif_files = [i for i in os.listdir(path_input) if i[-4:] == ".tif"]
 
 
@@ -55,34 +58,59 @@ def run_tile(tile_inference, tile_gt):
     clouds_image_gt = tile_gt[:, 10]
 
     # On récupère les lieux où il y a un faux nuage
-    indices_faux_nuages = np.unique(np.where(clouds_image_gt > 100)[0])
+    indices_faux_nuages = np.unique(np.where(clouds_image_gt > REAL_CLOUD_MAX_VALUE)[0])
 
     tile_inference = tile_inference[indices_faux_nuages]
     tile_gt = tile_gt[indices_faux_nuages]
 
     # On récupère les indices où il y a les vrais faux nuages (dates qui ne sont pas déjà nuageuses)
     clouds_image_gt = clouds_image_gt[indices_faux_nuages]
-    maximum = np.max(clouds_image_gt, axis=(1, 2))
-
-    indices_vrai_faux_nuages = np.where(maximum == 150)[0]
+    # On retranche SYNTHETIC_CLOUD_VALUE des pixels synthétiques pour retrouver le masque nuage original
+    original_cloud = np.where(clouds_image_gt > REAL_CLOUD_MAX_VALUE,
+                              clouds_image_gt - SYNTHETIC_CLOUD_VALUE,
+                              clouds_image_gt)
+    # On exclut les dates qui avaient déjà de vrais nuages avant l'ajout du masque synthétique
+    has_real_clouds = np.any(original_cloud > 0, axis=(1, 2))
+    indices_vrai_faux_nuages = np.where(~has_real_clouds)[0]
 
     tile_inference = tile_inference[indices_vrai_faux_nuages, :10]
     tile_gt = tile_gt[indices_vrai_faux_nuages, :10]
-    tile_gt = np.where(tile_gt == 0, 0, tile_gt - 1000)
+    tile_gt = np.where(tile_gt == 0, 0, tile_gt - OFFSET_S2)
 
     tile_gt = np.expand_dims(tile_gt, 0)
     tile_inference = np.expand_dims(tile_inference, 0)
-    mask_agg = np.where(tile_gt != 0, 0, 1)
-    mask_agg = mask_agg[:, :, 0, :, :]
 
-    agg_global.update(target=Tensor(tile_gt), masks=Tensor(mask_agg), predicted=Tensor(tile_inference))
+    syn_mask = np.where(tile_gt != 0, 1, 0)
+    syn_mask = syn_mask[:, :, 0:1, :, :]  # (B, T, 1, H, W)
+
+    # mask_agg exclut les pixels noirs et les pixels nuageux d'origine
+    mask_agg = np.where(tile_gt != 0, 0, 1)
+    mask_agg = mask_agg[:, :, 0:1, :, :]  # (B, T, 1, H, W)
+    original_cloud_selected = original_cloud[indices_vrai_faux_nuages][np.newaxis, :, np.newaxis, :, :]  # (B, T, 1, H, W)
+    mask_agg = np.clip(mask_agg + (original_cloud_selected > 0).astype(int), 0, 1)
+
+    agg_global.update(
+        target=Tensor(tile_gt),
+        masks=Tensor(syn_mask),
+        predicted=Tensor(tile_inference),
+        cloud_masks=Tensor(mask_agg)
+    )
     indices_4 = np.array([0, 1, 2, 7])
-    agg_global_4.update(target=Tensor(tile_gt[:, :, indices_4]), masks=Tensor(mask_agg), predicted=Tensor(tile_inference[:, :, indices_4]))
+    agg_global_4.update(
+        target=Tensor(tile_gt[:, :, indices_4]),
+        masks=Tensor(syn_mask),
+        predicted=Tensor(tile_inference[:, :, indices_4]),
+        cloud_masks=Tensor(mask_agg)
+    )
 
     for i in range(10):
         tile_gt_i = np.expand_dims(tile_gt[:, :, i], 2)
         tile_inference_i = np.expand_dims(tile_inference[:, :, i], 2)
-        aggs[i].update(target=Tensor(tile_gt_i), masks=Tensor(mask_agg), predicted=Tensor(tile_inference_i))
+        aggs[i].update(
+            target=Tensor(tile_gt_i),
+            masks=Tensor(syn_mask),
+            predicted=Tensor(tile_inference_i),
+            cloud_masks=Tensor(mask_agg))
 
 
 aggs = [CloudRemovalDatasetMetrics() for i in range(10)]

@@ -1,19 +1,15 @@
 import math
 from enum import Enum
 from functools import partial
-from typing import Dict
-from typing import List
 from typing import Literal
-from typing import Optional
 
 import numpy as np
 
 # import sklearn
 import torch
 import torchgeometry as tgm
-from torch import Tensor
-
 from scipy.stats import linregress
+from torch import Tensor
 
 
 class CloudRemovalMetrics:
@@ -32,7 +28,7 @@ class CloudRemovalMetrics:
 
     def __init__(
         self,
-        metrics: Optional[List[str]] = None,
+        metrics: list[str] | None = None,
         eval_occluded_observed: bool = True,
         clean_gt_cloudy_pixels: bool = True,
         sam_units: str = "rad",
@@ -56,12 +52,12 @@ class CloudRemovalMetrics:
         self.sam_units = sam_units
         self.window_size = window_size
         # Initialize metric functions
-        self.metric_fns: Dict[CloudRemovalMetrics.MetricType, callable] = {}
+        self.metric_fns: dict[CloudRemovalMetrics.MetricType, callable] = {}
         metrics_enum = self._parse_metrics(metrics)
         self._init_metric_functions(metrics_enum)
 
     @staticmethod
-    def _parse_metrics(metrics: Optional[List[str]]) -> List["CloudRemovalMetrics.MetricType"]:
+    def _parse_metrics(metrics: list[str] | None) -> list["CloudRemovalMetrics.MetricType"]:
         """Parse and validate the list of metric names into MetricType objects.
 
         Args:
@@ -77,8 +73,8 @@ class CloudRemovalMetrics:
             return list(CloudRemovalMetrics.MetricType)
         allowed = {m.value: m for m in CloudRemovalMetrics.MetricType}
         seen = set()
-        ordered: List[CloudRemovalMetrics.MetricType] = []
-        invalid: List[str] = []
+        ordered: list[CloudRemovalMetrics.MetricType] = []
+        invalid: list[str] = []
         for m in metrics:
             key = m.lower()
             if key not in allowed:
@@ -91,11 +87,11 @@ class CloudRemovalMetrics:
                 ordered.append(enum_val)
         if invalid:
             raise ValueError(
-                f"Unknown metric name(s): {invalid}. Valid metrics are: {sorted(allowed.keys())}"  # noqa: E501
+                f"Unknown metric name(s): {invalid}. Valid metrics are: {sorted(allowed.keys())}"
             )
         return ordered
 
-    def _init_metric_functions(self, metrics: List["CloudRemovalMetrics.MetricType"]) -> None:
+    def _init_metric_functions(self, metrics: list["CloudRemovalMetrics.MetricType"]) -> None:
         """
         Initializes the metric functions based on the provided list of metric types.
 
@@ -118,7 +114,7 @@ class CloudRemovalMetrics:
             self.metric_fns[MetricType.SSIM] = tgm.losses.SSIM(self.window_size, reduction="mean")
 
         if MetricType.PSNR in metric_set:
-            self.metric_fns[MetricType.PSNR] = lambda p, t: 20 * torch.log10(1 / self.metric_fns[MetricType.RMSE](p, t))
+            self.metric_fns[MetricType.PSNR] = lambda p, t: 20 * torch.log10(10_000 / self.metric_fns[MetricType.RMSE](p, t))
 
         if MetricType.SAM in metric_set:
             self.metric_fns[MetricType.SAM] = partial(self._compute_sam, units=self.sam_units)
@@ -154,7 +150,7 @@ class CloudRemovalMetrics:
 
     def _compute_pixelwise_metric(
         self, metric_name: str, metric_fn, predicted: Tensor, target: Tensor, masks: Tensor
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """
         Computes a single pixel-wise metric and its variants for occluded and observed regions.
 
@@ -228,15 +224,15 @@ class CloudRemovalMetrics:
             raise ValueError(
                 f"Input tensor shapes must be the same. " f"Got y_pred={y_pred.shape} and y_target={y_target.shape}"
             )
-        
-        if y_pred.shape[0]<=1:
+
+        if y_pred.shape[0] <= 1:
             return None
-        
+
         result = linregress(y_target, y_pred)
 
         return result.rvalue**2
 
-    def _compute_imagewise_metrics(self, predicted: Tensor, target: Tensor, masks: Tensor) -> Dict[str, float]:
+    def _compute_imagewise_metrics(self, predicted: Tensor, target: Tensor, masks: Tensor) -> dict[str, float]:
         """
         Computes image-wise metrics like SSIM.
 
@@ -271,7 +267,7 @@ class CloudRemovalMetrics:
                     metrics["ssim_images_observed_input_pixels"] = np.nan
         return metrics
 
-    def _compute_channelwise_metrics(self, predicted: Tensor, target: Tensor, masks: Tensor) -> Dict[str, float]:
+    def _compute_channelwise_metrics(self, predicted: Tensor, target: Tensor, masks: Tensor) -> dict[str, float]:
         """
         Computes channel-wise metrics like SAM for all, occluded, and observed pixels.
 
@@ -311,7 +307,7 @@ class CloudRemovalMetrics:
                     metrics["sam_observed_input_pixels"] = np.nan
         return metrics
 
-    def _compute_pixelwise_metrics(self, predicted: Tensor, target: Tensor, masks: Tensor) -> Dict[str, float]:
+    def _compute_pixelwise_metrics(self, predicted: Tensor, target: Tensor, masks: Tensor) -> dict[str, float]:
         """
         Computes all requested pixel-wise metrics (MAE, MSE, RMSE, PSNR, R2).
 
@@ -388,7 +384,7 @@ class CloudRemovalMetrics:
 
     def __call__(
         self, target: Tensor, masks: Tensor, predicted: Tensor, cloud_masks: Tensor = None
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """
         Computes the specified cloud removal metrics.
 
