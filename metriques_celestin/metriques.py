@@ -75,7 +75,8 @@ def run_tile(tile_inference, tile_gt):
 
     tile_inference = tile_inference[indices_vrai_faux_nuages, :10]
     tile_gt = tile_gt[indices_vrai_faux_nuages, :10]
-    tile_gt = np.where(tile_gt == 0, 0, tile_gt - OFFSET_S2)
+    tile_gt = np.where(tile_gt == 0, 0, tile_gt)
+    # tile_gt = np.where(tile_gt == 0, 0, tile_gt - OFFSET_S2)
 
     tile_gt = np.expand_dims(tile_gt, 0)
     tile_inference = np.expand_dims(tile_inference, 0)
