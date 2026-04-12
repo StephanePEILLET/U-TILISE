@@ -1,9 +1,9 @@
+import json
 import os
 import time
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 import rasterio
 from cr_torchmetrics import CloudRemovalDatasetMetrics
 from torch import Tensor
@@ -143,45 +143,50 @@ for tif_file in tqdm(tif_files):
             run_tile(tile_inference, tile_gt)
 
 
-dictionnaire = {
-    "bande": [],
-    "mae": [],
-    "mse": [],
-    "psnr": [],
-    "r2": [],
-    "rmse": [],
-    "sam": [],
-    "ssim": []
-}
+METRIC_NAMES = ["mae", "mse", "psnr", "r2", "rmse", "sam", "ssim"]
+COL_WIDTH = 10
 
-print("")
-print("--------------global---------------")
-results = agg_global.compute()
-dictionnaire["bande"].append("all")
-for key in sorted(list(results.keys())):
-    if "observed" in key:
-        print(f"{key} : {results[key]}")
-        dictionnaire[key.split("_")[0]].append(results[key])
 
-print("")
-print("--------------global---------------")
-results = agg_global_4.compute()
-dictionnaire["bande"].append("all_4")
-for key in sorted(list(results.keys())):
-    if "observed" in key:
-        print(f"{key} : {results[key]}")
-        dictionnaire[key.split("_")[0]].append(results[key])
+def extract_metrics(compute_results):
+    result = {}
+    for key in sorted(compute_results.keys()):
+        metric_name = key.split("_")[0]
+        suffix = "_".join(key.split("_")[1:])  # ex: "observed", "occluded", etc.
+        if metric_name not in result:
+            result[metric_name] = {}
+        result[metric_name][suffix] = float(compute_results[key])
+    return result
 
+
+def print_section(label, metrics):
+    header = f"{'metric':<{COL_WIDTH}}" + f"{label:>{COL_WIDTH}}"
+    print(header)
+    print("-" * len(header))
+    for name in METRIC_NAMES:
+        if name in metrics and "occluded" in metrics[name]:
+            print(f"  {name:<{COL_WIDTH - 2}}{metrics[name]['occluded']:>{COL_WIDTH}.4f}")
+
+
+resultats = {}
+
+print("\n" + "=" * 40)
+print(f"{'GLOBAL (toutes bandes)':^40}")
+print("=" * 40)
+resultats["all"] = extract_metrics(agg_global.compute())
+print_section("all", resultats["all"])
+
+print("\n" + "=" * 40)
+print(f"{'GLOBAL (4 bandes RVB+NIR)':^40}")
+print("=" * 40)
+resultats["all_4"] = extract_metrics(agg_global_4.compute())
+print_section("all_4", resultats["all_4"])
 
 for i in range(10):
-    print("")
-    print(f"--------------band{i}---------------")
-    dictionnaire["bande"].append(i)
-    results = aggs[i].compute()
-    for key in sorted(list(results.keys())):
-        if "observed" in key:
-            print(f"{key} : {results[key]}")
-            dictionnaire[key.split("_")[0]].append(results[key])
+    print("\n" + "=" * 40)
+    print(f"{'BANDE ' + str(i):^40}")
+    print("=" * 40)
+    resultats[f"band{i}"] = extract_metrics(aggs[i].compute())
+    print_section(f"band{i}", resultats[f"band{i}"])
 
-
-pd.DataFrame(dictionnaire).to_csv("resultats_celestin.csv")
+with open("resultats_celestin.json", "w", encoding="utf-8") as f:
+    json.dump(resultats, f, indent=2)
