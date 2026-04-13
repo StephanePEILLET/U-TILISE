@@ -6,56 +6,80 @@ masks, position_days, etc. Gère l'échantillonnage temporel, le masquage
 synthétique et les augmentations spatiales.
 """
 
-from pathlib import Path
 
 import numpy as np
 import torch
 
 torch.multiprocessing.set_sharing_strategy("file_system")
 
+import datetime as dt
+import warnings
+
 from omegaconf import DictConfig, OmegaConf
 from torch import Tensor
 
-from dataloader.datasets import HDF5Dataset
-from dataloader.tools.data_processor import SentinelDataProcessor
-from dataloader.tools.mask_generation import masks_init_filling, overlay_seq_with_clouds
-from dataloader.tools.positional_encoding import (
+from src.data.backends.constants import MAX_SEQ_LENGTH, SEED
+from src.data.backends.hdf5_backend import HDF5Dataset
+from src.data.interfaces import PhaseType, SentinelBackend
+from src.data.processing.masking import masks_init_filling, overlay_seq_with_clouds
+from src.data.processing.positional import (
     get_pairwise_representative_dates,
     get_position_for_positional_encoding,
     str2date,
 )
-from dataloader.tools.sampling import sample_indices_masked_frames, sampling_consecutive_frames
-
-MAX_SEQ_LENGTH = 30
-IMAGE_SIZE = (256, 256)
-SEED = 42
-
-import datetime as dt
-from typing import Literal
-
-DateArray = np.ndarray[dt.date]
-TensorDict = dict[str, torch.Tensor | dict[str, torch.Tensor]]
-SampleDict = dict[str, np.ndarray | dict[str, np.ndarray] | list[str]]
-PhaseType = Literal["train", "val", "test", "train+val", "all"]
-ChannelType = Literal["all", "bgr-nir"]
+from src.data.processing.sampling import sample_indices_masked_frames, sampling_consecutive_frames
+from src.data.processing.transforms import SentinelDataProcessor
 
 
-class SatelliteDataset(HDF5Dataset):
+class SentinelDataset(torch.utils.data.Dataset):
     """
-    Dataset qui exporte / ou importe les données CIRCA dans / depuis un fichier HDF5.
+    ✅ Adaptateur générique pour TOUS les backends de données Sentinel.
+    
+    Ce dataset est l'unique point d'entrée pour charger des données dans U-TILISE.
+    Il encapsule n'importe quel backend qui implémente `SentinelBackend` et
+    applique TOUTE la logique métier commune :
+    
+    Fonctionnalités :
+    - Échantillonnage temporel
+    - Génération de masques synthétiques
+    - Encodage positionnel
+    - Augmentations spatiales
+    - Normalisation et prétraitements
+    - Logique de fusion temporelle
+    
+    Ce dataset est 100% indépendant de la source de données. Il fonctionnera
+    exactement de la même façon avec un fichier HDF5, des fichiers TIF, ou
+    n'importe quel nouveau backend que vous ajouterez.
     """
+
+    @classmethod
+    def from_hdf5(cls, **kwargs) -> "SentinelDataset":
+        """
+        Constructeur rétro-compatible pour charger depuis un fichier HDF5.
+        
+        Args:
+            **kwargs: Tous les paramètres de HDF5Dataset + tous les paramètres
+                     du constructeur SentinelDataset.
+                     
+        Returns:
+            SentinelDataset initialisé avec le backend HDF5
+        """
+
+        # Extraire les paramètres du backend
+        backend_kwargs = {
+            k: kwargs.pop(k) for k in list(kwargs.keys())
+            if k in ['phase', 'hdf5_file', 'shuffle', 'use_sar', 'channels', 'load_transforms', 'image_size']
+        }
+
+        backend = HDF5Dataset(**backend_kwargs)
+        return cls(backend=backend, **kwargs)
 
     def __init__(
         self,
-        # HDF5Dataset parameters
-        phase: PhaseType = "all",
-        hdf5_file: str | Path | None = None,
-        shuffle: bool = False,
-        use_sar: bool = "asc",
-        channels: ChannelType = "all",
-        load_transforms: str | None = None,
+        # Le backend de données (HDF5Dataset ou Dataset_from_files)
+        backend: SentinelBackend,
         # U-TILISE specific parameters
-        filter_settings: dict = None,
+        return_valid_obs_only: bool = True,
         max_seq_length: int | None = MAX_SEQ_LENGTH,
         render_occluded_above_p: float | None = None,
         mask_kwargs: dict | DictConfig | None = None,
@@ -68,26 +92,40 @@ class SatelliteDataset(HDF5Dataset):
         # Rétro-compatibilité : accepter les anciens kwargs sans crasher
         **kwargs,
     ):
+
+        # Rétro-compatibilité : si l'ancienne clé filter_settings est passée,
+        # on en extrait return_valid_obs_only et on ignore le reste.
+        if "filter_settings" in kwargs:
+            fs = kwargs.pop("filter_settings")
+            if isinstance(fs, (dict, DictConfig)):
+                return_valid_obs_only = fs.get("return_valid_obs_only", return_valid_obs_only)
+            warnings.warn(
+                "SatelliteDataset: 'filter_settings' est déprécié. "
+                "Utilisez 'return_valid_obs_only' directement. "
+                "Les autres champs (type, min_length, …) ne sont pas utilisés car "
+                "les données HDF5 sont déjà pré-filtrées lors de leur création.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
         if kwargs:
-            import warnings
             warnings.warn(
                 f"SatelliteDataset: paramètres ignorés (rétro-compatibilité) : {list(kwargs.keys())}",
                 stacklevel=2,
             )
 
+        # Injection de dépendance : on stocke le backend tel quel
+        self.backend = backend
+
+        # Propriétés communes exposées par l'interface
+        self.c_index_rgb = backend.c_index_rgb
+        self.c_index_nir = backend.c_index_nir
+        self.num_channels = backend.num_channels
+
         # Initialize the random seed for reproducibility
         self.seed = seed
         self.rng = np.random.default_rng(seed=self.seed)
 
-        super().__init__(
-            phase=phase,
-            hdf5_file=hdf5_file,
-            shuffle=shuffle,
-            use_sar=use_sar,
-            channels=channels,
-            image_size=IMAGE_SIZE,
-            load_transforms=load_transforms,
-        )
         self.process_data = process_data
         self.return_windows = return_windows
 
@@ -95,15 +133,10 @@ class SatelliteDataset(HDF5Dataset):
         self.pe_strategy = pe_strategy
         self.augment = augment
 
-        (
-            self.filter_settings,
-            self.variable_seq_length,
-            self.seq_length,
-            self.max_seq_length,
-        ) = self.setup_filter_settings(
-            filter_settings=filter_settings,
-            max_seq_length=max_seq_length,
-        )
+        self.return_valid_obs_only = return_valid_obs_only
+        self.variable_seq_length = return_valid_obs_only
+        self.max_seq_length = max_seq_length
+        self.seq_length = MAX_SEQ_LENGTH if max_seq_length is None else max_seq_length
         (
             self.mask_kwargs,
             self.fill_type,
@@ -119,34 +152,24 @@ class SatelliteDataset(HDF5Dataset):
         # entraîné avec un dataloader qui masquait les données SAR par erreur.
         self.mask_sar = mask_sar
 
-    def setup_filter_settings(
-        self,
-        filter_settings: DictConfig | None = None,
-        max_seq_length: int | None = None,
-    ):
-        if filter_settings is None:
-            filter_settings = {
-                "type": None,
-                "min_length": 5,
-                "return_valid_obs_only": False,
-                "max_t_sampling": None,
-                "p_filter": 0.1,
-            }
+    def __len__(self) -> int:
+        return len(self.backend)
 
-        if isinstance(filter_settings, dict):
-            filter_settings = OmegaConf.create(filter_settings)
+    @property
+    def phase(self) -> PhaseType:
+        return self.backend.phase
 
-        if filter_settings.get("type", None):
-            variable_seq_length = filter_settings.return_valid_obs_only
-        else:
-            variable_seq_length = False
+    @property
+    def image_size(self):
+        return self.backend.image_size
 
-        # Definition en dur de certaines variables
-        filter_settings.max_num_consec_invalid = filter_settings.get("max_num_consec_invalid", None)
-        filter_settings.min_length = filter_settings.get("min_length", 0)
-        filter_settings.max_t_sampling = filter_settings.get("max_t_sampling", None)
-        seq_length = MAX_SEQ_LENGTH if max_seq_length is None else max_seq_length
-        return filter_settings, variable_seq_length, seq_length, max_seq_length
+    @property
+    def use_sar(self):
+        return self.backend.use_sar
+
+    @property
+    def without_coherence(self):
+        return getattr(self.backend, "without_coherence", False)
 
     def setup_mask_kwargs(self, mask_kwargs: DictConfig | None = None):
         # Parameters used for creating synthetic data gaps
@@ -200,7 +223,7 @@ class SatelliteDataset(HDF5Dataset):
     ) -> dict[str, int]:
         """
         Determines the longest subsequence of consecutive cloud-free images, where the temporal sampling between
-        consecutive cloud-free images does not exceed `self.filter_settings.max_t_sampling` days.
+        consecutive cloud-free images does not exceed `max_t_sampling` days.
 
         Args:
             sample:     dict.
@@ -218,7 +241,7 @@ class SatelliteDataset(HDF5Dataset):
         s2_dates = [str2date(s2_dates[t]) for t in t_cloudfree]
 
         # Count number of consecutive cloud-free images with temporal sampling of at most
-        # `self.filter_settings.max_t_sampling:`
+        # `max_t_sampling:`
         subseq = {"start": 0, "end": 0, "len": 0}
         count = 1
         start = 0
@@ -273,7 +296,7 @@ class SatelliteDataset(HDF5Dataset):
         Trims the sequence to a maximum temporal length.
         """
         if self.phase != "test":
-            if self.filter_settings.get("return_valid_obs_only", True):
+            if self.return_valid_obs_only:
                 t_sampled = masks_valid_obs.nonzero().view(-1)
             else:
                 t_sampled = torch.arange(0, len(masks_valid_obs))
@@ -328,7 +351,7 @@ class SatelliteDataset(HDF5Dataset):
                 'cloud_prob':         torch.Tensor, cloud probabilities associated with `x`.
                 'cloud_mask':         torch.Tensor, cloud mask associated with `x`.
         """
-        patch_data = self.etl_item(item=item)
+        patch_data = self.backend[item]
 
         if "idx_syn_aleatoire" in patch_data and self.mask_kwargs.mask_type == "random_fully_masked":
             patch_data["valid_obs"] = torch.from_numpy(
@@ -761,134 +784,3 @@ class SatelliteDataset(HDF5Dataset):
             cloud_mask = self._mask_images_with_cloud_coverage_above_p(cloud_mask)
 
         return cloud_mask
-
-    # def _subsample_sequence(self, idx_good_frames: np.ndarray, seq_length: int) -> tuple[torch.Tensor, torch.Tensor]:
-    #     """
-    #     Filters/Subsamples the image time series stored in `sample` as follows (cf. `self.filter_settings` and
-    #     `self.max_seq_length`):
-    #     1) Extracts cloud-free images or extracts the longest consecutive cloud-free subsequence,
-    #     2) removes invalid time steps (i.e., no observation, black image),
-    #     3) trims the sequence to a maximum temporal length.
-
-    #     Args:
-    #         sample:           h5py group.
-    #         seq_length:       int, temporal length of the sample.
-
-    #     Returns:
-    #         t_sampled:        torch.Tensor, length T.
-    #         masks_valid_obs:  torch.Tensor, (T, ).
-    #     """
-    #     # Generate a mask to exclude invalid frames:
-    #     # a value of 1 indicates a valid frame, whereas a value of 0 marks an invalid frame
-    #     if self.filter_settings.type == "cloud-free":
-    #         # Indices of available and cloud-free images
-    #         masks_valid_obs = torch.from_numpy(idx_good_frames)
-
-    #     elif self.filter_settings.type == "cloud-free_consecutive":
-    #         subseq = self._longest_consecutive_seq(idx_good_frames)
-    #         masks_valid_obs = torch.from_numpy(idx_good_frames)
-    #         masks_valid_obs[: subseq["start"]] = 0
-    #         masks_valid_obs[subseq["end"] + 1 :] = 0
-    #     else:
-    #         masks_valid_obs = torch.ones(
-    #             seq_length,
-    #         )
-
-    #     if self.filter_settings.get("return_valid_obs_only", True):
-    #         t_sampled = masks_valid_obs.nonzero().view(-1)
-    #     else:
-    #         t_sampled = torch.arange(0, len(masks_valid_obs))
-
-    #     if self.max_seq_length is not None and len(t_sampled) > self.max_seq_length:
-    #         # Randomly select `self.max_seq_length` consecutive frames
-    #         t_start = self.rng.choice(np.arange(0, len(t_sampled) - self.max_seq_length + 1))
-    #         t_end = t_start + self.max_seq_length
-    #         t_sampled = t_sampled[t_start:t_end]
-
-    #     return t_sampled, masks_valid_obs[t_sampled]
-
-    # @staticmethod
-    # def _longest_consecutive_seq(idx_frames: torch.Tensor) -> dict[str, int]:
-    #     """
-    #     Determines the longest subsequence of consecutive cloud-free images.
-
-    #     Args:
-    #         idx_frames:      torch.Tensor.
-
-    #     Returns:
-    #         subseq:      dict, the longest subsequence of valid images. The dictionary has the following key-value
-    #                      pairs:
-    #                         'start':  int, index of the first image of the subsequence.
-    #                         'end':    int, index of the last image of the subsequence.
-    #                         'len':    int, temporal length of the subsequence.
-    #     """
-
-    #     # Count number of consecutive cloud-free images
-    #     subseq = {"start": 0, "end": 0, "len": 0}
-    #     count = 1
-    #     start = 0
-
-    #     for i in range(len(idx_frames) - 1):
-    #         if idx_frames[i] + 1 == idx_frames[i + 1]:
-    #             end = i + 1
-    #             count += 1
-    #             if count > subseq["len"]:
-    #                 subseq["start"] = idx_frames[start]
-    #                 subseq["end"] = idx_frames[end]
-    #                 subseq["len"] = count
-    #         else:
-    #             start = i + 1
-    #             count = 1
-    #     return subseq
-
-    # def _filter_consecutive_sequence(
-    #     self,
-    #     dates,
-    #     idx_good_frames: list,
-    #     seq_length: int,
-    #     filter_type: Optional[str] = None,
-    #     max_t_sampling: Optional[int] = None,
-    # ) -> torch.Tensor:
-    #     """
-    #     Filters/Subsamples the image time series stored in `sample` as follows (cf. `self.filter_settings` and
-    #     `self.max_seq_length`):
-    #     1) Extracts cloud-free images or extracts the longest consecutive cloud-free subsequence,
-    #     2) selects a subsequence of cloud-free images such that the temporal difference between consecutive cloud-free
-    #        images is at most `self.filter_settings.max_t_sampling` days,
-    #     3) trims the sequence to a maximum temporal length.
-
-    #     Args:
-    #         idx_good_frames:           list.
-    #         seq_length:       int, temporal length of the sample.
-
-    #     Returns:
-    #         t_sampled:        torch.Tensor, length T.
-    #         masks_valid_obs:  torch.Tensor, (T, ).
-    #     """
-    #     # Indices of available and cloud-free images
-    #     if isinstance(idx_good_frames, torch.Tensor):
-    #         masks_valid_obs = idx_good_frames.clone()
-    #     else:
-    #         masks_valid_obs = torch.from_numpy(idx_good_frames.copy())
-
-    #     # a value of 1 indicates a valid frame, whereas a value of 0 marks an invalid frame
-    #     if filter_type == "cloud-free":
-    #         # Generate a mask to exclude invalid frames:
-    #         if max_t_sampling is not None:
-    #             subseq = self._longest_consecutive_seq_within_sampling_frequency(dates, masks_valid_obs, max_t_sampling)
-    #             masks_valid_obs[: subseq["start"]] = 0
-    #             masks_valid_obs[subseq["end"] + 1 :] = 0
-    #     elif filter_type == "cloud-free_consecutive":
-    #         subseq = self._longest_consecutive_seq(masks_valid_obs)
-    #         masks_valid_obs[: subseq["start"]] = 0
-    #         masks_valid_obs[subseq["end"] + 1 :] = 0
-    #     else:
-    #         masks_valid_obs = torch.ones(
-    #             seq_length,
-    #         )
-    #     return masks_valid_obs
-
-
-######################################################################################
-######################################################################################
-######################################################################################

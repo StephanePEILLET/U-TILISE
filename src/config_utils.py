@@ -10,8 +10,8 @@ from prodict import Prodict
 # Charger les variables d'environnement depuis .env (si le fichier existe)
 # pour permettre l'interpolation ${oc.env:VAR_NAME} dans les configs YAML.
 try:
-    from dotenv import load_dotenv
-    load_dotenv()
+    from dotenv import find_dotenv, load_dotenv
+    load_dotenv(find_dotenv(usecwd=True, filename=".env"))
 except ImportError:
     pass
 
@@ -94,6 +94,41 @@ def read_config(file: str) -> DictConfig:
         raise RuntimeError(f"ERROR: Cannot load the file {file}\n") from e
 
     return OmegaConf.create(config)
+
+
+def read_config_with_defaults(file: str, run_mode: str | None = None) -> DictConfig:
+    """
+    Lit un fichier YAML de configuration et le fusionne avec default.yaml.
+    
+    Les valeurs du fichier utilisateur surchargent celles de default.yaml.
+    Garantit que toutes les clés par défaut (mask.fill_value, misc.num_workers,
+    etc.) sont toujours présentes.
+    
+    Args:
+        file:       str, chemin du fichier de configuration spécifique.
+        run_mode:   str | None, force le run_mode après fusion ('train', 'val', 'test').
+                    Si None, utilise la valeur de la config utilisateur.
+                    Évite que run_mode: train (défaut) ne fuit dans eval/inference.
+    
+    Returns:
+        DictConfig, configuration fusionnée (default.yaml + config utilisateur).
+    """
+    cfg_custom = read_config(file)
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(script_dir)
+    default_config_path = os.path.join(project_root, "configs", "default.yaml")
+
+    if os.path.exists(default_config_path):
+        cfg_default = read_config(default_config_path)
+        config = OmegaConf.merge(cfg_default, cfg_custom)
+    else:
+        config = cfg_custom
+
+    if run_mode is not None and "misc" in config:
+        config.misc.run_mode = run_mode
+
+    return config
 
 
 def write_config(data: DictConfig | prodict.Prodict, outfile: str) -> None:

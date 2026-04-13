@@ -1,3 +1,49 @@
+"""
+Constantes globales pour le module de données.
+
+Toutes les constantes concernant les données sont définies ICI et SEULEMENT ICI.
+Modifiez ces valeurs pour changer le comportement de TOUS les backends
+et TOUS les modules de processing.
+"""
+
+# =============================================================================
+# Configuration des bandes Sentinel
+# =============================================================================
+
+# Nombre de bandes spectrales
+S2_BANDS_ALL = 10
+"""Nombre total de bandes Sentinel-2 dans le dataset"""
+
+S2_BANDS_BGR_NIR = 4
+"""Nombre de bandes en mode BGR + NIR"""
+
+S1_BANDS = 4
+"""Nombre de bandes Sentinel-1 par orbite (2 intensités + 2 cohérences)"""
+
+# Indices des canaux RGB dans Sentinel-2
+# Ordre des bandes dans le dataset : B02, B03, B04, B08, B05, B06, B07, B8A, B11, B12
+S2_RGB_INDICES = [2, 1, 0]
+"""Indices des canaux RGB : B04 (R), B03 (G), B02 (B)"""
+
+S2_NIR_INDEX = 6
+"""Indice du canal NIR (B8A)"""
+
+# =============================================================================
+# Constantes globales
+# =============================================================================
+
+MAX_SEQ_LENGTH = 30
+"""Longueur maximale par défaut d'une séquence temporelle"""
+
+IMAGE_SIZE = (256, 256)
+"""Taille par défaut des patches en pixels"""
+
+SEED = 42
+"""Seed de reproductibilité par défaut"""
+
+# =============================================================================
+# Splits géographiques
+# =============================================================================
 GEOGRAPHIC_SPLITS = {
     "train": [  # 41 zones MGRSC
         "31UDP_row-3_col-2",

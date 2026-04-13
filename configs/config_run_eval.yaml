@@ -13,10 +13,7 @@ data:
     blend_mode: center                     # Mode de fusion temporelle. ['switch', 'center', 'center_only', 'iterative']
     max_seq_length: 14                     # Fenêtre temporelle (14 par défaut en évaluation).
     return_windows: true                   # Retourner les coordonnées de la fenêtre dans le batch.
-    filter_settings:
-        type: cloud-free
-        min_length: 5
-        return_valid_obs_only: true
+    return_valid_obs_only: true            # True = ne retourner que les dates cloud-free lors du sous-échantillonnage.
 
 test_data:
     checkpoint: ${oc.env:CHECKPOINT}       # Checkpoint du modèle entraîné.

@@ -1,23 +1,10 @@
-import datetime as dt
 import math
-import os
 import random
-from pathlib import Path
-from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
-from typing import Tuple
 
-import h5py
 import numpy as np
-import torch
-import torch.utils.data
-from omegaconf import DictConfig
-from omegaconf import ListConfig
-from omegaconf import OmegaConf
-from torch import Tensor
-from torchvision import transforms
 
 
 def sampling_consecutive_frames(

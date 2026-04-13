@@ -9,7 +9,6 @@ import datetime as dt
 import json
 from pathlib import Path
 from typing import (
-    Dict,  # noqa: F401
     Literal,
 )
 
@@ -17,24 +16,16 @@ import h5py
 import numpy as np
 import pandas as pd
 import torch
+from src.data.backends.constants import GEOGRAPHIC_SPLITS, SEED, IMAGE_SIZE
 from numpy.typing import NDArray
 from torch.utils.data import Dataset
 
-from dataloader.datasets.constants import GEOGRAPHIC_SPLITS
+from src.data.interfaces import ChannelType, PhaseType, SampleDict, TensorDict
+
+SarPairingType = Literal["asc+desc", "asc", "desc", "mix_closest"]
 
 # Set multiprocessing sharing strategy
 torch.multiprocessing.set_sharing_strategy("file_system")
-
-# Constants
-SEED: int = 42
-IMAGE_SIZE: tuple[int] = (256, 256)  # Default image size for the dataset in the HDF5 files.
-
-DateArray = np.ndarray[dt.date]
-TensorDict = dict[str, torch.Tensor | dict[str, torch.Tensor]]
-SampleDict = dict[str, NDArray | dict[str, NDArray] | list[str]]
-PhaseType = Literal["train", "val", "test", "train+val", "all"]
-ChannelType = Literal["all", "bgr-nir"]
-SarPairingType = Literal["asc+desc", "asc", "desc", "mix_closest"]
 
 
 class HDF5Dataset(Dataset):
@@ -122,13 +113,6 @@ class HDF5Dataset(Dataset):
 
         if Path(path_file).exists():
             df_transforms = pd.read_json(path_file)
-            # cols_to_convert = [
-            #     "files",
-            #     "dates_S2",
-            #     "dates_S1_ASC",
-            #     "dates_S1_DESC",
-            # ]
-            # df_transforms[cols_to_convert] = df_transforms[cols_to_convert].map(ast.literal_eval)
             df_transforms.window = df_transforms.window.apply(lambda x: "_".join(map(str, x)))
             self.patches_dataset["patch"] = [
                 f"patches_{row.mgrs25}_window_{row.window}" for i, row in self.patches_dataset.iterrows()
@@ -484,22 +468,3 @@ class HDF5Dataset(Dataset):
             Dictionary containing the sample data with selected channels
         """
         return self.etl_item(item=item)
-
-
-if __name__ == "__main__":
-    # Example usage
-    path_dataset_circa = Path("/DATA_10TB/data_rpg/circa/hdf5")
-    # hdf5_file = path_dataset_circa / "new_circa_ligth.hdf5"
-    hdf5_file = path_dataset_circa / "CIRCA_CR_merged.hdf5"
-    # Import data from HDF5 file
-    dataset = HDF5Dataset(
-        hdf5_file=hdf5_file,
-        phase="all",
-        shuffle=False,
-        channels="all",
-        use_sar="asc+desc",
-        load_transforms="./metadata/patches_with_transforms.json",
-    )
-    # Get a sample
-    sample = next(iter(dataset))
-    print(sample.keys())

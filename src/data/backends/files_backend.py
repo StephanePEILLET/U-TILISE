@@ -20,12 +20,13 @@ from rasterio.windows import Window
 from torch.utils.data import Dataset
 from tqdm.auto import tqdm
 
-from dataloader.tools.data_processor import SentinelDataProcessor
-from dataloader.tools.mask_generation import masks_init_filling
-from dataloader.tools.positional_encoding import (
+from src.data.processing.transforms import SentinelDataProcessor
+from src.data.processing.masking import masks_init_filling
+from src.data.processing.positional import (
     get_pairwise_representative_dates,
     get_position_for_positional_encoding,
 )
+from src.data.interfaces import PhaseType, ChannelType
 
 ChannelType = Literal["all", "bgr-nir"]
 
@@ -46,7 +47,6 @@ class Dataset_from_files(Dataset):
         load_dataset: str | None = None,
         shuffle: bool = False,
         use_sar: bool = "mix_closest",
-        no_filter: bool = False,
         channels: ChannelType = "all",
         pe_strategy: str = "day-within-sequence",
         fill_value: float = 1.0,
@@ -76,7 +76,6 @@ class Dataset_from_files(Dataset):
         self.zones_dataset, self.dates_dict = None, None
         self.patches_dataset = None
         self.use_sar = use_sar
-        self.no_filter = no_filter
         self.num_channels, self.c_index_rgb, self.c_index_nir, self.s2_channels = self.setup_channels(channels)
         self.s2_tile = None
         self.s1_asc_tile = None

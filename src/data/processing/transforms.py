@@ -472,3 +472,25 @@ class SentinelDataProcessor:
                 closest_matches.append((dates_S2[i], dates_S1_desc[argmin_idx], argmin_idx, "DESC"))
 
         return closest_matches
+
+
+class TypeConverter:
+    def __init__(self):
+        self._from = "float32"
+        self._to = "uint8"
+
+    def from_type(self, img_type):
+        self._from = img_type
+        return self
+
+    def to_type(self, img_type):
+        self._to = img_type
+        return self
+
+    def convert(self, img, threshold=0.5):
+        if self._from == "float32":
+            if self._to == "float32":
+                return img
+            elif self._to == "uint8":
+                if img.max() > 1:
+                    info = np.idebug(img.dtype)  # Get the information of the incoming image type

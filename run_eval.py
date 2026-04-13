@@ -14,16 +14,15 @@ import sys
 import time
 from pathlib import Path
 
-import numpy as np
 import rasterio
 import torch
 from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
-from dataloader.tools.data_processor import SentinelDataProcessor
-from dataloader.tools.parcel_mask import ParcelMaskGenerator
 from src import config_utils
 from src.arguments import eval_parser
+from src.data.processing.parcel_mask import ParcelMaskGenerator
+from src.data.processing.transforms import SentinelDataProcessor, TypeConverter
 from src.data_utils import get_dataset
 from src.eval_tools import Imputation
 
@@ -36,43 +35,6 @@ GDAL_OPTIONS = {
     "blockysize": 256,
     "SPARSE_MODE": False,
 }
-
-
-class TypeConverter:
-
-    def __init__(self):
-        self._from = "float32"
-        self._to = "uint8"
-
-    def from_type(self, img_type):
-        self._from = img_type
-        return self
-
-    def to_type(self, img_type):
-        self._to = img_type
-        return self
-
-    def convert(self, img, threshold=0.5):
-        if self._from == "float32":
-            if self._to == "float32":
-                return img
-            elif self._to == "uint8":
-                if img.max() > 1:
-                    info = np.idebug(img.dtype)  # Get the information of the incoming image type
-                    img = img.astype(np.float32) / info.max  # normalize the data to 0 - 1
-                img = 255 * img  # scale by 255
-                return img.astype(np.uint8)
-            elif self._to == "uint16":
-                if img.max() > 1:
-                    info = np.idebug(img.dtype)  # Get the information of the incoming image type
-                    img = img.astype(np.float32) / info.max  # normalize the data to 0 - 1
-                img = np.iinfo(np.uint16).max * img  # scale by 65535
-                return img.astype(np.uint16)
-            elif self._to == "bit":
-                img = img > threshold
-                return img.astype(np.uint8)
-            else:
-                return img
 
 
 class Evaluator:
@@ -127,7 +89,7 @@ class Evaluator:
             raise FileNotFoundError(f"Cannot find the configuration file used during training: {args.config_file}\n")
 
         # Read config file used during training
-        self.config = config_utils.read_config(args.config_file)
+        self.config = config_utils.read_config_with_defaults(args.config_file, run_mode="test")
 
         # if "test_data" in self.config:
         #     args_test_data = self.config.test_data
@@ -343,7 +305,7 @@ if __name__ == "__main__":
 
     args = eval_parser.parse_args()
 
-    config = config_utils.read_config(args.config_file)
+    config = config_utils.read_config_with_defaults(args.config_file, run_mode="test")
     if "test_data" in config:
         temp = OmegaConf.create()
         temp.config_file = args.config_file
@@ -362,15 +324,17 @@ if __name__ == "__main__":
         args = temp
 
     # Extract settings w.r.t. test data
-    if args.test_data.test_config is not None:
-        if not os.path.isfile(args.test_data.test_config):
-            raise FileNotFoundError(f"Cannot find the test configuration file: {args.test_data.test_config}\n")
-        test_config = config_utils.read_config(args.test_data.test_config)
+    test_config_val = args.test_data.get("test_config", None) if "test_data" in args else None
+    if test_config_val is not None:
+        if not os.path.isfile(test_config_val):
+            raise FileNotFoundError(f"Cannot find the test configuration file: {test_config_val}\n")
+        test_config = config_utils.read_config_with_defaults(test_config_val, run_mode="test")
         args_test_data = test_config.data
     else:
         args_test_data = OmegaConf.create()
 
-    if args.test_data.hdf5_file is not None:
+    hdf5_file_val = args.test_data.get("hdf5_file", None) if "test_data" in args else None
+    if hdf5_file_val is not None:
         # if not os.path.isfile(os.path.join(args_test_data.root, args.test_data.hdf5_file)):
         #     raise FileNotFoundError(
         #         f"Cannot find the data file: {os.path.join(args_test_data.root, args.test_data.hdf5_file)}\n"
@@ -393,7 +357,7 @@ if __name__ == "__main__":
     import json
     from pathlib import Path
 
-    main_config = config_utils.read_config(args.config_file)
+    main_config = config_utils.read_config_with_defaults(args.config_file, run_mode="test")
     if main_config.get("output", False) and main_config.output.get("save_dir", False):
         save_dir = Path(main_config.output.save_dir)
         save_dir.mkdir(parents=True, exist_ok=True)

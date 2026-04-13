@@ -3,14 +3,35 @@
 # Ces paramètres sont surchargés par la config spécifique (train, eval, etc.)
 # ============================================================================
 
+
+
 data:                                      # Paramètres des données d'entrée
-    filter_settings:
-        type: cloud-free                   # Stratégie de filtrage des observations nuageuses. ['cloud-free', 'cloud-free_consecutive']
-        min_length: 5                      # Longueur minimale de séquence après filtrage.
-        return_valid_obs_only: true        # True = ne retourner que les dates cloud-free (train/val).
+    return_valid_obs_only: true            # True = ne retourner que les dates cloud-free lors du sous-échantillonnage temporel (train/val).
     pe_strategy: day-of-year               # Stratégie d'encodage positionnel. ['day-of-year', 'day-within-sequence', 'absolute', 'enumeration']
     max_seq_length: 10                     # Longueur maximale de séquence temporelle. None = pas de troncature.
     render_occluded_above_p: 0.9           # Seuil de couverture nuageuse pour masquer entièrement une image.
+
+    # ┌───────────────────────────────────────────────────────────────────────┐
+    # │ 🔌 Backend HDF5 (comportement historique)
+    # │ Décommenter ce bloc pour utiliser un fichier HDF5 pré-calculé
+    # └───────────────────────────────────────────────────────────────────────┘
+    # hdf5_file: ${oc.env:HDF5_FILE}        # Chemin vers le fichier HDF5
+    # use_sar: mix_closest                   # Mode SAR : false, 'asc', 'desc', 'mix_closest', 'asc+desc'
+    # channels: all                          # Bandes spectrales : 'all' ou 'bgr-nir'
+
+    # ┌───────────────────────────────────────────────────────────────────────┐
+    # │ 📂 Backend Fichiers brutes (sans HDF5)
+    # │ Décommenter ce bloc pour charger directement depuis des TIF
+    # │ ✅ Training et évaluation fonctionnent exactement de la même façon
+    # └───────────────────────────────────────────────────────────────────────┘
+    # data_optique: ./data/S2/                # Répertoire des GeoTIFF Sentinel-2
+    # data_radar: ./data/S1/                  # Répertoire des GeoTIFF Sentinel-1
+    # mgrsc: 31TCJ                            # Zone MGRSC à charger
+    # use_sar: mix_closest                   # Mode SAR : false, 'asc', 'desc', 'mix_closest', 'asc+desc'
+    # channels: all                          # Bandes spectrales : 'all' ou 'bgr-nir'
+    # image_size: [256, 256]                 # Taille des patches
+    # overlap: 0                              # Chevauchement entre patches
+    # keep_all_dates: false                  # Garder toutes les dates (même nuageuses) pour l'inférence
 
 mask:
     mask_type: random_clouds               # Type de masquage. ['random_clouds', 'real_clouds', 'random_fully_masked', 'consecutive_fully_masked']

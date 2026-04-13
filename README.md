@@ -73,6 +73,41 @@ Le fichier `.env` est ignoré par git (`.gitignore`) et n'est **jamais versionn�
 
 ---
 
+## 🚀 Démarrage rapide en 2 minutes
+
+### 1. Entraîner le modèle
+```bash
+python run_train.py configs/config_run_train.yaml --save_dir ./outputs/train/
+```
+
+### 2. Évaluer le modèle
+```bash
+python run_eval.py configs/config_run_eval.yaml
+```
+
+### 3. Inférer directement depuis des fichiers TIF
+```python
+# Charger directement depuis des fichiers brutes SANS HDF5
+from src.data.backends.files_backend import Dataset_from_files
+from src.data import SentinelDataset
+
+# Initialiser le backend de fichiers
+backend = Dataset_from_files(
+    data_optique="./data/S2/",
+    data_radar="./data/S1/",
+    mgrsc="31TCJ"
+)
+
+# ✅ Utiliser EXACTEMENT LE MÊME adaptateur
+dataset = SentinelDataset(backend=backend)
+
+# Charger un échantillon
+sample = dataset[0]
+print(sample.keys())  # x, y, masks, position_days, etc.
+```
+
+---
+
 ## Structure du projet
 
 ```
@@ -90,7 +125,7 @@ U-TILISE/
 │       ├── configs/              #     Configs YAML (train, eval, inférence)
 │       └── slurms/               #     Scripts SLURM de soumission
 │
-├── src/                          # Bibliothèque principale U-TILISE
+ ├── src/                          # Bibliothèque principale U-TILISE
 │   ├── models/                   #   Architecture du modèle
 │   │   ├── utilise.py            #     Encodeur spatial + LTAE + décodeur
 │   │   ├── ltae_transformer.py   #     Lightweight Temporal Attention Encoder
@@ -101,37 +136,30 @@ U-TILISE/
 │   ├── metrics/                  #   Métriques de reconstruction
 │   │   ├── cloud_removal.py      #     Métriques par sample (MAE, RMSE, PSNR, SSIM, SAM)
 │   │   └── aggregation.py        #     Agrégation dataset (torchmetrics)
-│   ├── datasets/                 #   Registre des datasets
-│   │   ├── dataset_tools.py      #     Détection de frames nuageuses
-│   │   └── mask_generation.py    #     Masques synthétiques
+│   ├── data/                     # ✅ MODULE DONNÉES UNIFIÉ ET RÉFACTORISÉ
+│   │   ├── __init__.py           #     API publique : SentinelDataset, SentinelBackend
+│   │   ├── interfaces.py         #     Protocols et types communs
+│   │   ├── sentinel_dataset.py   #     ✅ ADAPTATEUR PRINCIPAL : toute la logique métier
+│   │   ├── backends/             #     Backends de chargement de données
+│   │   │   ├── hdf5_backend.py   #       Lecture depuis fichier HDF5
+│   │   │   ├── files_backend.py  #       Chargement direct depuis fichiers TIF
+│   │   │   ├── hdf5_creator.py   #       Outil de création de fichiers HDF5
+│   │   │   └── constants.py      #       Constantes globales (splits, bandes)
+│   │   └── processing/           #     Outils de traitement des données
+│   │       ├── transforms.py     #       Prétraitements et normalisations
+│   │       ├── masking.py        #       Génération de masques synthétiques
+│   │       ├── sampling.py       #       Échantillonnage temporel
+│   │       ├── positional.py     #       Encodage positionnel
+│   │       └── dataset_tools.py  #       Utilitaires communs
 │   ├── trainer.py                #   Boucle d'entraînement (train/val)
 │   ├── loss.py                   #   Fonctions de perte (L1, SSIM, NDVI, R²)
 │   ├── eval_tools.py             #   Imputation fenêtre glissante + fusion
-│   ├── metrics/                  #   Métriques d'évaluation
-│   │   ├── cloud_removal.py      #     Métriques par échantillon (MAE, PSNR, SSIM, SAM…)
-│   │   └── aggregation.py        #     Agrégation par dataset (moyennes)
-│   ├── data_utils.py             #   Chargement datasets / dataloaders
+│   ├── data_utils.py             #   Wrapper pour instancier les datasets
 │   ├── config_utils.py           #   Lecture/écriture configs (OmegaConf + .env)
 │   ├── utils.py                  #   Instanciation modèle, optimiseur, scheduler
 │   ├── visutils.py               #   Visualisation (galeries, colormaps)
 │   ├── logger.py                 #   Logging et statistiques
 │   └── formatter.py              #   Formatage des logs
-│
-├── dataloader/                   # Chargement et traitement des données
-│   ├── datasets/
-│   │   ├── hdf5_creator.py       #   Création HDF5 (FileScanner, HDF5Maker, merge)
-│   │   ├── hdf5_reader.py        #   Lecture HDF5 (HDF5Dataset)
-│   │   ├── adapter.py            #   Adaptation → format U-TILISE (SatelliteDataset)
-│   │   ├── dataset_from_files.py #   Chargement direct depuis TIF
-│   │   └── constants.py          #   Splits géographiques train/val/test
-│   └── tools/
-│       ├── data_processor.py     #   Lecture/normalisation rasters (rasterio)
-│       ├── mask_generation.py    #   Utilitaires de masquage
-│       ├── sampling.py           #   Échantillonnage temporel
-│       ├── parcel_mask.py        #   Masques parcellaires agricoles (GPKG)
-│       ├── type_converter.py     #   Conversion float ↔ int16
-│       ├── writer.py             #   Écriture de prédictions (GeoTIFF)
-│       └── positional_encoding.py#   Encodage positionnel
 │
 ├── metadata/                     # Métadonnées des patches
 ├── envs/                         # Environnement conda
@@ -140,6 +168,55 @@ U-TILISE/
 │   ├── training_demo.ipynb       #   Démo entraînement (subset + TensorBoard)
 │   └── inference_demo.ipynb      #   Démo inférence (visualisation + métriques)
 └── docs/                         # Documentation
+```
+
+---
+
+## 📚 Référence API publique
+
+### `src.data.SentinelDataset`
+Adaptateur générique pour tous les backends de données.
+
+**Constructeur principal :**
+```python
+dataset = SentinelDataset(
+    backend: SentinelBackend,           # N'importe quel backend
+    return_valid_obs_only: bool = True, # Ne retourner que les observations valides
+    max_seq_length: int | None = 30,    # Tronquer les séquences trop longues
+    render_occluded_above_p: float | None = None,  # Masquer les images trop nuageuses
+    mask_kwargs: dict | None = None,    # Configuration du masquage
+    pe_strategy: str = "day-within-sequence",  # Stratégie d'encodage positionnel
+    augment: bool | None = False,       # Activer les augmentations
+    process_data: bool | None = True,   # Appliquer tout le traitement
+    mask_sar: bool = False,             # Masquer aussi les bandes SAR (mode legacy)
+)
+```
+
+**Constructeur rétro-compatible HDF5 :**
+```python
+dataset = SentinelDataset.from_hdf5(
+    phase="train",
+    hdf5_file="data/circa.hdf5",
+    use_sar="asc+desc",
+    channels="all",
+    # + tous les paramètres du constructeur principal
+)
+```
+
+### `SentinelBackend` (Protocole)
+Interface que tous les backends doivent implémenter :
+```python
+class SentinelBackend(Protocol):
+    def __getitem__(self, item: int) -> SampleDict: ...
+    def __len__(self) -> int: ...
+    @property
+    def c_index_rgb(self) -> Tensor: ...
+    @property
+    def c_index_nir(self) -> Tensor: ...
+    @property
+    def num_channels(self) -> int: ...
+    @property
+    def phase(self) -> PhaseType: ...
 ```
 
 ---
@@ -270,7 +347,7 @@ maker = HDF5Maker(
     hdf5_folder="chemin/vers/sortie_hdf5/",
     use_sar=True,
     channels="all",
-    filter_settings={"type": "cloud-free", "min_length": 5},
+    min_seq_length=5,
 )
 maker.load_items_to_hdf5()
 
@@ -395,6 +472,29 @@ sbatch configs/jzellou/slurms/metrics_v4_asc_desc_cfm_iterative.slurm
 # Inférence à la tuile
 sbatch configs/jzellou/slurms/inference_v4_asc_desc.slurm
 ```
+
+---
+
+---
+
+## ❓ FAQ / Dépannage
+
+### Q : Pourquoi l'architecture utilise Composition au lieu de l'héritage ?
+Parce que l'héritage rend impossible d'avoir plusieurs backends. Avec la composition :
+- On peut changer de backend sans toucher à aucune autre ligne de code
+- On ajoute un nouveau backend en 20 lignes de code
+- Toute modification de la logique métier est répercutée automatiquement sur tous les backends
+
+### Q : Comment ajouter un nouveau type de masque ?
+Ajoutez votre fonction dans `src/data/processing/masking.py`. Elle sera automatiquement disponible dans tous les backends.
+
+### Q : Comment ajouter un nouveau backend (S3, COG, etc.) ?
+1. Créez un fichier `src/data/backends/my_backend.py`
+2. Implémentez l'interface `SentinelBackend`
+3. C'est tout. `SentinelDataset` fonctionnera immédiatement avec votre nouveau backend.
+
+### Q : Pourquoi il n'y a plus de dossier `dataloader/` ?
+Tout le code de chargement des données a été **factorisé et unifié** dans `src/data/`. L'ancien dossier `dataloader/` contenait 70% de code dupliqué.
 
 ---
 

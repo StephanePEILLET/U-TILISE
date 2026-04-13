@@ -25,9 +25,9 @@ from rasterio.windows import Window
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
-from dataloader.datasets.dataset_from_files import Dataset_from_files
-from dataloader.tools.data_processor import SentinelDataProcessor
-from dataloader.tools.type_converter import TypeConverter
+from src.data.backends.files_backend import Dataset_from_files
+from src.data.processing.transforms import SentinelDataProcessor
+from src.data.processing.transforms import TypeConverter
 from src import config_utils
 from src.arguments import eval_parser
 from src.eval_tools import Imputation
@@ -81,7 +81,7 @@ def _handle_folders(config: DictConfig):
     # Répertoires de sortie
     output_folder = Path(config.output.save_dir)
     output_folder.mkdir(parents=True, exist_ok=True)
-    name_experiment = Path(config.test_data.test_config).parent.name
+    name_experiment = Path(config.test_data.get("test_config", "default")).parent.name
     output_folder_inferences = output_folder / name_experiment
     output_folder_inferences.mkdir(parents=True, exist_ok=True)
     return Path(data_optique), Path(data_radar), data_masks, Path(output_folder_inferences)
@@ -139,14 +139,16 @@ def inference_one_tile(
             print(f"Predictions for MGRS-C area {mgrs25} exist but are likely corrupted ({file_size_kb:.1f} KB). Re-processing...")
             out_filename.unlink()
 
-    if (config.mask.mask_type == "random_fully_masked" or config.mask.mask_type == "consecutive_fully_masked"):
-        if config.test_data.data_masks is None:
-            raise ValueError(f"Mask type {config.mask.mask_type} requires a data_masks directory in the configuration.")
-        mask_type = "fully_masked"  # Nécessaire pour que le dataset applique les masques de reconstruction (aléatoires ou consécutifs) au lieu des masques d'origine
-        keep_all_dates = False  # On filtre les dates et on garde seulement les dates non nuageuses et les dates masquées.
+    mask_type_val = config.mask.get("mask_type", "original_masks")
+    if (mask_type_val == "random_fully_masked" or mask_type_val == "consecutive_fully_masked"):
+        data_masks_val = config.test_data.get("data_masks", None)
+        if data_masks_val is None:
+            raise ValueError(f"Mask type {mask_type_val} requires a data_masks directory in the configuration.")
+        mask_type = "fully_masked"
+        keep_all_dates = False
     else:
-        mask_type = "original_masks"  # Utilise les masques d'origine (nuages + masques de reconstruction) fournis dans les données d'entraînement
-        keep_all_dates = True  # En mode inférence, ne pas filtrer les dates nuageuses (sinon T varie par patch et ne correspond plus au nombre de bandes du fichier de sortie)
+        mask_type = "original_masks"
+        keep_all_dates = True
 
     ds = Dataset_from_files(
         mgrsc=mgrs25,
@@ -154,7 +156,7 @@ def inference_one_tile(
         data_radar=data_radar,
         image_size=image_size,
         overlap=overlap,
-        fill_value=config.mask.fill_value,
+        fill_value=config.mask.get("fill_value", 1),
         mask_type=mask_type,
         data_masks=data_masks,
         use_sar=config.data.get("use_sar", "mix_closest"),
@@ -277,17 +279,14 @@ def main(
     if not os.path.isfile(args.config_file):
         raise FileNotFoundError(f"Cannot find the configuration file used during training: {args.config_file}\n")
     # Read config file (inference config) — contient test_data, mask, output, misc, etc.
-    config = config_utils.read_config(args.config_file)
-    # Manage old config settings
+    config = config_utils.read_config_with_defaults(args.config_file, run_mode="test")
     if "include_S1" in args_test_data:
         if args_test_data.include_S1 is True:
             config.data.use_sar = "mix_closest"
         else:
             config.data.use_sar = False
         args_test_data.pop("include_S1")
-    # Merge les paramètres 'data' de la config d'entraînement dans la config d'inférence
     config.data.update(args_test_data)
-    # Evaluate the entire image sequence (dans le cas de l'evaluation)
     config.data.max_seq_length = None
 
     # --- Valeurs par défaut pour les sections optionnelles ---
@@ -339,7 +338,12 @@ def main(
 
     # Pour l'inférence, limiter les workers pour éviter la saturation de la mémoire partagée.
     # Chaque worker sérialise des tenseurs volumineux (T×14×256×256) vers le parent.
-    num_workers = min(config.misc.num_workers, 2)  # Max 2 workers en inférence
+    # Pour l'inférence, limiter les workers pour éviter la saturation de la mémoire partagée.
+    # Chaque worker sérialise des tenseurs volumineux (T×14×256×256) vers le parent.
+    try:
+        num_workers = min(config.misc.num_workers, 2)
+    except (AttributeError, Exception):
+        num_workers = 2  # Valeur par défaut sûre pour l'inférence
     # Sécuriser GDAL pour les environnements multithread/multiprocess
     # Removing VSI_CACHE as it might cause issues with high-throughput writing or network drives ("dirty block" errors)
     # os.environ["VSI_CACHE"] = "TRUE"
@@ -381,23 +385,24 @@ if __name__ == "__main__":
 
     args = eval_parser.parse_args()
 
-    config = config_utils.read_config(args.config_file)
+    config = config_utils.read_config_with_defaults(args.config_file, run_mode="test")
     if "test_data" in config:
         temp = OmegaConf.create()
         temp.config_file = args.config_file
         temp.test_data = config.test_data
-        if "mode" in temp.test_data:
-            temp.mode = config.test_data.mode
-        if "checkpoint" in temp.test_data:
-            temp.checkpoint = config.test_data.checkpoint
+        if "mode" in config.test_data:
+            temp.mode = config.test_data.get("mode")
+        if "checkpoint" in config.test_data:
+            temp.checkpoint = config.test_data.get("checkpoint")
             del temp.test_data.checkpoint
         args = temp
 
     # Extract settings w.r.t. test data
-    if args.test_data.test_config is not None:
-        if not os.path.isfile(args.test_data.test_config):
+    test_config_path = args.test_data.get("test_config", None) if "test_data" in args else None
+    if test_config_path is not None:
+        if not os.path.isfile(test_config_path):
             raise FileNotFoundError(f"Cannot find the test configuration file: {args.test_data.test_config}\n")
-        test_config = config_utils.read_config(args.test_data.test_config)
+        test_config = config_utils.read_config_with_defaults(test_config_path, run_mode="test")
         args_test_data = test_config.data
     else:
         args_test_data = OmegaConf.create()

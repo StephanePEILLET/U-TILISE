@@ -50,16 +50,10 @@ def setup_configuration(args: argparse.Namespace) -> OmegaConf:
     if not os.path.exists(args.config_file):
         raise FileNotFoundError(f"ERROR: Cannot find the yaml configuration file: {args.config_file}")
 
-    # Import the user configuration file
     cfg_custom = config_utils.read_config(args.config_file)
     if not cfg_custom:
         sys.exit(1)
-    # Augment/overwrite the default parameter settings with the runtime arguments given by the user
-    # Get the directory of the current script
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    default_config_path = os.path.join(script_dir, "configs", "default.yaml")
-    cfg_default = config_utils.read_config(default_config_path)
-    config = OmegaConf.merge(cfg_default, cfg_custom)
+    config = config_utils.read_config_with_defaults(args.config_file, run_mode="train")
     config.output.output_directory = args.save_dir
 
     # Création explicite du répertoire de sauvegarde au plus haut niveau pour éviter les problèmes d'export

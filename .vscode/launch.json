@@ -59,17 +59,6 @@
             ]
         },
         {
-            "name": "Inference U-TILISE",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "inference_full_tile.py",
-            "console": "integratedTerminal",
-            "envFile": "${workspaceFolder}/.env",
-            "args": [
-                "./configs/config_run_inference.yaml",
-            ]
-        },
-        {
             "name": "Inference from tiles",
             "type": "debugpy",
             "request": "launch",

@@ -35,9 +35,9 @@ from rasterio.windows import Window
 from torch.utils.data import Dataset
 from tqdm.auto import tqdm
 
-from dataloader.datasets.constants import GEOGRAPHIC_SPLITS
-from dataloader.tools.data_processor import SentinelDataProcessor
-from dataloader.tools.positional_encoding import get_position_for_positional_encoding  # NOQA
+from src.data.backends.constants import GEOGRAPHIC_SPLITS
+from src.data.processing.transforms import SentinelDataProcessor
+from src.data.processing.positional import get_position_for_positional_encoding  # NOQA
 
 torch.multiprocessing.set_sharing_strategy("file_system")
 
@@ -484,15 +484,27 @@ class HDF5Maker(FileScanner):
         load_dataset: str | None = None,
         shuffle: bool = False,
         use_sar: bool = True,
-        filter_settings: dict = None,
         min_seq_length: int | None = MIN_SEQ_LENGTH,
         max_seq_length: int | None = None,
         render_occluded_above_p: float | None = None,
         mask_kwargs: dict | DictConfig | None = None,
         pe_strategy: str = "day-within-sequence",
         channels: str | None = "all",
+        # Rétro-compatibilité : filter_settings est accepté mais ignoré
+        filter_settings: dict = None,
     ):
         self.rng = np.random.default_rng(seed=SEED)
+
+        if filter_settings is not None:
+            import warnings
+            warnings.warn(
+                "HDF5DatasetCreator: 'filter_settings' est déprécié et ignoré. "
+                "Le filtrage des dates nuageuses est effectué directement via "
+                "SentinelDataProcessor.filter_dates() lors de la création du HDF5. "
+                "Les champs type, min_length, return_valid_obs_only, etc. n'ont pas d'effet ici.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
         super().__init__(
             data_optique=data_optique,
@@ -506,15 +518,11 @@ class HDF5Maker(FileScanner):
 
         self.hdf5_folder = hdf5_folder
         self.min_seq_length = min_seq_length
+        self.max_seq_length = max_seq_length
+        self.seq_length = MAX_SEQ_LENGTH if max_seq_length is None else max_seq_length
         self.render_occluded_above_p = render_occluded_above_p
         self.pe_strategy = pe_strategy
         _, self.c_index_rgb, self.c_index_nir, self.s2_channels = self._setup_channels(channels)
-        (
-            self.filter_settings,
-            self.variable_seq_length,
-            self.seq_length,
-            self.max_seq_length,
-        ) = self._setup_filter_settings(filter_settings, max_seq_length)
         (
             self.mask_kwargs,
             self.fill_type,
@@ -541,35 +549,6 @@ class HDF5Maker(FileScanner):
         if self.use_sar:
             num_channels += 4
         return num_channels, c_index_rgb, c_index_nir, s2_channels
-
-    def _setup_filter_settings(
-        self,
-        filter_settings: DictConfig | None = None,
-        max_seq_length: int | None = None,
-    ):
-        """Configure les paramètres de filtrage des dates nuageuses."""
-        if filter_settings is None:
-            filter_settings = {
-                "type": None,
-                "min_length": 5,
-                "return_valid_obs_only": False,
-                "max_t_sampling": None,
-                "p_filter": 0.1,
-            }
-
-        if isinstance(filter_settings, dict):
-            filter_settings = OmegaConf.create(filter_settings)
-
-        if filter_settings.get("type", None):
-            variable_seq_length = filter_settings.return_valid_obs_only
-        else:
-            variable_seq_length = False
-
-        filter_settings.max_num_consec_invalid = filter_settings.get("max_num_consec_invalid", None)
-        filter_settings.min_length = filter_settings.get("min_length", 0)
-        filter_settings.max_t_sampling = filter_settings.get("max_t_sampling", None)
-        seq_length = MAX_SEQ_LENGTH if max_seq_length is None else max_seq_length
-        return filter_settings, variable_seq_length, seq_length, max_seq_length
 
     def _setup_mask_kwargs(self, mask_kwargs: DictConfig | None = None):
         """Configure les paramètres de masquage synthétique (type, ratio, remplissage)."""
@@ -970,11 +949,6 @@ if __name__ == "__main__":
         #   --data-radar /path/to/radar_dataset_v4 \
         #   --hdf5-folder /path/to/hdf5/archives_MGRSC
 
-        filter_settings = {
-            "type": "cloud-free",
-            "min_length": 10,
-            "return_valid_obs_only": True,
-        }
         mask_kwargs = {
             "mask_type": "random_clouds",
             "ratio_masked_frames": 0.5,
@@ -994,7 +968,7 @@ if __name__ == "__main__":
             data_radar=Path(args.data_radar),
             image_size=[256, 256],
             overlap=0,
-            filter_settings=filter_settings,
+            min_seq_length=10,
             mask_kwargs=mask_kwargs,
         )
         dataset.load_items_to_hdf5()

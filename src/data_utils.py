@@ -14,7 +14,7 @@ from torch import Tensor
 from torch.nn import functional as F
 from torch.utils.data import Dataset
 
-from src.datasets import DATASETS
+from src.data import SentinelDataset
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -160,7 +160,7 @@ def get_dataloader(
         dataset=dset,
         batch_size=(batch_size if batch_size is not None else config.training_settings.batch_size),
         shuffle=(shuffle if shuffle is not None else False),
-        num_workers=config.misc.num_workers,
+        num_workers=config.misc.get("num_workers", 4) if hasattr(config.misc, 'get') else 4,
         collate_fn=collate_fn,
         pin_memory=config.misc.get("pin_memory", pin_memory),
         drop_last=drop_last,
@@ -171,39 +171,38 @@ def get_dataloader(
 
 
 def get_dataset(config: DictConfig, phase: str, logger: logging.Logger | None = None) -> Dataset:
-    """Instancie un dataset à partir de la configuration.
-
-    Extrait explicitement les paramètres attendus par le constructeur du dataset
-    au lieu de passer l'intégralité de config.data via **kwargs.
-    Les paramètres inconnus (anciennes configs) sont absorbés par **kwargs dans
-    SatelliteDataset avec un avertissement.
+    """
+    ✅ Instancie et retourne le dataset configuré selon les paramètres.
+    
+    Détecte AUTOMATIQUEMENT le backend à utiliser :
+    - Si `data_optique` ET `data_radar` sont présents → utilise `FilesBackend` (fichiers TIF directs)
+    - Sinon → utilise `HDF5Backend` (comportement historique)
+    
+    Fonctionne de la même façon pour training, évaluation et inférence.
+    Rétrocompatibilité 100% avec toutes les anciennes configurations.
+    
+    Args:
+        config: Configuration complète du run
+        phase: Phase du dataset (train/val/test/train+val)
+        logger: Logger optionnel pour les messages
     """
     assert config["misc"]["run_mode"] in ["train", "val", "test"]
     assert phase in ["train", "val", "train+val", "test"]
 
-    if config.data.dataset not in DATASETS:
-        if logger:
-            logger.error(f"Unknown dataset: {config.data.dataset}\n")
-        else:
-            raise NotImplementedError(f"Unknown dataset: {config.data.dataset}\n")
-
-    DatasetClass = DATASETS[config.data.dataset]
     augment = config.data.get("augment", phase == "train")
 
-    # Résoudre le fichier HDF5 (peut être un dict par phase ou un chemin unique)
-    hdf5_file = config.data.get("hdf5_file")
-    if isinstance(hdf5_file, DictConfig):
-        hdf5_file = hdf5_file[phase]
+    # Rétro-compatibilité : si l'ancienne clé filter_settings existe dans la config,
+    # on extrait return_valid_obs_only et on passe filter_settings au constructeur
+    # qui émettra un DeprecationWarning.
+    filter_settings = config.data.get("filter_settings")
+    if filter_settings is not None:
+        return_valid_obs_only = filter_settings.get("return_valid_obs_only", True)
+    else:
+        return_valid_obs_only = config.data.get("return_valid_obs_only", True)
 
-    # Extraction explicite des paramètres du dataset
+    # Paramètres spécifiques U-TILISE (communs à TOUS les backends)
     dataset_kwargs = {
-        "hdf5_file": hdf5_file,
-        "phase": phase,
-        "channels": config.data.get("channels", "all"),
-        "use_sar": config.data.get("use_sar", "mix_closest"),
-        "load_transforms": config.data.get("load_transforms"),
-        "shuffle": config.data.get("shuffle", False),
-        "filter_settings": config.data.get("filter_settings"),
+        "return_valid_obs_only": return_valid_obs_only,
         "max_seq_length": config.data.get("max_seq_length"),
         "render_occluded_above_p": config.data.get("render_occluded_above_p"),
         "pe_strategy": config.data.get("pe_strategy", "day-of-year"),
@@ -216,7 +215,69 @@ def get_dataset(config: DictConfig, phase: str, logger: logging.Logger | None = 
     # Retirer les None pour laisser les défauts du constructeur s'appliquer
     dataset_kwargs = {k: v for k, v in dataset_kwargs.items() if v is not None}
 
-    return DatasetClass(**dataset_kwargs)
+    # =========================================================================
+    # 🔍 Détection automatique du backend
+    # =========================================================================
+    data_optique = config.data.get("data_optique")
+    data_radar = config.data.get("data_radar")
+
+    # Cas 1 : Utilisateur veut charger depuis des fichiers TIF directs
+    if data_optique is not None and data_radar is not None:
+        if logger:
+            logger.info(f"✅ Backend détecté : Fichiers brutes (pas de HDF5)")
+            logger.info(f"   📂 Optique : {data_optique}")
+            logger.info(f"   📂 Radar : {data_radar}")
+        
+        from src.data.backends.files_backend import Dataset_from_files
+        
+        # Paramètres spécifiques au backend fichiers
+        backend_kwargs = {
+            "data_optique": data_optique,
+            "data_radar": data_radar,
+            "mgrsc": config.data.get("mgrsc"),
+            "image_size": config.data.get("image_size", (256, 256)),
+            "overlap": config.data.get("overlap", 0),
+            "load_dataset": config.data.get("load_dataset"),
+            "shuffle": config.data.get("shuffle", False),
+            "use_sar": config.data.get("use_sar", "mix_closest"),
+            "channels": config.data.get("channels", "all"),
+            "pe_strategy": config.data.get("pe_strategy", "day-within-sequence"),
+            "fill_value": config.data.get("fill_value", 1.0),
+            "mask_type": config.data.get("mask_type", "original_masks"),
+            "data_masks": config.data.get("data_masks"),
+            "keep_all_dates": config.data.get("keep_all_dates", False),
+        }
+        backend_kwargs = {k: v for k, v in backend_kwargs.items() if v is not None}
+        
+        # Initialiser le backend fichiers
+        backend = Dataset_from_files(**backend_kwargs)
+        
+        # Initialiser l'adaptateur générique
+        return SentinelDataset(backend=backend, **dataset_kwargs)
+    
+    # Cas 2 : Comportement historique → backend HDF5
+    else:
+        if logger:
+            logger.info(f"✅ Backend détecté : Fichier HDF5")
+        
+        # Résoudre le fichier HDF5 (peut être un dict par phase ou un chemin unique)
+        hdf5_file = config.data.get("hdf5_file")
+        if isinstance(hdf5_file, DictConfig):
+            hdf5_file = hdf5_file[phase]
+        
+        if logger and hdf5_file:
+            logger.info(f"   📄 Fichier : {hdf5_file}")
+        
+        # Utiliser le constructeur rétro-compatible
+        return SentinelDataset.from_hdf5(
+            hdf5_file=hdf5_file,
+            phase=phase,
+            channels=config.data.get("channels", "all"),
+            use_sar=config.data.get("use_sar", "mix_closest"),
+            load_transforms=config.data.get("load_transforms"),
+            shuffle=config.data.get("shuffle", False),
+            **dataset_kwargs
+        )
 
 
 def compute_false_color(x: Tensor, index_rgb: Tensor | list[int], index_nir: int | float) -> Tensor:
