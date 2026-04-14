@@ -5,7 +5,7 @@
 data:
     dataset: circa                         # Nom du dataset. ['circa']
     hdf5_file: ${oc.env:HDF5_FILE}         # Chemin HDF5 (variable .env)
-    max_seq_length: 14                      # Longueur max de séquence temporelle.
+    max_seq_length: 5                      # Longueur max de séquence temporelle.
     channels: all                          # Bandes spectrales. ['all', 'rgb', 'bgr_nir', liste d'indices]
     use_sar: mix_closest                   # Mode SAR. [false, 'asc', 'desc', 'mix_closest', 'asc+desc']
     subset: false                          # Entier = sous-ensemble de N patches, false = tout le dataset.
