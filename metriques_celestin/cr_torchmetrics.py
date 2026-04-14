@@ -1,14 +1,9 @@
 import math
-from typing import Dict
-from typing import List
-from typing import Optional
 
-import numpy as np
 import torch
+from cr_metrics_per_bands import CloudRemovalMetrics
 from torch import Tensor
 from torchmetrics.aggregation import MeanMetric
-
-from cr_metrics import CloudRemovalMetrics
 
 
 class CloudRemovalDatasetMetrics:
@@ -24,13 +19,13 @@ class CloudRemovalDatasetMetrics:
 
     def __init__(
         self,
-        metrics: Optional[List[str]] = None,
+        metrics: list[str] | None = None,
         eval_occluded_observed: bool = True,
         clean_gt_cloudy_pixels: bool = True,
         sam_units: str = "rad",
         window_size: int = 5,
         skip_nan: bool = True,
-        device: Optional[torch.device] = None,
+        device: torch.device | None = None,
     ) -> None:
         """Args:
         metrics: List of metric names or None for all.
@@ -50,7 +45,7 @@ class CloudRemovalDatasetMetrics:
         )
         self.skip_nan = skip_nan
         self.device = device if device is not None else torch.device("cpu")
-        self._aggregators: Dict[str, MeanMetric] = {}
+        self._aggregators: dict[str, MeanMetric] = {}
 
     def _get_or_create_aggregator(self, name: str) -> MeanMetric:
         if name not in self._aggregators:
@@ -64,8 +59,8 @@ class CloudRemovalDatasetMetrics:
         target: Tensor,
         masks: Tensor,
         predicted: Tensor,
-        cloud_masks: Optional[Tensor] = None,
-    ) -> Dict[str, float]:
+        cloud_masks: Tensor | None = None,
+    ) -> dict[str, float]:
         """Compute metrics for one sample/batch and update running means.
 
         Returns the per-sample metrics dict (not averaged)."""
@@ -78,18 +73,16 @@ class CloudRemovalDatasetMetrics:
         metrics_dict = self.sample_metrics(target=target, masks=masks, predicted=predicted, cloud_masks=cloud_masks)
 
         for k, v in metrics_dict.items():
-            if v is None or (isinstance(v, float) and (math.isnan(v) or math.isinf(v))):
-                if self.skip_nan:
-                    continue
+            if (v is None or (isinstance(v, float) and (math.isnan(v) or math.isinf(v)))) and self.skip_nan:
+                continue
             value = torch.tensor(v, dtype=torch.float32, device=self.device)
-            if torch.isnan(value) or torch.isinf(value):
-                if self.skip_nan:
-                    continue
+            if (torch.isnan(value) or torch.isinf(value)) and self.skip_nan:
+                continue
             self._get_or_create_aggregator(k).update(value)
         return metrics_dict
 
     @torch.no_grad()
-    def compute(self) -> Dict[str, float]:
+    def compute(self) -> dict[str, float]:
         """Return the mean value for each metric accumulated so far."""
 
         return {k: agg.compute().item() for k, agg in self._aggregators.items()}
@@ -106,10 +99,10 @@ class CloudRemovalDatasetMetrics:
         return self
 
     # Optional: make the class iterable-friendly with state_dict / load_state_dict
-    def state_dict(self) -> Dict[str, Dict[str, Tensor]]:
+    def state_dict(self) -> dict[str, dict[str, Tensor]]:
         return {k: agg.state_dict() for k, agg in self._aggregators.items()}
 
-    def load_state_dict(self, state: Dict[str, Dict[str, Tensor]]):
+    def load_state_dict(self, state: dict[str, dict[str, Tensor]]):
         for k, sd in state.items():
             agg = self._get_or_create_aggregator(k)
             agg.load_state_dict(sd)

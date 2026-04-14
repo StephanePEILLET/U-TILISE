@@ -16,19 +16,20 @@ from tqdm import tqdm
 # src_gt = rasterio.open(gt)
 
 # Paths LNV16
-store_dai = Path("/mnt/stores/store_dai")
-path_input = store_dai / "tmp/speillet/inferences/v3_combined/consecutive_fully_masked/2026-03-26_16-17"
-gt_path_dir = store_dai / "projets/pac/3str/EXP_2/Data_Raster/test_v3/consecutif"
-
-# Paths JZELLOU
-# store_dai = Path("/mnt/stores/store-DAI")
-# # path_input = Path("/mnt/common/hdd/home/SPeillet/outputs/U-TILISE/inference/v3_combined")
+# store_dai = Path("/mnt/stores/store_dai")
 # path_input = store_dai / "tmp/speillet/inferences/v3_combined/consecutive_fully_masked/2026-03-26_16-17"
 # gt_path_dir = store_dai / "projets/pac/3str/EXP_2/Data_Raster/test_v3/consecutif"
+
+# Paths JZELLOU
+store_dai = Path("/mnt/stores/store-DAI")
+# path_input = Path("/mnt/common/hdd/home/SPeillet/outputs/U-TILISE/inference/v3_combined")
+path_input = store_dai / "tmp/speillet/inferences/v3_combined/random_fully_masked/2026-03-26_16-17"
+gt_path_dir = store_dai / "projets/pac/3str/EXP_2/Data_Raster/test_v3/aleatoire"
 
 REAL_CLOUD_MAX_VALUE = 100  # Valeur maximale qu'un pixel de vrai nuage peut prendre (nuages synthétiques ont une valeur > 100)
 SYNTHETIC_CLOUD_VALUE = 150  # Valeur ajoutée au masque original pour marquer les nuages synthétiques
 OFFSET_S2 = 1000
+
 tif_files = [i for i in os.listdir(path_input) if i[-4:] == ".tif"]
 
 
@@ -188,5 +189,5 @@ for i in range(10):
     resultats[f"band{i}"] = extract_metrics(aggs[i].compute())
     print_section(f"band{i}", resultats[f"band{i}"])
 
-with open("resultats_celestin.json", "w", encoding="utf-8") as f:
+with open("resultats_celestin_aleatoire.json", "w", encoding="utf-8") as f:
     json.dump(resultats, f, indent=2)
