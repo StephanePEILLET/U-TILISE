@@ -15,3 +15,4 @@ lightning_logs/*
 .data/patches_with_transforms.json.DS_Store
 .kilo/*
 .github/*
+.vscode/*
