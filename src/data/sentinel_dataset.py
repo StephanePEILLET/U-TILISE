@@ -33,7 +33,7 @@ from src.data.processing.transforms import SentinelDataProcessor
 
 class SentinelDataset(torch.utils.data.Dataset):
     """
-    ✅ Adaptateur générique pour TOUS les backends de données Sentinel.
+    Adaptateur generique pour TOUS les backends de données Sentinel.
     
     Ce dataset est l'unique point d'entrée pour charger des données dans U-TILISE.
     Il encapsule n'importe quel backend qui implémente `SentinelBackend` et
@@ -759,16 +759,18 @@ class SentinelDataset(torch.utils.data.Dataset):
             cloud_mask:  torch.Tensor, n x 1 x H x W, sampled cloud masks.
         """
         # Retrieve information about the tile from which the sample originates
-        sample_info = self.patches_dataset.iloc[id_sample]
+        patches_dataset = self.backend.patches_dataset
+        hdf5_file = self.backend.hdf5_file
+        sample_info = patches_dataset.iloc[id_sample]
         # Extract all samples that originate from the same tile as the given input sample
-        samples = self.patches_dataset[self.patches_dataset["mgrs25"] == sample_info.mgrs25]
+        samples = patches_dataset[patches_dataset["mgrs25"] == sample_info.mgrs25]
         # Randomly sample `n` cloud masks with cloud coverage of >= p
         cloud_mask = []
         while len(cloud_mask) < n:
             # Extract the cloud masks of a randomly drawn image time series, T * 1 * H * W (ancien code H x W x 1 x T)
             selected_idx = self.rng.choice(samples.index)
-            seletect_row = self.patches_dataset.iloc[selected_idx]
-            seq = self.hdf5_file[f"{seletect_row.mgrs}/{seletect_row.mgrs25}/{seletect_row.window}/S2/cloud_mask"][:]
+            seletect_row = patches_dataset.iloc[selected_idx]
+            seq = hdf5_file[f"{seletect_row.mgrs}/{seletect_row.mgrs25}/{seletect_row.window}/S2/cloud_mask"][:]
             seq = torch.from_numpy(np.expand_dims(seq, axis=1)).type(torch.float32)  # H x W x T => T * 1 * H * W
 
             # Compute cloud coverage per frame

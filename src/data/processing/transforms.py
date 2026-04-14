@@ -493,4 +493,10 @@ class TypeConverter:
                 return img
             elif self._to == "uint8":
                 if img.max() > 1:
-                    info = np.idebug(img.dtype)  # Get the information of the incoming image type
+                    info = np.iinfo(img.dtype)  # Get the information of the incoming image type
+                    img = img / info.max
+                return np.clip(img * 255, 0, 255).astype(np.uint8)
+            elif self._to == "uint16":
+                return np.clip(img, 0, 10000).astype(np.uint16)
+        # Default case: no conversion
+        return img

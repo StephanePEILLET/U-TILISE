@@ -166,6 +166,7 @@ def inference_one_tile(
     # ds.keep_all_dates = True
     meta = ds.s2_meta.copy()
     output_type = meta["dtype"]
+    print(f"Output dtype: {output_type}")
     mgrs25_dataloader = DataLoader(ds, batch_size=1, shuffle=False, pin_memory=pin_memory, num_workers=num_workers, worker_init_fn=_worker_init_fn)
 
     # Get the imputation model
@@ -233,7 +234,7 @@ def inference_one_tile(
                     write_errors += 1
                     if write_errors == 1:
                         print(
-                            f"\n⚠ BAND COUNT MISMATCH pour {mgrs25} : patch a {final_patch.shape[0]} bandes "
+                            f"\n[WARNING] BAND COUNT MISMATCH pour {mgrs25} : patch a {final_patch.shape[0]} bandes "
                             f"mais le fichier attend {expected_bands}. "
                             f"Vérifiez que keep_all_dates=True est actif (T doit être constant par patch)."
                         )
@@ -248,13 +249,13 @@ def inference_one_tile(
                         print(f"Error writing patch at x={x}, y={y}: {e}")
 
     if write_errors > 0:
-        print(f"\n✗ ÉCHEC pour {mgrs25} : {write_errors} patchs en erreur, {patches_written} écrits.")
+        print(f"\n[ECHOEC] pour {mgrs25} : {write_errors} patchs en erreur, {patches_written} ecrits.")
         if patches_written == 0:
             print(f"  Fichier vide supprimé : {out_filename.as_posix()}")
             out_filename.unlink(missing_ok=True)
         print("-----------------------------------------------------")
     else:
-        print(f"\n✓ Predictions for MGRS-C area {mgrs25} saved successfully ({patches_written} patches).")
+        print(f"\n[OK] Predictions for MGRS-C area {mgrs25} saved successfully ({patches_written} patches).")
         print(f"  File path: {out_filename.as_posix()}")
         print("-----------------------------------------------------")
 

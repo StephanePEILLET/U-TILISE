@@ -1,6 +1,5 @@
 # ============================================================================
 # Config de base pour l'évaluation — surcharge les valeurs de default.yaml
-# Pour l'évaluation v4 asc+desc, utiliser les configs dans configs/jzellou/configs/
 # ============================================================================
 
 data:

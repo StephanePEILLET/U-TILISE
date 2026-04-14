@@ -1,7 +1,5 @@
 # ============================================================================
 # Config de base pour l'entraînement — surcharge les valeurs de default.yaml
-# Pour l'entraînement v4 asc+desc, utiliser plutôt la config dédiée :
-#   configs/jzellou/configs/train_v4_asc_desc_random_clouds_combined.yaml
 # ============================================================================
 
 data:

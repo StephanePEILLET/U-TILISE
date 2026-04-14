@@ -172,7 +172,7 @@ def get_dataloader(
 
 def get_dataset(config: DictConfig, phase: str, logger: logging.Logger | None = None) -> Dataset:
     """
-    ✅ Instancie et retourne le dataset configuré selon les paramètres.
+    Instancie et retourne le dataset configure selon les parametres.
     
     Détecte AUTOMATIQUEMENT le backend à utiliser :
     - Si `data_optique` ET `data_radar` sont présents → utilise `FilesBackend` (fichiers TIF directs)
@@ -216,7 +216,7 @@ def get_dataset(config: DictConfig, phase: str, logger: logging.Logger | None = 
     dataset_kwargs = {k: v for k, v in dataset_kwargs.items() if v is not None}
 
     # =========================================================================
-    # 🔍 Détection automatique du backend
+    # Detection automatique du backend
     # =========================================================================
     data_optique = config.data.get("data_optique")
     data_radar = config.data.get("data_radar")
@@ -224,9 +224,9 @@ def get_dataset(config: DictConfig, phase: str, logger: logging.Logger | None = 
     # Cas 1 : Utilisateur veut charger depuis des fichiers TIF directs
     if data_optique is not None and data_radar is not None:
         if logger:
-            logger.info(f"✅ Backend détecté : Fichiers brutes (pas de HDF5)")
-            logger.info(f"   📂 Optique : {data_optique}")
-            logger.info(f"   📂 Radar : {data_radar}")
+            logger.info(f"Backend detecte : Fichiers brutes (pas de HDF5)")
+            logger.info(f"   Optique : {data_optique}")
+            logger.info(f"   Radar : {data_radar}")
         
         from src.data.backends.files_backend import Dataset_from_files
         
@@ -258,7 +258,7 @@ def get_dataset(config: DictConfig, phase: str, logger: logging.Logger | None = 
     # Cas 2 : Comportement historique → backend HDF5
     else:
         if logger:
-            logger.info(f"✅ Backend détecté : Fichier HDF5")
+            logger.info(f"Backend detecte : Fichier HDF5")
         
         # Résoudre le fichier HDF5 (peut être un dict par phase ou un chemin unique)
         hdf5_file = config.data.get("hdf5_file")
@@ -266,7 +266,7 @@ def get_dataset(config: DictConfig, phase: str, logger: logging.Logger | None = 
             hdf5_file = hdf5_file[phase]
         
         if logger and hdf5_file:
-            logger.info(f"   📄 Fichier : {hdf5_file}")
+            logger.info(f"   Fichier : {hdf5_file}")
         
         # Utiliser le constructeur rétro-compatible
         return SentinelDataset.from_hdf5(

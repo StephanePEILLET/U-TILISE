@@ -32,22 +32,22 @@ TensorDict = dict[str, torch.Tensor | dict[str, torch.Tensor]]
 @runtime_checkable
 class SentinelBackend(Protocol):
     """
-    🔌 Interface commune pour TOUS les backends de données.
+    Interface commune pour TOUS les backends de données.
     
     Tout backend qui implémente cette interface fonctionnera **automatiquement**
     avec SentinelDataset sans aucune modification.
     
-    📜 Règles d'implémentation d'un nouveau backend :
-    1. ❌ Ne faites AUCUN traitement métier dans le backend
-    2. ❌ Ne générez PAS de masques synthétiques
-    3. ❌ Ne faites PAS d'échantillonnage temporel
-    4. ✅ Retournez seulement les données brutes telles qu'elles sont stockées
-    5. ✅ Tous les prétraitements doivent être dans SentinelDataset
-    6. ✅ Respectez exactement le format de retour de __getitem__
+    Regles d'implementation d'un nouveau backend :
+    1. Ne faites AUCUN traitement metier dans le backend
+    2. Ne genereez PAS de masques synthetiques
+    3. Ne faites PAS d'echantillonnage temporel
+    4. Retournez seulement les donnees brutes telles qu'elles sont stockees
+    5. Tous les pretraitements doivent etre dans SentinelDataset
+    6. Respectez exactement le format de retour de __getitem__
     
     Backends existants :
-    - ✅ `HDF5Backend` : lit depuis un fichier HDF5 pré-calculé
-    - ✅ `FilesBackend` : lit directement depuis les fichiers TIF brutes
+    - `HDF5Backend` : lit depuis un fichier HDF5 pre-calcule
+    - `FilesBackend` : lit directement depuis les fichiers TIF brutes
     """
 
     def __getitem__(self, item: int) -> SampleDict:

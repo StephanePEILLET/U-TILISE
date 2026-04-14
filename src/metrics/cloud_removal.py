@@ -7,8 +7,8 @@ from typing import Literal
 import numpy as np
 import torch
 import torchgeometry as tgm
-from scipy.stats import linregress
 from torch import Tensor
+from torchmetrics.functional import r2_score
 
 
 class CloudRemovalMetrics:
@@ -119,7 +119,7 @@ class CloudRemovalMetrics:
 
         """
         metric_set = set(metrics)
-        MetricType = CloudRemovalMetrics.MetricType  # noqa: N806  # local alias for brevity
+        MetricType = CloudRemovalMetrics.MetricType  # local alias for brevity
 
         if MetricType.MAE in metric_set:
             self.metric_fns[MetricType.MAE] = lambda p, t: torch.mean(torch.abs(p - t))
@@ -296,8 +296,9 @@ class CloudRemovalMetrics:
         if y_pred.shape[0] <= 1:
             return None
 
-        result = linregress(y_target.cpu(), y_pred.cpu())
-        return result.rvalue**2
+        # result = linregress(y_target.cpu(), y_pred.cpu())
+        # return result.rvalue**2
+        return r2_score(y_pred, y_target)
 
     def _compute_imagewise_metrics(
         self,
@@ -326,7 +327,7 @@ class CloudRemovalMetrics:
             )
             metrics["ssim"] = 1 - 2 * dssim
 
-            _, C, _, _ = predicted.shape  # noqa: N806
+            _, C, _, _ = predicted.shape
             if self.compute_per_band:
                 for band in range(C):
                     dssim_band = self.metric_fns[CloudRemovalMetrics.MetricType.SSIM](
@@ -500,7 +501,7 @@ class CloudRemovalMetrics:
                 per band metrics.
 
         """
-        _, C = predicted.shape  # noqa: N806
+        _, C = predicted.shape
         metrics = {}
         pixel_metrics_to_compute = {
             CloudRemovalMetrics.MetricType.MAE,
@@ -549,7 +550,7 @@ class CloudRemovalMetrics:
                 tensors: (predicted_pix, target_pix, masks_pix).
 
         """
-        n_frames, C, H, W = predicted_img.shape  # noqa: N806
+        n_frames, C, H, W = predicted_img.shape
 
         # Optionally filter out cloudy pixels from the ground truth
         if cloud_masks is not None and self.clean_gt_cloudy_pixels:
@@ -605,7 +606,7 @@ class CloudRemovalMetrics:
         target = target.to(torch.float32)
         masks = masks.to(torch.float32)
         metrics = {}
-        B, T, C, H, W = predicted.shape  # noqa: N806
+        B, T, C, H, W = predicted.shape
         n_frames = B * T
 
         # always compute SSIM (image-wise) before any cloud filtering

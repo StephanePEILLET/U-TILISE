@@ -12,7 +12,7 @@ data:                                      # Paramètres des données d'entrée
     render_occluded_above_p: 0.9           # Seuil de couverture nuageuse pour masquer entièrement une image.
 
     # ┌───────────────────────────────────────────────────────────────────────┐
-    # │ 🔌 Backend HDF5 (comportement historique)
+    # │ Backend HDF5 (comportement historique)
     # │ Décommenter ce bloc pour utiliser un fichier HDF5 pré-calculé
     # └───────────────────────────────────────────────────────────────────────┘
     # hdf5_file: ${oc.env:HDF5_FILE}        # Chemin vers le fichier HDF5
@@ -20,9 +20,9 @@ data:                                      # Paramètres des données d'entrée
     # channels: all                          # Bandes spectrales : 'all' ou 'bgr-nir'
 
     # ┌───────────────────────────────────────────────────────────────────────┐
-    # │ 📂 Backend Fichiers brutes (sans HDF5)
+    # │ Backend Fichiers brutes (sans HDF5)
     # │ Décommenter ce bloc pour charger directement depuis des TIF
-    # │ ✅ Training et évaluation fonctionnent exactement de la même façon
+    # │ Training et evaluation fonctionnent exactement de la meme facon
     # └───────────────────────────────────────────────────────────────────────┘
     # data_optique: ./data/S2/                # Répertoire des GeoTIFF Sentinel-2
     # data_radar: ./data/S1/                  # Répertoire des GeoTIFF Sentinel-1

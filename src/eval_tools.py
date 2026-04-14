@@ -59,7 +59,7 @@ class Imputation:
             test_config = config_utils.read_config(config_file_test)
             # Training config provides base (architecture, hyperparameters),
             # eval config overrides what it specifies (data, mask, etc.)
-            self.config = OmegaConf.merge(test_config, self.config)
+            self.config = OmegaConf.merge(self.config, test_config)
         # Extract the temporal window size and the number of channels used during training
         if temporal_window is not None:
             self.temporal_window = temporal_window
