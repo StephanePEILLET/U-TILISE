@@ -258,7 +258,7 @@ def main(args: argparse.Namespace) -> None:
         )
 
         test_imputation = Imputation(
-            config_file_train=(Path(config.output.experiment_folder) / "config.yaml"),
+            train_config_path=(Path(config.output.experiment_folder) / "config.yaml"),
             checkpoint=(Path(config.output.checkpoint_dir) / "Model_best.pth"),
             num_channels=test_dset.num_channels,
             device=device,

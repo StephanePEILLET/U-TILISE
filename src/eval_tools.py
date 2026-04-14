@@ -24,9 +24,8 @@ from src.visutils import COLORMAPS
 class Imputation:
     def __init__(
         self,
-        config_file_train: str | None,
+        train_config_path: str | None,
         checkpoint: str | None = None,
-        config_file_test: str | None = None,
         temporal_window: int | None = None,
         device: torch.device | None = None,
         num_channels: int = 10,
@@ -34,33 +33,26 @@ class Imputation:
         center_only_n_keep: int = 2,
     ):
         self.checkpoint = checkpoint
-        self.config_file_train = config_file_train
+        self.train_config_path = train_config_path
         self.blend_mode = blend_mode
         self.center_only_n_keep = center_only_n_keep
 
         if self.checkpoint is None:
             raise ValueError("No checkpoint specified.\n")
 
-        if self.config_file_train is None:
+        if self.train_config_path is None:
             raise ValueError("No training configuration file specified.\n")
 
-        if not os.path.isfile(self.config_file_train):
+        if not os.path.isfile(self.train_config_path):
             raise FileNotFoundError(
-                f"Cannot find the configuration file used during training: {self.config_file_train}\n"
+                f"Cannot find the training configuration file: {self.train_config_path}\n"
             )
 
         if not os.path.isfile(self.checkpoint):
             raise FileNotFoundError(f"Cannot find the model weights: {self.checkpoint}\n")
 
-        # Read the configuration file used during training
-        self.config = config_utils.read_config(self.config_file_train)
+        self.config = config_utils.read_config_with_defaults(self.train_config_path)
 
-        if config_file_test is not None:
-            test_config = config_utils.read_config(config_file_test)
-            # Training config provides base (architecture, hyperparameters),
-            # eval config overrides what it specifies (data, mask, etc.)
-            self.config = OmegaConf.merge(self.config, test_config)
-        # Extract the temporal window size and the number of channels used during training
         if temporal_window is not None:
             self.temporal_window = temporal_window
         else:

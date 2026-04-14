@@ -171,10 +171,8 @@ def inference_one_tile(
 
     # Get the imputation model
     imputation = Imputation(
-        config_file_train=args.config_file,
+        train_config_path=args.train_config_path,
         checkpoint=args.checkpoint,
-        config_file_test=args.test_data.test_config,
-        # temporal_window=MAX_SAMPLES_ON_GPU,
         num_channels=ds.num_channels,
         device=device,
     )
@@ -266,100 +264,58 @@ def inference_one_tile(
 
 def main(
     args: argparse.Namespace,
-    args_test_data: DictConfig,
+    config: DictConfig,
 ):
     """
     Flux des configurations :
-    - args.config_file     : chemin vers le fichier de config d'inférence (config_run_inference.yaml)
-                             Il est aussi passé comme 'config_file_train' à Imputation (convention héritée de run_eval).
-    - args.test_data       : section test_data de la config d'inférence (data_optique, data_radar, test_tiles, etc.)
-    - args.test_data.test_config : chemin vers la config d'entraînement du modèle.
-    - args_test_data       : section 'data' de la config d'entraînement (channels, use_sar, etc.)
+    - config : configuration finale fusionnee (default.yaml + train_config + inference_config)
+    - args.train_config_path : chemin vers la config d'entrainement (pour Imputation)
+    - args.checkpoint : chemin vers le checkpoint du modele
     """
     _ = torch.set_grad_enabled(False)
-    if not os.path.isfile(args.config_file):
-        raise FileNotFoundError(f"Cannot find the configuration file used during training: {args.config_file}\n")
-    # Read config file (inference config) — contient test_data, mask, output, misc, etc.
-    config = config_utils.read_config_with_defaults(args.config_file, run_mode="test")
-    if "include_S1" in args_test_data:
-        if args_test_data.include_S1 is True:
-            config.data.use_sar = "mix_closest"
-        else:
-            config.data.use_sar = False
-        args_test_data.pop("include_S1")
-    config.data.update(args_test_data)
-    config.data.max_seq_length = None
 
-    # --- Valeurs par défaut pour les sections optionnelles ---
     if "misc" not in config:
         config.misc = OmegaConf.create({"num_workers": 0, "pin_memory": False})
     if "output" not in config:
         raise ValueError(
-            "La section 'output' avec 'save_dir' doit être spécifiée dans la configuration d'inférence.\n"
+            "La section 'output' avec 'save_dir' doit etre specifiee dans la configuration d'inference.\n"
             "Ajoutez :\n  output:\n    save_dir: /chemin/vers/repertoire/sortie"
         )
 
-    # 3. Optimisation pour multiprocessing (num_workers > 0)
-    # Rasterio/GDAL est thread-safe mais peut avoir des problèmes avec fork()
-    # "spawn" est plus sûr mais plus lent au démarrage.
-    # Pour Unix "fork" est plus standard mais peut causer des verrous sur les fichiers ouverts par GDAL
     try:
         mp.set_start_method("spawn", force=True)
     except RuntimeError:
         pass
 
-    # ==============================================================================
-    # FIX POUR L'ERREUR "Bus error / out of shared memory" SUR SLURM
-    # ==============================================================================
-    # 1. Stratégie file_system : utilise des fichiers temporaires au lieu de /dev/shm
     mp.set_sharing_strategy('file_system')
-    # 2. Rediriger les fichiers temporaires vers un stockage disque (pas un tmpfs/ramdisk)
-    #    Sur Jean Zay : $JOBSCRATCH ou $SCRATCH sont sur disque, /tmp est un tmpfs en RAM
     for scratch_var in ("JOBSCRATCH", "SCRATCH", "SLURM_TMPDIR"):
         scratch_dir = os.environ.get(scratch_var)
         if scratch_dir and os.path.isdir(scratch_dir):
             os.environ["TMPDIR"] = scratch_dir
             tempfile.tempdir = scratch_dir
-            print(f"[shared memory fix] TMPDIR redirigé vers ${scratch_var}={scratch_dir}")
+            print(f"[shared memory fix] TMPDIR redirige vers ${scratch_var}={scratch_dir}")
             break
     else:
-        print("[shared memory fix] Aucun répertoire scratch trouvé, TMPDIR inchangé.")
-    # ==============================================================================
+        print("[shared memory fix] Aucun repertoire scratch trouve, TMPDIR inchange.")
 
     image_size = [256, 256]
     overlap = 0
 
-    # CONFIGURATION CRITIQUE pour les workers sur stockage réseau :
-    # 1. Empêche GDAL d'essayer d'écrire des fichiers de métadonnées (.aux.xml)
     os.environ["GDAL_PAM_ENABLED"] = "NO"
-    # 2. Empêche GDAL de scanner tout le dossier à chaque ouverture
     os.environ["GDAL_DISABLE_READDIR_ON_OPEN"] = "EMPTY_DIR"
-    # 3. Limit GDAL Cache to avoid OOM on write or heavy flushing issues
-    os.environ["GDAL_CACHEMAX"] = "512"  # 512 MB
+    os.environ["GDAL_CACHEMAX"] = "512"
 
-    # Pour l'inférence, limiter les workers pour éviter la saturation de la mémoire partagée.
-    # Chaque worker sérialise des tenseurs volumineux (T×14×256×256) vers le parent.
-    # Pour l'inférence, limiter les workers pour éviter la saturation de la mémoire partagée.
-    # Chaque worker sérialise des tenseurs volumineux (T×14×256×256) vers le parent.
     try:
         num_workers = min(config.misc.num_workers, 2)
     except (AttributeError, Exception):
-        num_workers = 2  # Valeur par défaut sûre pour l'inférence
-    # Sécuriser GDAL pour les environnements multithread/multiprocess
-    # Removing VSI_CACHE as it might cause issues with high-throughput writing or network drives ("dirty block" errors)
-    # os.environ["VSI_CACHE"] = "TRUE"
-    # os.environ["VSI_CACHE_SIZE"] = "100000000"  # 100MB
-
-    # Désactiver pin_memory si multiprocessing complexe cause des problèmes
-    # ou si la RAM est limite
+        num_workers = 2
     pin_memory = False if num_workers > 0 else torch.cuda.is_available()
 
-    test_tiles_file = Path(config.test_data.get("test_tiles", None))  # JSON file containing the list of MGRS-C tiles to evaluate on
-    assert test_tiles_file is not None, "Le chemin vers le fichier JSON contenant les MGRS-C à évaluer doit être spécifié dans la configuration de test."
+    test_tiles_file = Path(config.test_data.get("test_tiles", None))
+    assert test_tiles_file is not None, "Le chemin vers le fichier JSON contenant les MGRS-C a evaluer doit etre specifie dans la configuration de test."
     with open(test_tiles_file, encoding="utf-8") as f:
         test_tiles = json.load(f)
 
-    # load_dataset = config.output.get("tiles_window_file", None)
     for mgrs25 in tqdm(test_tiles, desc="MGRS-C areas"):
         inference_one_tile(
             args=args,
@@ -372,11 +328,10 @@ def main(
         )
     print("Evaluation completed.")
 
-    # Sauvegarder la config d'inférence utilisée dans le dossier de sortie
     _, _, _, output_folder_inferences = _handle_folders(config)
     config_dump_path = output_folder_inferences / "config_inference.yaml"
     OmegaConf.save(config, config_dump_path)
-    print(f"Config d'inférence sauvegardée : {config_dump_path}")
+    print(f"Config d'inference sauvegardee : {config_dump_path}")
 
 
 if __name__ == "__main__":
@@ -386,32 +341,28 @@ if __name__ == "__main__":
 
     args = eval_parser.parse_args()
 
+    if not os.path.isfile(args.config_file):
+        raise FileNotFoundError(f"Cannot find the configuration file: {args.config_file}\n")
+
     config = config_utils.read_config_with_defaults(args.config_file, run_mode="test")
-    if "test_data" in config:
-        temp = OmegaConf.create()
-        temp.config_file = args.config_file
-        temp.test_data = config.test_data
-        if "mode" in config.test_data:
-            temp.mode = config.test_data.get("mode")
-        if "checkpoint" in config.test_data:
-            temp.checkpoint = config.test_data.get("checkpoint")
-            del temp.test_data.checkpoint
-        args = temp
 
-    # Extract settings w.r.t. test data
-    test_config_path = args.test_data.get("test_config", None) if "test_data" in args else None
-    if test_config_path is not None:
-        if not os.path.isfile(test_config_path):
-            raise FileNotFoundError(f"Cannot find the test configuration file: {args.test_data.test_config}\n")
-        test_config = config_utils.read_config_with_defaults(test_config_path, run_mode="test")
-        args_test_data = test_config.data
-    else:
-        args_test_data = OmegaConf.create()
+    test_data_section = config.get("test_data", OmegaConf.create())
+    train_config_path = test_data_section.get("test_config", None)
+    checkpoint = test_data_section.get("checkpoint", args.checkpoint)
 
-    if args.test_data.split is not None:
-        args_test_data.split = args.test_data.split
-    if args.test_data.mode is not None:
-        args_test_data.mode = args.test_data.mode
+    if train_config_path is None:
+        raise ValueError("test_data.test_config (chemin vers la config d'entrainement) est requis.\n")
+    if not os.path.isfile(train_config_path):
+        raise FileNotFoundError(f"Cannot find the training configuration file: {train_config_path}\n")
 
-    main(args, args_test_data)
-    # EOF
+    train_config = config_utils.read_config_with_defaults(train_config_path, run_mode="test")
+
+    config = OmegaConf.merge(train_config, config)
+    config.misc.run_mode = "test"
+    config.data.max_seq_length = None
+
+    args.train_config_path = train_config_path
+    args.checkpoint = checkpoint
+    args.test_data = test_data_section
+
+    main(args, config)

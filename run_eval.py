@@ -40,11 +40,12 @@ GDAL_OPTIONS = {
 class Evaluator:
     def __init__(
         self,
+        config: DictConfig,
         args: argparse.Namespace,
-        args_test_data: DictConfig,
     ):
 
         self.args = args
+        self.config = config
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.args_metrics = {
             "masked_metrics": True,
@@ -85,40 +86,7 @@ class Evaluator:
 
         _ = torch.set_grad_enabled(False)
 
-        if not os.path.isfile(args.config_file):
-            raise FileNotFoundError(f"Cannot find the configuration file used during training: {args.config_file}\n")
-
-        # Read config file used during training
-        self.config = config_utils.read_config_with_defaults(args.config_file, run_mode="test")
-
-        # if "test_data" in self.config:
-        #     args_test_data = self.config.test_data
-
-        # Merge generic data settings (used during training) with test-specific data settings
-        if self.config.data.get("hdf5_file", False):
-            for key in ["hdf5_file", "hdf5_file_read"]:
-                if key in args_test_data:
-                    args_test_data.pop(key)
-            args_test_data.hdf5_file = self.config.data.hdf5_file
-        # Manage old config settings
-        if "include_S1" in args_test_data:
-            if args_test_data.include_S1 is True:
-                self.config.data.use_sar = "mix_closest"
-            else:
-                self.config.data.use_sar = False
-            args_test_data.pop("include_S1")
-        self.config.data.update(args_test_data)
-
-        if self.config.data.dataset != "circa":
-            self.config.data.preprocessed = True
-
-        # Evaluate the entire image sequence (dans le cas de l'evaluation)
-        self.config.data.max_seq_length = None
-
-        if args_test_data.get("mode", False) and args_test_data.mode is not None:
-            phase = args_test_data.mode
-        else:
-            phase = "test"
+        phase = "test"
 
         # Get the data loader
         if phase == "test" and self.config.mask.mask_type not in [
@@ -165,13 +133,11 @@ class Evaluator:
         # MAX_SAMPLES_ON_GPU = 14
         # Get the imputation model
         self.imputation = Imputation(
-            config_file_train=self.args.config_file,
+            train_config_path=self.args.train_config_path,
             checkpoint=self.args.checkpoint,
-            config_file_test=self.args.test_data.test_config,
-            # temporal_window=MAX_SAMPLES_ON_GPU,
             num_channels=self.dset.num_channels,
             device=device,
-            blend_mode=self.config.data.get("blend_mode", "switch"),  # "switch", "center", "center_only" or "iterative"
+            blend_mode=self.config.data.get("blend_mode", "switch"),
             center_only_n_keep=self.config.data.get("center_only_n_keep", 2),
         )
         # Parcel mask generator (optional)
@@ -305,47 +271,34 @@ if __name__ == "__main__":
 
     args = eval_parser.parse_args()
 
+    if not os.path.isfile(args.config_file):
+        raise FileNotFoundError(f"Cannot find the configuration file: {args.config_file}\n")
+
     config = config_utils.read_config_with_defaults(args.config_file, run_mode="test")
-    if "test_data" in config:
-        temp = OmegaConf.create()
-        temp.config_file = args.config_file
-        temp.test_data = config.test_data
-        if "mode" in temp.test_data:
-            temp.mode = config.test_data.mode
-        if "checkpoint" in temp.test_data:
-            temp.checkpoint = config.test_data.checkpoint
-            del temp.test_data.checkpoint
-        if "return_predictions" in temp.test_data:
-            temp.return_predictions = config.test_data.return_predictions
-            del temp.test_data.return_predictions
-        if "predictions_save_path" in temp.test_data:
-            temp.predictions_save_path = config.test_data.predictions_save_path
-            del temp.test_data.predictions_save_path
-        args = temp
 
-    # Extract settings w.r.t. test data
-    test_config_val = args.test_data.get("test_config", None) if "test_data" in args else None
-    if test_config_val is not None:
-        if not os.path.isfile(test_config_val):
-            raise FileNotFoundError(f"Cannot find the test configuration file: {test_config_val}\n")
-        test_config = config_utils.read_config_with_defaults(test_config_val, run_mode="test")
-        args_test_data = test_config.data
-    else:
-        args_test_data = OmegaConf.create()
+    # Extraire les metadonnees de test_data depuis la config d'evaluation
+    test_data_section = config.pop("test_data", OmegaConf.create())
+    train_config_path = test_data_section.get("test_config", None)
+    checkpoint = test_data_section.get("checkpoint", args.checkpoint)
 
-    hdf5_file_val = args.test_data.get("hdf5_file", None) if "test_data" in args else None
-    if hdf5_file_val is not None:
-        # if not os.path.isfile(os.path.join(args_test_data.root, args.test_data.hdf5_file)):
-        #     raise FileNotFoundError(
-        #         f"Cannot find the data file: {os.path.join(args_test_data.root, args.test_data.hdf5_file)}\n"
-        #     )
-        args_test_data.hdf5_file = args.test_data.hdf5_file
-    if args.test_data.split is not None:
-        args_test_data.split = args.test_data.split
-    if args.test_data.mode is not None:
-        args_test_data.mode = args.test_data.mode
+    if train_config_path is None:
+        raise ValueError("test_data.test_config (chemin vers la config d'entrainement) est requis.\n")
+    if not os.path.isfile(train_config_path):
+        raise FileNotFoundError(f"Cannot find the training configuration file: {train_config_path}\n")
 
-    evaluator = Evaluator(args, args_test_data)
+    train_config = config_utils.read_config_with_defaults(train_config_path, run_mode="test")
+
+    # L'architecture du modele vient de la config d'entrainement.
+    # On merge: default.yaml < train_config < eval_config
+    # Ce qui garantit que utilise.encoder_widths, etc. viennent du train.
+    config = OmegaConf.merge(train_config, config)
+    config.misc.run_mode = "test"
+    config.data.max_seq_length = None
+
+    args.train_config_path = train_config_path
+    args.checkpoint = checkpoint
+
+    evaluator = Evaluator(config, args)
     since = time.time()
     stats = evaluator.evaluate()
     time_elapsed = time.time() - since
@@ -357,14 +310,12 @@ if __name__ == "__main__":
     import json
     from pathlib import Path
 
-    main_config = config_utils.read_config_with_defaults(args.config_file, run_mode="test")
-    if main_config.get("output", False) and main_config.output.get("save_dir", False):
-        save_dir = Path(main_config.output.save_dir)
+    if config.output.get("save_dir", False):
+        save_dir = Path(config.output.save_dir)
         save_dir.mkdir(parents=True, exist_ok=True)
         if stats is not None:
             with open((save_dir / "test_stats.json"), "w") as f:
                 json.dump(stats, f)
-        # Sauvegarder la config d'évaluation utilisée dans le dossier de sortie
         config_dump_path = save_dir / "config_eval.yaml"
-        OmegaConf.save(main_config, config_dump_path)
-        print(f"Config d'évaluation sauvegardée : {config_dump_path}")
+        OmegaConf.save(config, config_dump_path)
+        print(f"Config d'evaluation sauvegardee : {config_dump_path}")

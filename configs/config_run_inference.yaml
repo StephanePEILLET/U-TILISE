@@ -7,9 +7,9 @@ data:
     hdf5_file: ${oc.env:HDF5_FILE}         # Chemin HDF5 (variable .env)
     load_transforms: ${oc.env:LOAD_TRANSFORMS,./metadata/patches_with_transforms.json}  # JSON des transformations géométriques.
     channels: all                          # Bandes spectrales. ['all', 'rgb', 'bgr_nir', liste d'indices]
-    use_sar: mix_closest                   # Mode SAR. [false, 'asc', 'desc', 'mix_closest', 'asc+desc']
+    use_sar: asc+desc                   # Mode SAR. [false, 'asc', 'desc', 'mix_closest', 'asc+desc']
     subset: false                          # Entier = sous-ensemble, false = tout.
-    max_seq_length: 5                      # Longueur max de séquence temporelle.
+    max_seq_length: 14                      # Longueur max de séquence temporelle.
     return_windows: true                   # Retourner les coordonnées de la fenêtre dans le batch.
 
 test_data:
