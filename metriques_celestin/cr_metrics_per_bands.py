@@ -30,7 +30,7 @@ class CloudRemovalMetrics:
         clean_gt_cloudy_pixels: bool = True,
         sam_units: str = "rad",
         window_size: int = 5,
-        max_pixel_intensity: int = 1,
+        max_pixel_intensity: int = 10000,
     ) -> None:
         """Initialize the CloudRemovalMetrics class.
 
