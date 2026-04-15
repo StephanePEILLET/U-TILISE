@@ -7,8 +7,8 @@ from typing import Literal
 import numpy as np
 import torch
 import torchgeometry as tgm
+from scipy.stats import spearmanr
 from torch import Tensor
-from torchmetrics.functional import r2_score
 
 
 class CloudRemovalMetrics:
@@ -295,7 +295,9 @@ class CloudRemovalMetrics:
         # result = linregress(y_target.cpu(), y_pred.cpu())
         # return result.rvalue**2
 
-        return r2_score(y_pred, y_target)
+        # return r2_score(y_pred, y_target)
+        rho, _ = spearmanr(y_target.cpu().numpy(), y_pred.cpu().numpy())
+        return rho**2 if rho >= 0 else 0.0
 
     def _compute_imagewise_metrics(
         self,
