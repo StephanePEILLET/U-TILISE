@@ -48,4 +48,4 @@ mkdir -p $TMPDIR
 export TEMP=$TMPDIR
 export TMP=$TMPDIR
 
-srun --cpu-bind=none python /mnt/common/hdd/home/SPeillet/U-TILISE/metriques_celestin/metriques_aleatoire.py
+srun --cpu-bind=none python /mnt/common/hdd/home/SPeillet/U-TILISE/metriques_celestin/metriques_orig_aleatoire.py
