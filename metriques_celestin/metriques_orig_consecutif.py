@@ -11,7 +11,7 @@ from tqdm import tqdm
 
 # inferences = "pred_mgrsc_30TXR_row-3_col-3.tif"
 # gt = "bands_stacked_30TXR_row-3_col-3.tif"
-
+OFFSET = 0
 
 # src_inferences = rasterio.open(inferences)
 # src_gt = rasterio.open(gt)
@@ -68,7 +68,7 @@ def run_tile(tile_inference, tile_gt):
 
     tile_inference = tile_inference[indices_vrai_faux_nuages, :10]
     tile_gt = tile_gt[indices_vrai_faux_nuages, :10]
-    tile_gt = np.where(tile_gt == 0, 0, tile_gt - 1000)
+    tile_gt = np.where(tile_gt == 0, 0, tile_gt - OFFSET)
 
     tile_gt = np.expand_dims(tile_gt, 0)
     tile_inference = np.expand_dims(tile_inference, 0)
@@ -155,4 +155,4 @@ for i in range(10):
             dictionnaire[key.split("_")[0]].append(results[key])
 
 
-pd.DataFrame(dictionnaire).to_csv("resultats_orig_consecutif.csv")
+pd.DataFrame(dictionnaire).to_csv("resultats_orig_consecutif_without_offset.csv")
