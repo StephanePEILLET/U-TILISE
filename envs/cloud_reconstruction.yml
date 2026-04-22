@@ -12,7 +12,7 @@ dependencies:
   - torchvision ==0.15.2
   - torchmetrics ==1.2.1
   - lightning ==2.3.3
-  - numpy >=1.22.4,<2
+  - numpy >=1.22.4,<2  # 1.26.4
   - pandas>=1.4.3
   - pillow >=9.3.0,<10
   - PyYAML>=6.0
@@ -40,6 +40,7 @@ dependencies:
   - jupyter
   - ipywidgets
   - kornia
+# mkl==2023.2.0
   - pip:
       - setuptools
       - torch_scatter
